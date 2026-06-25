@@ -52,18 +52,19 @@ namespace OSFDefeat::Harness
 				return;
 			}
 
-			// 1. Prime the actor under the crosshair with the instance Essential flag.
+			// 1. Defeat the actor under the crosshair (once) via the real verb — the proven
+			//    recipe (bleedout life state + ghost + manager-level combat removal).
 			RE::Actor* const target = CrosshairActor(player);
-			if (target && IsPrimable(target, player)) {
+			if (target && IsPrimable(target, player) && !Defeat::IsDefeated(target)) {
 				const FormID id = target->GetFormID();
 				if (g_primed.insert(id).second) {
-					Engine::SetInstanceEssential(target, true);
-					g_phase[id] = kAlive;
-					REX::INFO("[OSFDefeat][probe] primed {:08X} essential (crosshair)", id);
+					Defeat::DefeatActor(target, nullptr);  // left down (no recovery) to stress-test survival
+					g_phase[id] = kDown;
+					REX::INFO("[OSFDefeat][probe] defeated {:08X} (crosshair) — watching it holds under fire", id);
 				}
 			}
 
-			// 2. Watch primed NPCs for alive -> bleedout -> dead transitions.
+			// 2. Watch defeated NPCs: with ghost they must NOT die under continued damage.
 			//    LookupByID is a stable hash lookup (no process-list walk).
 			for (auto it = g_phase.begin(); it != g_phase.end();) {
 				const FormID id = it->first;
@@ -73,24 +74,9 @@ namespace OSFDefeat::Harness
 					it = g_phase.erase(it);
 					continue;
 				}
-				if (actor->IsDead()) {
-					if (it->second < kDead) {
-						if (Defeat::IsDefeated(actor)) {
-							REX::WARN("[OSFDefeat][probe] (2) FAILED: downed {:08X} DIED under damage", id);
-						} else {
-							REX::WARN("[OSFDefeat][probe] (1) FAILED: {:08X} died before bleedout (instance-essential did not hold)", id);
-						}
-						it->second = kDead;
-					}
-				} else if (Engine::IsInBleedout(actor)) {
-					if (it->second < kDown) {
-						REX::INFO("[OSFDefeat][probe] (1) HOLDS: {:08X} entered BLEEDOUT via instance-essential (hp={:.1f})",
-							id, Engine::GetHealth(actor));
-						it->second = kDown;
-						if (!Defeat::IsDefeated(actor)) {
-							Defeat::DefeatActor(actor, nullptr);  // left down (no recovery) to stress-test (2)
-						}
-					}
+				if (actor->IsDead() && it->second != kDead) {
+					REX::WARN("[OSFDefeat][probe] FAILED: defeated {:08X} DIED under fire (ghost did not hold)", id);
+					it->second = kDead;
 				}
 				++it;
 			}

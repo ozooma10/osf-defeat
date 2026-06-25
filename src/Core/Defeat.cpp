@@ -45,17 +45,16 @@ namespace OSFDefeat::Defeat
 			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
 			Engine::SetCombatAIDisabled(true);
 		} else {
-			// NPC path — instance-scoped test path (investigation (1)/(2)). Make THIS
-			// instance essential (not the shared base) so a lethal hit routes to
-			// bleedout; pin it down with kNoBleedoutRecovery; and only force the
-			// health-floor drop if it isn't already bleeding out (forced/API defeat of
-			// a still-healthy NPC). TODO: per-actor combat/detection suppression.
-			Engine::SetInstanceEssential(a_victim, true);
+			// NPC path — the OSF RE-proven, base-form-agnostic per-actor recipe
+			// (gameplay.defeat_damage_hook, live-validated 2026-06-25). No shared-base flip,
+			// no health hacking: force the bleedout life state, hold it with
+			// kNoBleedoutRecovery, make it invulnerable so the defeat sticks through ongoing
+			// fire, and remove it from combat at the manager level so other actors disengage.
 			a_victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-			if (!Engine::IsInBleedout(a_victim) && Engine::GetHealth(a_victim) > 0.0f) {
-				Engine::DriveHealthFloor(a_victim);
-			}
-			REX::INFO("[OSFDefeat] NPC defeat (instance-essential): {:08X}", id);
+			Engine::SetLifeState(a_victim, Engine::kBleedOut);
+			Engine::SetGhost(a_victim, true);
+			Engine::StopCombatAndAlarmOnActor(a_victim);
+			REX::INFO("[OSFDefeat] NPC defeat (bleedout + ghost + disengage): {:08X}", id);
 		}
 
 		data->state.store(DefeatState::Defeated);
@@ -89,9 +88,10 @@ namespace OSFDefeat::Defeat
 			Engine::RestoreHealthToMax(a_victim);
 			Engine::SetCombatAIDisabled(false);
 		} else {
+			Engine::SetLifeState(a_victim, Engine::kAlive);
+			Engine::RestoreHealthToMax(a_victim);  // exit bleedout + get up
+			Engine::SetGhost(a_victim, false);     // drop invulnerability
 			a_victim->boolFlags.reset(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-			Engine::RestoreHealthToMax(a_victim);
-			Engine::SetInstanceEssential(a_victim, false);  // round-trip the test flag
 		}
 
 		const FormID aggressorId = data->aggressor;
@@ -142,23 +142,35 @@ namespace OSFDefeat::Defeat
 			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
 			Engine::SetCombatAIDisabled(true);
 		} else {
-			Engine::SetInstanceEssential(victim, true);
 			victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+			Engine::SetLifeState(victim, Engine::kBleedOut);
+			Engine::SetGhost(victim, true);
+			Engine::StopCombatAndAlarmOnActor(victim);
 		}
 	}
 
-	void Pacify(RE::Actor* /*a_victim*/)
+	void Pacify(RE::Actor* a_victim)
 	{
-		REX::INFO("[OSFDefeat] Pacify: per-actor pacify not yet implemented (TODO)");
+		if (!a_victim) {
+			return;
+		}
+		// Per-actor pacify = remove the actor from combat at the MANAGER level so every other
+		// combatant disengages (OSF RE-proven). This is the per-actor analog of the global tcai
+		// gate, and the lever plain per-actor StopCombat lacked (others re-acquire after StopCombat).
+		Engine::StopCombatAndAlarmOnActor(a_victim);
+		REX::INFO("[OSFDefeat] pacified {:08X}", a_victim->GetFormID());
 	}
 
 	void UndoPacify(RE::Actor* /*a_victim*/)
 	{
-		REX::INFO("[OSFDefeat] UndoPacify: per-actor pacify not yet implemented (TODO)");
+		// Nothing to undo explicitly: once the actor is alive with AI active it re-evaluates
+		// combat on its own (RescueActor restores life state + AI). No-op by design.
 	}
 
-	bool IsPacified(const RE::Actor* /*a_victim*/)
+	bool IsPacified(const RE::Actor* a_victim)
 	{
-		return false;
+		// A defeated actor is combat-removed for the duration of its defeat. (Standalone Pacify
+		// of a non-defeated actor is not separately tracked.)
+		return IsDefeated(a_victim);
 	}
 }

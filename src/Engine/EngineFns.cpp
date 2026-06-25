@@ -16,6 +16,12 @@ namespace OSFDefeat::Engine
 		// which relocates with the handler's ID across game builds.
 		constexpr std::uint64_t kTcaiHandlerID = 66826;
 
+		// Per-actor NPC defeat primitives — AddrLib IDs RE'd + live-validated in the OSF RE
+		// sandbox (gameplay.defeat_damage_hook, 1.16.244).
+		constexpr std::uint64_t kSetLifeStateID = 100787;  // void(Actor*, ACTOR_LIFE_STATE); vtable slot 0x16F
+		constexpr std::uint64_t kSetGhostID = 100873;      // void(Actor*, bool)
+		constexpr std::uint64_t kCombatRemoveID = 103285;  // void(ProcessLists*, Actor*, bool)
+
 		std::uintptr_t g_combatAIGate = 0;  // cached, resolved lazily
 
 		[[nodiscard]] bool IsReadable(std::uintptr_t a_addr, std::size_t a_size)
@@ -149,5 +155,36 @@ namespace OSFDefeat::Engine
 	bool IsInBleedout(RE::Actor* a_actor)
 	{
 		return a_actor && a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kInBleedoutAnimation);
+	}
+
+	void SetLifeState(RE::Actor* a_actor, std::uint32_t a_lifeState)
+	{
+		if (!a_actor) {
+			return;
+		}
+		using Fn = void (*)(RE::Actor*, std::uint32_t);
+		static REL::Relocation<Fn> fn{ REL::ID(kSetLifeStateID) };
+		fn(a_actor, a_lifeState);
+	}
+
+	void SetGhost(RE::Actor* a_actor, bool a_ghost)
+	{
+		if (!a_actor) {
+			return;
+		}
+		using Fn = void (*)(RE::Actor*, bool);
+		static REL::Relocation<Fn> fn{ REL::ID(kSetGhostID) };
+		fn(a_actor, a_ghost);
+	}
+
+	void StopCombatAndAlarmOnActor(RE::Actor* a_actor)
+	{
+		auto* const pl = RE::ProcessLists::GetSingleton();
+		if (!a_actor || !pl) {
+			return;
+		}
+		using Fn = void (*)(RE::ProcessLists*, RE::Actor*, bool);
+		static REL::Relocation<Fn> fn{ REL::ID(kCombatRemoveID) };
+		fn(pl, a_actor, false);
 	}
 }

@@ -3,29 +3,27 @@
 #include "pch.h"
 
 // =============================================================================
-// NpcProbe — a live, in-game validation harness for the per-actor NPC defeat
-// investigation. NOT shipping behaviour; a switchable diagnostic.
+// NpcProbe — a live, in-game smoke test for the per-actor NPC defeat verb. NOT
+// shipping behaviour; an opt-in diagnostic.
 //
-// Each frame it auto-primes hostile, in-combat NPCs with the *instance* Essential
-// flag (boolFlags 1<<18) and watches their boolFlags transitions, logging to
-// OSFDefeat.log (tagged "[probe]"):
+// The original instance-essential investigation is RESOLVED: instance Essential does
+// NOT route a lethal hit to bleedout (the death path reads the BASE flag). The proven
+// recipe is bleedout life state + ghost (invulnerable) + manager-level combat removal,
+// now in Defeat::DefeatActor. This harness exercises that verb end to end.
 //
-//   (1) alive -> bleedout   instance-essential routed the lethal hit  => (1) HOLDS
-//       alive -> dead       instance-essential did NOT prevent death  => (1) FAILS
-//   (2) defeated -> dead    a downed NPC died under continued damage  => (2) FAILS
-//
-// When an NPC enters bleedout the probe runs the real Defeat::DefeatActor verb on
-// it (instance-essential hold path), so this also exercises the NPC verb end to
-// end. Downed NPCs are intentionally left down (no auto-recovery) so you can keep
-// firing to stress-test (2). Toggle off to restore normal lethality.
+// When enabled, each frame it defeats the actor under the crosshair via the real
+// Defeat::DefeatActor verb and watches it (logging to OSFDefeat.log, tagged "[probe]"):
+// a defeated NPC must stay down and must NOT die under continued fire (ghost holds).
+// Downed NPCs are left down (no auto-recovery) so you can keep firing to stress-test.
+// Toggle off to restore normal behaviour.
 // =============================================================================
 namespace OSFDefeat::Harness
 {
 	class NpcProbe
 	{
 	public:
-		// Default on: this is the active investigation. Flip to compile-quiet later.
-		static constexpr bool kDefaultEnabled = true;
+		// Opt-in: the investigation it served is resolved, and it auto-defeats on crosshair.
+		static constexpr bool kDefaultEnabled = false;
 
 		static void               Install();  // per-frame task; call once on the game thread
 		static void               SetEnabled(bool a_enabled);
