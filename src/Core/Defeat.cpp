@@ -45,12 +45,17 @@ namespace OSFDefeat::Defeat
 			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
 			Engine::SetCombatAIDisabled(true);
 		} else {
-			// NPC path (Phase-1 milestone). kNoBleedoutRecovery is available and the
-			// health-floor drop works; what still needs RE is *per-actor* combat
-			// suppression / pacify so we don't have to use the global gate. Best-effort.
+			// NPC path — instance-scoped test path (investigation (1)/(2)). Make THIS
+			// instance essential (not the shared base) so a lethal hit routes to
+			// bleedout; pin it down with kNoBleedoutRecovery; and only force the
+			// health-floor drop if it isn't already bleeding out (forced/API defeat of
+			// a still-healthy NPC). TODO: per-actor combat/detection suppression.
+			Engine::SetInstanceEssential(a_victim, true);
 			a_victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-			Engine::DriveHealthFloor(a_victim);
-			REX::INFO("[OSFDefeat] NPC defeat is best-effort (per-actor pacify TODO): {:08X}", id);
+			if (!Engine::IsInBleedout(a_victim) && Engine::GetHealth(a_victim) > 0.0f) {
+				Engine::DriveHealthFloor(a_victim);
+			}
+			REX::INFO("[OSFDefeat] NPC defeat (instance-essential): {:08X}", id);
 		}
 
 		data->state.store(DefeatState::Defeated);
@@ -86,6 +91,7 @@ namespace OSFDefeat::Defeat
 		} else {
 			a_victim->boolFlags.reset(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
 			Engine::RestoreHealthToMax(a_victim);
+			Engine::SetInstanceEssential(a_victim, false);  // round-trip the test flag
 		}
 
 		const FormID aggressorId = data->aggressor;
@@ -136,6 +142,7 @@ namespace OSFDefeat::Defeat
 			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
 			Engine::SetCombatAIDisabled(true);
 		} else {
+			Engine::SetInstanceEssential(victim, true);
 			victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
 		}
 	}

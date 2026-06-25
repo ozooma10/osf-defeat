@@ -4,6 +4,7 @@
 #include "API/OSFDefeatAPI.h"
 #include "Core/Persistence.h"
 #include "Core/Pipeline.h"
+#include "Harness/NpcProbe.h"
 #include "Trigger/PollTrigger.h"
 
 // =============================================================================
@@ -39,6 +40,7 @@ namespace
 		g_trigger = std::move(trigger);
 
 		OSFDefeat::API::Server::Register();
+		OSFDefeat::Harness::NpcProbe::Install();  // diagnostic: validates NPC instance-essential (1)/(2)
 		REX::INFO("[OSFDefeat] core installed");
 	}
 

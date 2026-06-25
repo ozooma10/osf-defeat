@@ -133,4 +133,21 @@ namespace OSFDefeat::Engine
 			REX::INFO("[OSFDefeat] player base {:08X} set Essential", npc->GetFormID());
 		}
 	}
+
+	void SetInstanceEssential(RE::Actor* a_actor, bool a_essential)
+	{
+		if (!a_actor) {
+			return;
+		}
+		if (a_essential) {
+			a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kEssential);
+		} else {
+			a_actor->boolFlags.reset(RE::Actor::BOOL_FLAGS::kEssential);
+		}
+	}
+
+	bool IsInBleedout(RE::Actor* a_actor)
+	{
+		return a_actor && a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kInBleedoutAnimation);
+	}
 }

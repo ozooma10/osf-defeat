@@ -34,4 +34,13 @@ namespace OSFDefeat::Engine
 	// Make the player base (TESNPC) Essential so a lethal hit routes to bleedout.
 	// Idempotent; cheap to call every frame.
 	void EnsureEssential(RE::PlayerCharacter* a_player);
+
+	// Set/clear the *instance* Essential flag (boolFlags 1<<18) on one Actor without
+	// touching its shared base. Investigation hypothesis (1): does this route that
+	// one instance's lethal hits to bleedout, leaving the base/other instances alone?
+	void SetInstanceEssential(RE::Actor* a_actor, bool a_essential);
+
+	// Read the per-instance "in bleedout animation" flag (boolFlags 1<<6) — the NPC
+	// down signal (more reliable than HP polling for actors we don't fully control).
+	[[nodiscard]] bool IsInBleedout(RE::Actor* a_actor);
 }
