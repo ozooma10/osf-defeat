@@ -1,0 +1,32 @@
+#pragma once
+
+#include "pch.h"
+
+#include "API/OSFDefeatAPI.h"
+
+namespace OSFDefeat::API
+{
+	// Concrete implementation of the public framework interface + the messaging
+	// bridge (request/response + event broadcasts). Other SFSE plugins reach the
+	// core only through here.
+	class Server final : public OSFDefeatAPI::IVDefeat1
+	{
+	public:
+		[[nodiscard]] static Server* GetSingleton();
+
+		// Wire the core's defeat/rescue observers to event broadcasts.
+		static void Register();
+
+		// Answer an interface request by dispatching the interface back to the sender.
+		void OnRequest(const SFSE::MessagingInterface::Message* a_msg);
+
+		void BroadcastDefeat(std::uint32_t a_victim, std::uint32_t a_aggressor);
+		void BroadcastRescue(std::uint32_t a_victim, std::uint32_t a_aggressor);
+
+		// --- OSFDefeatAPI::IVDefeat1 -----------------------------------------------
+		[[nodiscard]] std::uint32_t Version() const noexcept override;
+		bool                        DefeatActor(RE::Actor* a_victim) override;
+		bool                        RescueActor(RE::Actor* a_victim, bool a_undoPacify) override;
+		[[nodiscard]] bool          IsDefeated(RE::Actor* a_victim) override;
+	};
+}
