@@ -58,11 +58,11 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\OSFDefeat.log`.
    followed by the existing `NPC defeat (bleedout + ghost + disengage)` / `defeated …`.
    The NPC should **drop into bleedout, not die**, others disengage, and it survives further fire
    (ghost). Aggressor `YYYYYYYY` should be **you** (or the actual attacker).
-3. **Attribution** — confirm `aggressor` matches the real damage dealer on weapon kills. On a
-   Papyrus/script `DamageValue` kill, watch for the new line
-   `hook: script-path aggressor resolved via myKiller -> YYYYYYYY` — if it appears, `myKiller`
-   carries a usable aggressor on the clamped path; if it never does (aggressor stays `00000000`),
-   `myKiller` isn't set pre-kill and the `currentCombatTarget` fallback in Follow-ups is the next step.
+3. **Attribution** — confirm `aggressor` matches the real damage dealer on weapon kills
+   (live-proven 2026-06-25: weapon kill of FF0157FE logged `aggressor 00000014` via `a_ref`). On a
+   Papyrus/script `DamageValue` kill of an NPC **actively fighting you**, watch for
+   `hook: script-path aggressor resolved via combatTarget -> YYYYYYYY` (the `currentCombatTarget`
+   fallback). A non-combat NPC has no combat target → `aggressor 00000000` (expected).
 4. **No regression** — player still goes down via the essential/poll path (bleedout, `tcai`
    disengage, ~8 s revive) exactly as before.
 5. **Recovery** — defeated NPC auto-revives after the pipeline beat (`kBeatMs`, 8 s) and gets up.
@@ -73,17 +73,25 @@ To run **poll-only** (player only) — e.g. if the hook drifts on a future game 
 gate-failure path already self-disables the hook cleanly, so this is only for a hard opt-out.
 
 ## Follow-ups
-- **Aggressor on the script path — IMPLEMENTED (awaiting in-game validation).** When `a_ref` is null
-  (the slot-7 / Papyrus `DamageValue` path), `Drain` now falls back to `Engine::ResolveKiller`,
-  which reads the victim's `myKiller` handle (Actor+0x29C) and resolves it via `GetSmartPointer`
-  (.244 ID `35638`, already current in this copy's `IDs.h` — the unsynced-handle-table concern was
-  stale for this primitive). The resolve runs on the **game thread** (in `Drain`, not the worker
-  thunk) under the handle manager's reader lock. **Caveat to validate:** the clamp *prevents* the
-  kill, so the engine may not set `myKiller` for that hit (the `killer=00000014` proof was on the
-  death-commit path we now bypass) — so this reliably helps only where `myKiller` was already set.
-  If it comes back `00000000` on pure-script kills, the better signal is the victim's
-  `currentCombatTarget` (Actor+0x298, "who they were fighting"); wiring that needs the offset
-  RE-confirmed first.
+- **Aggressor on the script path — DONE + LIVE-VALIDATED 2026-06-25 (combatTarget).** Proof: a
+  console `damageav health 9999` on an NPC fighting the player logged
+  `script-path aggressor resolved via combatTarget -> 00000014` and `defeated FF017625 (aggressor
+  00000014)` — clamp on the worker thread (a_ref null → 0), resolved on the game-thread `Drain` via
+  `GetSmartPointer` (no crash).
+  When `a_ref` is null (the slot-7 / Papyrus `DamageValue` path), `Drain` falls back to
+  `Engine::ResolveCombatTarget`, which reads the victim's `currentCombatTarget` handle (Actor+0x298,
+  "who they were fighting") and resolves it via `GetSmartPointer` (.244 ID `35638`, current in this
+  copy's `IDs.h`). The resolve runs on the **game thread** (in `Drain`, not the worker thunk) under
+  the handle manager's reader lock.
+  - **Why not `myKiller`?** First implemented against `myKiller@0x29C`; **disproven in-game
+    2026-06-25** — a console `damageav health 9999` clamp logged `aggressor 00000000` and NO
+    `resolved via myKiller` line. The clamp *prevents* the kill, and `myKiller` is only written when
+    a kill **commits** (the `killer=00000014` proof was on the `SetLifeState` death path we bypass),
+    so it reads empty for clamped victims. `currentCombatTarget` is populated throughout the fight,
+    so it's the correct signal.
+  - **Still to validate:** `damageav`-kill an NPC that is **actively fighting you** → expect
+    `hook: script-path aggressor resolved via combatTarget -> 00000014`. A non-combat NPC has no
+    combat target → stays `00000000` (correct: nobody defeated it in combat).
 - **EM damage:** confirm whether EM/stun weapons deplete the Health AV through this seam or a
   separate gauge (open gap in the module). If separate, a would-be-lethal EM hit won't be caught.
 - **Player via the hook:** if a unified hook path is ever wanted, it needs a player DefeatActor
