@@ -6,6 +6,8 @@
 #include "Core/Persistence.h"
 #include "Core/Pipeline.h"
 #include "Harness/NpcProbe.h"
+#include "Harness/Spike.h"  // [SPIKE] throwaway PoC native bindings; remove with src/Harness/Spike.*
+#include "Papyrus/Functions.h"
 #include "Trigger/HookTrigger.h"
 #include "Trigger/PollTrigger.h"
 
@@ -73,6 +75,8 @@ namespace
 			InstallCore();
 		} else if (a_msg->type == OSFDefeatAPI::kRequestMessage) {
 			OSFDefeat::API::Server::GetSingleton()->OnRequest(a_msg);
+		} else if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
+			OSFDefeat::Papyrus::Register();         // public Papyrus API (Phase 1 verbs + queries)
 		}
 	}
 }
