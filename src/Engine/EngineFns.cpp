@@ -34,6 +34,12 @@ namespace OSFDefeat::Engine
 		// gameplay.defeat_damage_hook). Sits right beside dialogueItemTarget@0x294 / myKiller@0x29C.
 		constexpr std::ptrdiff_t kCurrentCombatTargetHandleOffset = 0x298;
 
+		// Taxonomy reads (OSF RE actor_faction_taxonomy, live-validated 1.16.244): the actor's base
+		// form pointer sits at Actor+0x98, and the base's crime faction (TESNPC jurisdiction) at
+		// base+0x3B0. (CLSF's modeled offsets here were found stale — read raw.)
+		constexpr std::ptrdiff_t kActorBaseOffset = 0x98;
+		constexpr std::ptrdiff_t kCrimeFactionOffset = 0x3B0;
+
 		// Resolve a raw u32 TESPointerHandle stored at a fixed Actor offset to an Actor*, via the
 		// engine handle manager. GAME-THREAD ONLY (reads the handle table under its reader lock).
 		[[nodiscard]] RE::Actor* ResolveActorHandleAt(RE::Actor* a_actor, std::ptrdiff_t a_offset)
@@ -250,5 +256,31 @@ namespace OSFDefeat::Engine
 	RE::Actor* ResolveCombatTarget(RE::Actor* a_actor)
 	{
 		return ResolveActorHandleAt(a_actor, kCurrentCombatTargetHandleOffset);
+	}
+
+	bool HasCrimeFaction(const RE::Actor* a_actor)
+	{
+		if (!a_actor) {
+			return false;
+		}
+		// Chase Actor+0x98 (base form) then base+0x3B0 (crimeFaction) as raw pointer-sized reads
+		// off stable pointers — safe on any thread (no handle table, no array walk).
+		const std::uintptr_t base = *reinterpret_cast<const std::uintptr_t*>(
+			reinterpret_cast<const std::byte*>(a_actor) + kActorBaseOffset);
+		if (base == 0) {
+			return false;
+		}
+		const std::uintptr_t crimeFaction =
+			*reinterpret_cast<const std::uintptr_t*>(base + kCrimeFactionOffset);
+		return crimeFaction != 0;
+	}
+
+	bool HasCombatTarget(const RE::Actor* a_actor)
+	{
+		if (!a_actor) {
+			return false;
+		}
+		return *reinterpret_cast<const std::uint32_t*>(
+				   reinterpret_cast<const std::byte*>(a_actor) + kCurrentCombatTargetHandleOffset) != 0u;
 	}
 }

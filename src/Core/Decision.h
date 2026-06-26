@@ -24,9 +24,11 @@ namespace OSFDefeat::Decision
 	// protected categories, exclusion in Validation.
 	enum class EncounterClass
 	{
-		Hostile,  // an enemy combatant — the standard defeat
-		Crew,     // the player's own teammate / commanded actor — not a defeat target
-		Unknown,
+		Hostile = 0,   // an enemy combatant — the standard defeat
+		Crew = 1,      // the player's own teammate / commanded actor — not a defeat target
+		Security = 2,  // a guard / law-enforcement actor (boolBits kGuard)
+		Civilian = 3,  // a non-combatant bystander (has a crime faction, not currently fighting)
+		Unknown = 4,
 	};
 
 	[[nodiscard]] EncounterClass Classify(const RE::Actor* a_victim, const RE::Actor* a_aggressor);

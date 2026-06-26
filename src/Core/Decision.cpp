@@ -3,6 +3,7 @@
 #include "Core/Decision.h"
 
 #include "Core/Consequence.h"
+#include "Engine/EngineFns.h"
 
 #include <algorithm>
 #include <optional>
@@ -33,6 +34,10 @@ namespace OSFDefeat::Decision
 					  static_cast<std::uint32_t>(OSFDefeatAPI::EncounterClass::kHostile));
 		static_assert(static_cast<std::uint32_t>(EncounterClass::Crew) ==
 					  static_cast<std::uint32_t>(OSFDefeatAPI::EncounterClass::kCrew));
+		static_assert(static_cast<std::uint32_t>(EncounterClass::Security) ==
+					  static_cast<std::uint32_t>(OSFDefeatAPI::EncounterClass::kSecurity));
+		static_assert(static_cast<std::uint32_t>(EncounterClass::Civilian) ==
+					  static_cast<std::uint32_t>(OSFDefeatAPI::EncounterClass::kCivilian));
 		static_assert(static_cast<std::uint32_t>(EncounterClass::Unknown) ==
 					  static_cast<std::uint32_t>(OSFDefeatAPI::EncounterClass::kUnknown));
 
@@ -65,12 +70,21 @@ namespace OSFDefeat::Decision
 		if (!a_victim) {
 			return EncounterClass::Unknown;
 		}
+		// Order per OSF RE actor_faction_taxonomy (all SAFE field reads — no ID-bound calls):
+		// Crew -> Security -> Civilian -> Hostile.
 		if (IsPlayerCrew(a_victim)) {
 			return EncounterClass::Crew;
 		}
-		// TODO (taxonomy): a security/civilian split needs faction / crime-faction data, which is
-		// ID-bound on this unsynced CLSF (unverified on .244) — deferred. Everything else, including
-		// the normal enemy combatant, defaults to Hostile.
+		if (a_victim->boolBits.all(RE::Actor::BOOL_BITS::kGuard)) {
+			return EncounterClass::Security;  // guard / law-enforcement (boolBits bit30)
+		}
+		// Civilian = has a crime faction (jurisdiction) but isn't currently fighting anyone. The
+		// crime faction is the JURISDICTION, shared by a city's guards and civilians — kGuard above
+		// already split off the guards, so a non-guard with a crime faction and no combat target is
+		// a bystander.
+		if (Engine::HasCrimeFaction(a_victim) && !Engine::HasCombatTarget(a_victim)) {
+			return EncounterClass::Civilian;
+		}
 		return EncounterClass::Hostile;
 	}
 
@@ -81,6 +95,10 @@ namespace OSFDefeat::Decision
 			return "Hostile";
 		case EncounterClass::Crew:
 			return "Crew";
+		case EncounterClass::Security:
+			return "Security";
+		case EncounterClass::Civilian:
+			return "Civilian";
 		default:
 			return "Unknown";
 		}

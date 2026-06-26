@@ -52,6 +52,12 @@ namespace OSFDefeat::Consequence
 			if (a_class == "Crew") {
 				return static_cast<std::uint32_t>(EC::kCrew);
 			}
+			if (a_class == "Security") {
+				return static_cast<std::uint32_t>(EC::kSecurity);
+			}
+			if (a_class == "Civilian") {
+				return static_cast<std::uint32_t>(EC::kCivilian);
+			}
 			if (a_class == "Unknown") {
 				return static_cast<std::uint32_t>(EC::kUnknown);
 			}

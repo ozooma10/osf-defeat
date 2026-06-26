@@ -66,9 +66,11 @@ namespace OSFDefeatAPI
 	// internal taxonomy; treat unrecognized values as kUnknown (more may be added later).
 	enum class EncounterClass : std::uint32_t
 	{
-		kHostile = 0,  // an enemy combatant — the standard defeat
-		kCrew = 1,     // the player's own teammate / commanded actor (normally excluded upstream)
-		kUnknown = 2,
+		kHostile = 0,   // an enemy combatant — the standard defeat
+		kCrew = 1,      // the player's own teammate / commanded actor (normally excluded upstream)
+		kSecurity = 2,  // a guard / law-enforcement actor
+		kCivilian = 3,  // a non-combatant bystander (has a crime faction, not currently fighting)
+		kUnknown = 4,
 	};
 
 	// Context passed to an outcome provider for one defeat.

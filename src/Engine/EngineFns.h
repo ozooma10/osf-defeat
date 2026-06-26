@@ -77,6 +77,17 @@ namespace OSFDefeat::Engine
 	// re-acquire after StopCombat but not after this); the core of console StopCombatAlarmOnActor.
 	void StopCombatAndAlarmOnActor(RE::Actor* a_actor);
 
+	// True if the actor's base form has a crime faction (TESNPC jurisdiction). Read via
+	// base @ Actor+0x98 then crimeFaction @ base+0x3B0 (OSF RE actor_faction_taxonomy, .244).
+	// Plain pointer reads off stable pointers -> safe on any thread. Used by the Security/Civilian
+	// classification (a civilian has a crime faction but isn't currently fighting).
+	[[nodiscard]] bool HasCrimeFaction(const RE::Actor* a_actor);
+
+	// True if the actor currently has a combat target (handle @ Actor+0x298 != 0) — i.e. is
+	// actively fighting someone. A plain u32 read (no handle-table resolution), so safe on any
+	// thread, unlike ResolveCombatTarget below.
+	[[nodiscard]] bool HasCombatTarget(const RE::Actor* a_actor);
+
 	// Resolve the actor's current combat target (handle @ Actor+0x298, "who this actor is
 	// fighting") to an Actor*, via the engine handle manager (GetSmartPointer, .244 AddrLib ID
 	// 35638 — already current in this copy's IDs.h, not the stale Skyrim 72432). Returns nullptr
