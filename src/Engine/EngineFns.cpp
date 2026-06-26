@@ -22,6 +22,37 @@ namespace OSFDefeat::Engine
 		constexpr std::uint64_t kSetGhostID = 100873;      // void(Actor*, bool)
 		constexpr std::uint64_t kCombatRemoveID = 103285;  // void(ProcessLists*, Actor*, bool)
 
+		// The actor's current combat target = a raw u32 TESPointerHandle at Actor+0x298 (CLSF
+		// models the field but exposes no accessor). RE-proven on 1.16.244 (StopCombat clears it;
+		// gameplay.defeat_damage_hook). Sits right beside dialogueItemTarget@0x294 / myKiller@0x29C.
+		constexpr std::ptrdiff_t kCurrentCombatTargetHandleOffset = 0x298;
+
+		// Resolve a raw u32 TESPointerHandle stored at a fixed Actor offset to an Actor*, via the
+		// engine handle manager. GAME-THREAD ONLY (reads the handle table under its reader lock).
+		[[nodiscard]] RE::Actor* ResolveActorHandleAt(RE::Actor* a_actor, std::ptrdiff_t a_offset)
+		{
+			if (!a_actor) {
+				return nullptr;
+			}
+			// A plain field load off an Actor pointer we own (NOT a live process-list array walk),
+			// so the read itself is safe; the handle-TABLE resolution below is the game-thread part.
+			const std::uint32_t handle = *reinterpret_cast<const std::uint32_t*>(
+				reinterpret_cast<const std::byte*>(a_actor) + a_offset);
+			if (handle == 0) {  // empty handle (index 0 is the invalid slot)
+				return nullptr;
+			}
+			// BSPointerHandle<Actor> is layout-identical to the raw u32, so reinterpret the handle
+			// storage into the CLSF handle type and resolve through its .get() -> GetSmartPointer
+			// (ID 35638). The resolver age-checks the table and yields null for a stale/garbage
+			// handle (no crash). NiPointer balances the engine's AddRef on scope-exit; the referent
+			// is a live game actor held by the engine, so the raw pointer stays valid this frame.
+			static_assert(sizeof(RE::BSPointerHandle<RE::Actor>) == sizeof(std::uint32_t),
+				"actor handle must be layout-identical to the raw u32");
+			const auto&                    h = *reinterpret_cast<const RE::BSPointerHandle<RE::Actor>*>(&handle);
+			const RE::NiPointer<RE::Actor> ptr = h.get();
+			return ptr.get();
+		}
+
 		std::uintptr_t g_combatAIGate = 0;  // cached, resolved lazily
 
 		[[nodiscard]] bool IsReadable(std::uintptr_t a_addr, std::size_t a_size)
@@ -186,5 +217,10 @@ namespace OSFDefeat::Engine
 		using Fn = void (*)(RE::ProcessLists*, RE::Actor*, bool);
 		static REL::Relocation<Fn> fn{ REL::ID(kCombatRemoveID) };
 		fn(pl, a_actor, false);
+	}
+
+	RE::Actor* ResolveCombatTarget(RE::Actor* a_actor)
+	{
+		return ResolveActorHandleAt(a_actor, kCurrentCombatTargetHandleOffset);
 	}
 }

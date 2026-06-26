@@ -69,4 +69,15 @@ namespace OSFDefeat::Engine
 	// this actor as a target → they DISENGAGE. The per-actor lever plain StopCombat lacked (others
 	// re-acquire after StopCombat but not after this); the core of console StopCombatAlarmOnActor.
 	void StopCombatAndAlarmOnActor(RE::Actor* a_actor);
+
+	// Resolve the actor's current combat target (handle @ Actor+0x298, "who this actor is
+	// fighting") to an Actor*, via the engine handle manager (GetSmartPointer, .244 AddrLib ID
+	// 35638 — already current in this copy's IDs.h, not the stale Skyrim 72432). Returns nullptr
+	// if the actor isn't in combat or the handle is stale (the resolver age-checks → null, no
+	// crash). HookTrigger's aggressor fallback when the damage call's a_ref is null (script/Papyrus
+	// DamageValue path): unlike myKiller (only set when a kill COMMITS — which our clamp prevents,
+	// so it reads empty for clamped victims, confirmed in-game 2026-06-25), the combat target is
+	// populated throughout the fight. MUST run on the GAME THREAD: reads the handle table under the
+	// manager's reader lock.
+	[[nodiscard]] RE::Actor* ResolveCombatTarget(RE::Actor* a_actor);
 }

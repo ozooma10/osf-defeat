@@ -84,12 +84,10 @@ namespace OSFDefeat::Trigger
 			if (a_ref && a_ref->IsActor()) {
 				return a_ref->As<RE::Actor>();
 			}
-			// Script / Papyrus DamageValue (the slot-7 wrapper) passes a_ref = null. Attribution
-			// via the victim's myKiller handle (Actor+0x29C) is deferred: resolving a
-			// TESPointerHandle needs the GetSmartPointer primitive (OSF RE ID 35638) wired into
-			// Engine, and this CommonLibSF copy is unsynced (its handle-manager ID may be the
-			// stale Skyrim one that crashed on .244). Attribute null rather than risk a
-			// worker-thread handle deref; the down still happens, just unattributed.
+			// Script / Papyrus DamageValue (the slot-7 wrapper) passes a_ref = null. We do NOT
+			// resolve the victim's myKiller handle here — that handle-table deref is game-thread
+			// only. Return null now; Drain (game thread) falls back to Engine::ResolveKiller on
+			// the victim before firing the sink.
 			return nullptr;
 		}
 
@@ -149,8 +147,22 @@ namespace OSFDefeat::Trigger
 			}
 			for (const auto& down : batch) {
 				auto* const victim = RE::TESForm::LookupByID<RE::Actor>(down.victim);
-				auto* const aggressor =
+				auto*       aggressor =
 					down.aggressor ? RE::TESForm::LookupByID<RE::Actor>(down.aggressor) : nullptr;
+				// Script/Papyrus path: a_ref was null on the worker thread, so no aggressor was
+				// captured. Now on the game thread we can safely resolve the victim's combat target
+				// (Actor+0x298, "who they were fighting") through the handle table. We use the
+				// combat target, NOT myKiller — the clamp prevents the kill, so myKiller is never
+				// set for a clamped victim (confirmed in-game). Combat kills are already attributed
+				// via a_ref, so this only ever upgrades the unattributed (script) path.
+				if (victim && !aggressor) {
+					if (auto* const target = Engine::ResolveCombatTarget(victim)) {
+						aggressor = target;
+						REX::INFO(
+							"[OSFDefeat] hook: script-path aggressor resolved via combatTarget -> {:08X} for victim {:08X}",
+							target->GetFormID(), down.victim);
+					}
+				}
 				if (victim && g_sink) {
 					g_sink(DownEvent{ victim, aggressor });  // -> Pipeline::OnDown -> DefeatActor
 				}
