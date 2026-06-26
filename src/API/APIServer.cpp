@@ -7,6 +7,27 @@
 
 namespace OSFDefeat::API
 {
+	namespace
+	{
+		// Fire-and-forget broadcast that does NOT log when there are zero subscribers.
+		// CommonLibSF's MessagingInterface::Dispatch logs an ERROR whenever the underlying
+		// SFSE dispatch returns false, and a broadcast (receiver = nullptr) returns false
+		// precisely when no plugin is listening — the normal state for an event framework
+		// with no consumer installed. So broadcasts call the raw SFSE proxy directly (the
+		// same reinterpret CommonLibSF itself uses in its private GetProxy()), bypassing that
+		// error log. Targeted dispatches (the request/response below) keep the wrapper, where
+		// a false return DOES indicate a real delivery failure worth logging.
+		void BroadcastQuiet(std::uint32_t a_type, void* a_data, std::uint32_t a_len)
+		{
+			const auto* const intfc = SFSE::GetMessagingInterface();
+			if (!intfc) {
+				return;
+			}
+			const auto* const raw = reinterpret_cast<const SFSE::Impl::SFSEMessagingInterface*>(intfc);
+			raw->Dispatch(SFSE::GetPluginHandle(), a_type, a_data, a_len, nullptr);  // nullptr = broadcast
+		}
+	}
+
 	Server* Server::GetSingleton()
 	{
 		static Server singleton;
@@ -41,24 +62,14 @@ namespace OSFDefeat::API
 
 	void Server::BroadcastDefeat(std::uint32_t a_victim, std::uint32_t a_aggressor)
 	{
-		const auto* const intfc = SFSE::GetMessagingInterface();
-		if (!intfc) {
-			return;
-		}
 		OSFDefeatAPI::DefeatEvent data{ a_victim, a_aggressor };
-		intfc->Dispatch(OSFDefeatAPI::kOnDefeatMessage, &data,
-			static_cast<std::uint32_t>(sizeof(data)), nullptr);  // nullptr = broadcast
+		BroadcastQuiet(OSFDefeatAPI::kOnDefeatMessage, &data, static_cast<std::uint32_t>(sizeof(data)));
 	}
 
 	void Server::BroadcastRescue(std::uint32_t a_victim, std::uint32_t a_aggressor)
 	{
-		const auto* const intfc = SFSE::GetMessagingInterface();
-		if (!intfc) {
-			return;
-		}
 		OSFDefeatAPI::DefeatEvent data{ a_victim, a_aggressor };
-		intfc->Dispatch(OSFDefeatAPI::kOnRescueMessage, &data,
-			static_cast<std::uint32_t>(sizeof(data)), nullptr);
+		BroadcastQuiet(OSFDefeatAPI::kOnRescueMessage, &data, static_cast<std::uint32_t>(sizeof(data)));
 	}
 
 	std::uint32_t Server::Version() const noexcept
