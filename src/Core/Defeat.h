@@ -35,6 +35,10 @@ namespace OSFDefeat::Defeat
 	// the persisted absolute game-time deadline, carried straight into the registry.
 	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay);
 
+	// Re-assert the held down state on an already-registered defeated NPC whose engine state drifted
+	// (3D reload reset its life state). NPC-only and idempotent. Called by the recovery tick.
+	void ReapplyDownState(RE::Actor* a_victim);
+
 	// --- Pacify: API shape reserved; per-actor pacify on Starfield is still TODO.
 	void               Pacify(RE::Actor* a_victim);
 	void               UndoPacify(RE::Actor* a_victim);

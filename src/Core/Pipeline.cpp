@@ -7,6 +7,7 @@
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
 #include "Core/Validation.h"
+#include "Engine/EngineFns.h"
 
 namespace OSFDefeat::Pipeline
 {
@@ -42,11 +43,13 @@ namespace OSFDefeat::Pipeline
 			return (a_realSeconds * timeScale) / kSecondsPerDay;
 		}
 
-		// Game-thread recovery tick (registered as a permanent SFSE task). Revives every defeated
-		// actor whose absolute game-time deadline has passed. Because the deadline is game-time,
-		// this naturally stalls while the game is paused (NowDay frozen) and trips through any
-		// sleep/wait the player does. Replaces the old per-defeat detached std::thread real-time
-		// beat (which ignored game-time and was not save/load-safe).
+		// Game-thread recovery tick (registered as a permanent SFSE task). Three jobs per defeated
+		// actor: (1) auto-revive once its game-time deadline passes; (2) drop orphans — an expired
+		// entry whose actor no longer resolves can never be rescued, so remove it (plugs a registry
+		// leak that also bloats the co-save); (3) re-assert the down state if it drifted — a
+		// defeated NPC whose 3D reloaded loses its bleedout/ghost, so poll for that and re-apply
+		// (the poll-first answer to the 3D-reload gap; a Load3D hook is the future precise version).
+		// Game-time deadlines mean (1)/(2) stall while paused and trip through sleep/wait.
 		void TickRecovery()
 		{
 			static std::uint64_t s_lastTickMs = 0;
@@ -57,17 +60,31 @@ namespace OSFDefeat::Pipeline
 			s_lastTickMs = nowMs;
 
 			const float today = NowDay();
-			// Snapshot() copies the ids, so rescuing (which erases from the registry) mid-loop is safe.
+			// Snapshot() copies the ids, so removing/rescuing (which erase from the registry)
+			// mid-loop is safe.
 			for (const auto id : DefeatRegistry::Snapshot()) {
 				const auto data = DefeatRegistry::Get(id);
 				if (!data || data->state.load() != DefeatState::Defeated) {
 					continue;  // being applied / already rescuing
 				}
+				auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id);
 				const float deadline = data->recoverAtDay;
-				if (deadline > 0.0f && today >= deadline) {  // <=0 = held indefinitely (Phase 3)
-					if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
-						Defeat::RescueActor(actor, true);  // removes it from the registry
+				const bool  expired = deadline > 0.0f && today >= deadline;  // <=0 = held indefinitely
+
+				if (expired) {
+					if (actor) {
+						Defeat::RescueActor(actor, true);  // normal recovery (removes from registry)
+					} else {
+						DefeatRegistry::Remove(id);  // orphan: gone before recovery -> drop it
 					}
+					continue;
+				}
+
+				// Still held: keep the defeat asserted across 3D reloads. If a defeated NPC's life
+				// state is no longer bleedout, it drifted (reload reset it) -> re-apply. The guard
+				// means the common case (still kBleedOut) does nothing but a cheap read.
+				if (actor && !actor->IsPlayerRef() && Engine::GetLifeState(actor) != Engine::kBleedOut) {
+					Defeat::ReapplyDownState(actor);
 				}
 			}
 		}

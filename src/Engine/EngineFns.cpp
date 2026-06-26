@@ -19,6 +19,12 @@ namespace OSFDefeat::Engine
 		// Per-actor NPC defeat primitives — AddrLib IDs RE'd + live-validated in the OSF RE
 		// sandbox (gameplay.defeat_damage_hook, 1.16.244).
 		constexpr std::uint64_t kSetLifeStateID = 100787;  // void(Actor*, ACTOR_LIFE_STATE); vtable slot 0x16F
+
+		// Life state lives in bits 17-20 of the dword at actor+0xF8 (ActorState::actorState1;
+		// ActorState subobject @ actor+0xF0). RE-proven .244 (gameplay.defeat_damage_hook).
+		constexpr std::ptrdiff_t kActorState1Offset = 0xF8;
+		constexpr std::uint32_t  kLifeStateMask = 0x1E0000;
+		constexpr std::uint32_t  kLifeStateShift = 17;
 		constexpr std::uint64_t kSetGhostID = 100873;      // void(Actor*, bool)
 		constexpr std::uint64_t kCombatRemoveID = 103285;  // void(ProcessLists*, Actor*, bool)
 
@@ -230,6 +236,16 @@ namespace OSFDefeat::Engine
 		using Fn = void (*)(RE::Actor*, std::uint32_t);
 		static REL::Relocation<Fn> fn{ REL::ID(kSetLifeStateID) };
 		fn(a_actor, a_lifeState);
+	}
+
+	std::uint32_t GetLifeState(const RE::Actor* a_actor)
+	{
+		if (!a_actor) {
+			return kAlive;
+		}
+		const std::uint32_t actorState1 = *reinterpret_cast<const std::uint32_t*>(
+			reinterpret_cast<const std::byte*>(a_actor) + kActorState1Offset);
+		return (actorState1 & kLifeStateMask) >> kLifeStateShift;
 	}
 
 	void SetGhost(RE::Actor* a_actor, bool a_ghost)

@@ -68,6 +68,11 @@ namespace OSFDefeat::Engine
 	// life state directly — base-form-agnostic, per-instance. kBleedOut downs it, kAlive revives.
 	void SetLifeState(RE::Actor* a_actor, std::uint32_t a_lifeState);
 
+	// Read the actor's current life state (bits 17-20 of [actor+0xF8], RE-proven .244). A plain
+	// read off a stable pointer → safe on any thread. Used to detect a defeated NPC whose state
+	// drifted (e.g. its 3D reloaded and reset it to kAlive) so the tick can re-assert it.
+	[[nodiscard]] std::uint32_t GetLifeState(const RE::Actor* a_actor);
+
 	// Bethesda "ghost" (AddrLib ID 100873): true = invulnerable + AI de-prioritizes it as a target,
 	// so the defeat STICKS through ongoing fire. Reversible.
 	void SetGhost(RE::Actor* a_actor, bool a_ghost);

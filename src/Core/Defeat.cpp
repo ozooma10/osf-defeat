@@ -16,6 +16,19 @@ namespace OSFDefeat::Defeat
 			const auto* const cal = RE::Calendar::GetSingleton();
 			return cal ? cal->GetDaysPassedExact() : 0.0f;
 		}
+
+		// The OSF RE-proven, base-form-agnostic per-actor NPC down treatment (live-validated
+		// 2026-06-25): force the bleedout life state, hold it with kNoBleedoutRecovery, make it
+		// invulnerable so the defeat sticks through ongoing fire, and remove it from combat at the
+		// manager level so other actors disengage. Idempotent, so it doubles as the re-assertion
+		// applied when a defeated actor's state drifts (e.g. its 3D reloaded and reset it).
+		void ApplyNpcDownState(RE::Actor* a_victim)
+		{
+			a_victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+			Engine::SetLifeState(a_victim, Engine::kBleedOut);
+			Engine::SetGhost(a_victim, true);
+			Engine::StopCombatAndAlarmOnActor(a_victim);
+		}
 	}
 
 	void SetOnDefeat(Observer a_observer) { g_onDefeat = std::move(a_observer); }
@@ -45,15 +58,7 @@ namespace OSFDefeat::Defeat
 			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
 			Engine::SetCombatAIDisabled(true);
 		} else {
-			// NPC path — the OSF RE-proven, base-form-agnostic per-actor recipe
-			// (gameplay.defeat_damage_hook, live-validated 2026-06-25). No shared-base flip,
-			// no health hacking: force the bleedout life state, hold it with
-			// kNoBleedoutRecovery, make it invulnerable so the defeat sticks through ongoing
-			// fire, and remove it from combat at the manager level so other actors disengage.
-			a_victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-			Engine::SetLifeState(a_victim, Engine::kBleedOut);
-			Engine::SetGhost(a_victim, true);
-			Engine::StopCombatAndAlarmOnActor(a_victim);
+			ApplyNpcDownState(a_victim);
 			REX::INFO("[OSFDefeat] NPC defeat (bleedout + ghost + disengage): {:08X}", id);
 		}
 
@@ -142,10 +147,17 @@ namespace OSFDefeat::Defeat
 			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
 			Engine::SetCombatAIDisabled(true);
 		} else {
-			victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-			Engine::SetLifeState(victim, Engine::kBleedOut);
-			Engine::SetGhost(victim, true);
-			Engine::StopCombatAndAlarmOnActor(victim);
+			ApplyNpcDownState(victim);
+		}
+	}
+
+	void ReapplyDownState(RE::Actor* a_victim)
+	{
+		// Re-assert the held down state on an already-registered defeated NPC whose state drifted
+		// (e.g. its 3D reloaded and reset its life state). NPC-only: the player's down state is
+		// re-applied every frame by PollTrigger (EnsureEssential), so skip it here.
+		if (a_victim && !a_victim->IsPlayerRef()) {
+			ApplyNpcDownState(a_victim);
 		}
 	}
 
