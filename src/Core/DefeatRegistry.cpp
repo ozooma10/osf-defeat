@@ -4,10 +4,11 @@
 
 namespace OSFDefeat
 {
-	std::shared_ptr<VictimData> DefeatRegistry::Add(FormID a_id, float a_registeredDay, FormID a_aggressor)
+	std::shared_ptr<VictimData> DefeatRegistry::Add(
+		FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)
 	{
 		std::unique_lock lock{ _m };
-		auto              data = std::make_shared<VictimData>(a_registeredDay, a_aggressor);
+		auto              data = std::make_shared<VictimData>(a_registeredDay, a_aggressor, a_recoverAtDay);
 		const auto [it, inserted] = _victims.emplace(a_id, data);
 		return inserted ? data : nullptr;
 	}

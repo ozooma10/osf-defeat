@@ -126,9 +126,9 @@ namespace OSFDefeat::Defeat
 		return out;
 	}
 
-	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor)
+	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)
 	{
-		auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor);
+		auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor, a_recoverAtDay);
 		if (!data) {
 			return;
 		}

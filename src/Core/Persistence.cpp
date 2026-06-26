@@ -12,7 +12,10 @@ namespace OSFDefeat::Persistence
 	{
 		constexpr std::uint32_t kUniqueID = 'OSFD';
 		constexpr std::uint32_t kRecDefeated = 'DFT0';
-		constexpr std::uint32_t kVersion = 1;
+		// v2 adds the absolute game-time recovery deadline (recoverAtDay) per record. v1 records
+		// (formId, day, aggressor) are still readable and get a synthesized deadline on load.
+		constexpr std::uint32_t kVersion = 2;
+		constexpr std::uint32_t kVersionDeadline = 2;
 
 		void Save(const SFSE::SerializationInterface* a_intfc)
 		{
@@ -28,9 +31,11 @@ namespace OSFDefeat::Persistence
 				const FormID  formId = id;
 				const float   day = data ? data->registeredDay : 0.0f;
 				const FormID  aggressor = data ? data->aggressor : 0;
+				const float   recoverAtDay = data ? data->recoverAtDay : 0.0f;
 				a_intfc->WriteRecordData(formId);
 				a_intfc->WriteRecordData(day);
 				a_intfc->WriteRecordData(aggressor);
+				a_intfc->WriteRecordData(recoverAtDay);
 			}
 			REX::INFO("[OSFDefeat] saved {} defeated actor(s)", count);
 		}
@@ -42,14 +47,18 @@ namespace OSFDefeat::Persistence
 				if (type != kRecDefeated) {
 					continue;
 				}
+				const bool    hasDeadline = version >= kVersionDeadline;
 				std::uint32_t count = 0;
 				a_intfc->ReadRecordData(count);
 				for (std::uint32_t i = 0; i < count; ++i) {
 					FormID formId{}, aggressor{};
-					float  day{};
+					float  day{}, recoverAtDay{};
 					a_intfc->ReadRecordData(formId);
 					a_intfc->ReadRecordData(day);
 					a_intfc->ReadRecordData(aggressor);
+					if (hasDeadline) {
+						a_intfc->ReadRecordData(recoverAtDay);
+					}
 
 					const auto resolved = a_intfc->ResolveFormID(formId);
 					if (!resolved) {
@@ -64,9 +73,14 @@ namespace OSFDefeat::Persistence
 							ragr = *r;
 						}
 					}
+					// v1 saves carry no deadline -> synthesize one from the recorded defeat time so
+					// these actors still auto-recover (if already past, the tick revives at once).
+					if (!hasDeadline) {
+						recoverAtDay = day + Pipeline::RecoverySpanDays();
+					}
 					if (const auto* const tasks = SFSE::GetTaskInterface()) {
-						tasks->AddTask([rid, day, ragr]() {
-							Pipeline::RestoreDefeated(rid, day, ragr);
+						tasks->AddTask([rid, day, ragr, recoverAtDay]() {
+							Pipeline::RestoreDefeated(rid, day, ragr, recoverAtDay);
 						});
 					}
 				}

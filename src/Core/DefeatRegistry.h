@@ -18,12 +18,15 @@ namespace OSFDefeat
 	struct VictimData
 	{
 		VictimData() = default;
-		VictimData(float a_registeredDay, FormID a_aggressor) :
-			registeredDay(a_registeredDay), aggressor(a_aggressor) {}
+		VictimData(float a_registeredDay, FormID a_aggressor, float a_recoverAtDay = 0.0f) :
+			registeredDay(a_registeredDay), aggressor(a_aggressor), recoverAtDay(a_recoverAtDay) {}
 
 		float                    registeredDay{ 0.0f };  // Calendar GetDaysPassedExact at defeat (persisted)
+		float                    recoverAtDay{ 0.0f };   // absolute game-day auto-recovery deadline; <=0 = held (persisted)
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
 		std::atomic<DefeatState> state{ DefeatState::Defeating };
+		// registeredDay/aggressor are write-once at construction; recoverAtDay is mutated only on
+		// the game thread (Pipeline outcome + recovery tick + co-save Save) — no atomic needed.
 	};
 
 	// Thread-safe, actor-agnostic store of every actor currently in a defeat state.
@@ -33,7 +36,8 @@ namespace OSFDefeat
 	{
 	public:
 		// Inserts a new victim. Returns the data, or nullptr if already present.
-		static std::shared_ptr<VictimData> Add(FormID a_id, float a_registeredDay, FormID a_aggressor);
+		static std::shared_ptr<VictimData> Add(
+			FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay = 0.0f);
 		static std::shared_ptr<VictimData> Get(FormID a_id);
 		static bool                         Contains(FormID a_id);
 		static bool                         Remove(FormID a_id);

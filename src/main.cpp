@@ -54,6 +54,8 @@ namespace
 		InstallTrigger(std::make_unique<OSFDefeat::Trigger::PollTrigger>());
 		InstallTrigger(std::make_unique<OSFDefeat::Trigger::HookTrigger>());
 
+		OSFDefeat::Pipeline::Install();  // game-thread, game-time recovery tick (drains auto-recoveries)
+
 		OSFDefeat::API::Server::Register();
 		OSFDefeat::Harness::NpcProbe::Install();  // diagnostic, default-off
 		REX::INFO("[OSFDefeat] core installed");

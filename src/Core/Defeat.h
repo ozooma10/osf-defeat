@@ -31,8 +31,9 @@ namespace OSFDefeat::Defeat
 
 	[[nodiscard]] std::vector<RE::Actor*> GetAllDefeated(bool a_loadedOnly);
 
-	// Re-apply down state for an actor restored from a co-save (no observer fire).
-	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor);
+	// Re-apply down state for an actor restored from a co-save (no observer fire). recoverAtDay is
+	// the persisted absolute game-time deadline, carried straight into the registry.
+	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay);
 
 	// --- Pacify: API shape reserved; per-actor pacify on Starfield is still TODO.
 	void               Pacify(RE::Actor* a_victim);
