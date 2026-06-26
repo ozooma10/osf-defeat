@@ -28,4 +28,14 @@ namespace OSFDefeat::Consequence
 	// First matching rule's outcome for this defeat, or nullopt if no rule matches.
 	[[nodiscard]] std::optional<OSFDefeatAPI::DefeatOutcome> Evaluate(
 		const OSFDefeatAPI::DefeatContext& a_context);
+
+	// Sink the framework calls to broadcast an authored "event" consequence. Installed by the API
+	// layer (so Core has no API dependency — same inversion as Defeat's defeat/rescue observers).
+	using EventSink = std::function<void(std::uint32_t a_victim, std::uint32_t a_aggressor, const char* a_tag)>;
+	void SetEventSink(EventSink a_sink);
+
+	// Execute the authored consequences (effects) of the rule matching this defeat: broadcast
+	// "event" effects via the sink and write "log" effects. Game thread. Independent of who set the
+	// outcome (a C++ provider overriding the recovery does NOT suppress a matched rule's effects).
+	void Fire(const OSFDefeatAPI::DefeatContext& a_context);
 }

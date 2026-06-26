@@ -48,10 +48,11 @@ namespace RE
 namespace OSFDefeatAPI
 {
 	// SFSE message ids (4cc). Distinct across request/response/events.
-	inline constexpr std::uint32_t kRequestMessage = 'OSFr';   // consumer -> OSF: send me the interface
-	inline constexpr std::uint32_t kResponseMessage = 'OSFR';  // OSF -> consumer: here is the interface (data = IVDefeat1**)
-	inline constexpr std::uint32_t kOnDefeatMessage = 'OSFd';  // OSF -> all: an actor was defeated (data = DefeatEvent*)
-	inline constexpr std::uint32_t kOnRescueMessage = 'OSFs';  // OSF -> all: an actor was rescued (data = DefeatEvent*)
+	inline constexpr std::uint32_t kRequestMessage = 'OSFr';      // consumer -> OSF: send me the interface
+	inline constexpr std::uint32_t kResponseMessage = 'OSFR';     // OSF -> consumer: here is the interface (data = IVDefeat1**)
+	inline constexpr std::uint32_t kOnDefeatMessage = 'OSFd';     // OSF -> all: an actor was defeated (data = DefeatEvent*)
+	inline constexpr std::uint32_t kOnRescueMessage = 'OSFs';     // OSF -> all: an actor was rescued (data = DefeatEvent*)
+	inline constexpr std::uint32_t kOnConsequenceMessage = 'OSFc';  // OSF -> all: an authored consequence fired (data = ConsequenceEvent*)
 
 	inline constexpr std::uint32_t kInterfaceVersion = 2;
 
@@ -60,6 +61,17 @@ namespace OSFDefeatAPI
 	{
 		std::uint32_t victim;     // FormID of the defeated/rescued actor
 		std::uint32_t aggressor;  // FormID of the aggressor, or 0 if unknown
+	};
+
+	// Payload broadcast with kOnConsequenceMessage: an authored "event" consequence from the data
+	// config fired for a defeat. The framework declares WHAT (a tag); the listening mod implements
+	// HOW (capture, ransom, loot, ...). This is the data-driven consequence seam.
+	struct ConsequenceEvent
+	{
+		std::uint32_t victim;     // FormID of the defeated actor
+		std::uint32_t aggressor;  // FormID of the aggressor, or 0 if unknown
+		const char*   tag;        // null-terminated event tag from the rule; valid ONLY during this
+								  // synchronous dispatch — copy it if you retain it past the callback
 	};
 
 	// Coarse encounter classification handed to an outcome provider. Mirrors the framework's

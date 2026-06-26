@@ -11,8 +11,16 @@
   //                             Converted to game-time, so it pauses with the game and scales with
   //                             sleep/wait.
   //
-  // This default file reproduces the built-in behavior (everyone auto-recovers after the ~8s beat).
-  // Edit it to author outcomes — e.g. set Hostile to "hold" to capture defeated enemies.
+  // A rule may also carry "consequences": effects that fire when the rule matches a defeat:
+  //   { "type": "event", "tag": "<name>" }     broadcasts kOnConsequenceMessage with that tag, for a
+  //                                            consumer mod to act on (capture, ransom, loot, ...).
+  //   { "type": "log",   "message": "<text>" } writes to the SFSE log (handy for testing the path).
+  // Example:
+  //   { "class": "Hostile", "outcome": { "disposition": "hold" },
+  //     "consequences": [ { "type": "event", "tag": "osf_capture" } ] }
+  //
+  // This default file reproduces the built-in behavior (everyone auto-recovers after the ~8s beat)
+  // and authors no consequences. Edit it to author outcomes and effects.
   "version": 1,
   "rules": [
     {

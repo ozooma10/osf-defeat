@@ -2,6 +2,7 @@
 
 #include "API/APIServer.h"
 
+#include "Core/Consequence.h"
 #include "Core/Decision.h"
 #include "Core/Defeat.h"
 #include "Core/Pipeline.h"
@@ -43,6 +44,9 @@ namespace OSFDefeat::API
 		Defeat::SetOnRescue([](FormID a_victim, FormID a_aggressor) {
 			GetSingleton()->BroadcastRescue(a_victim, a_aggressor);
 		});
+		Consequence::SetEventSink([](std::uint32_t a_victim, std::uint32_t a_aggressor, const char* a_tag) {
+			GetSingleton()->BroadcastConsequence(a_victim, a_aggressor, a_tag);
+		});
 		REX::INFO("[OSFDefeat] API server registered");
 	}
 
@@ -71,6 +75,12 @@ namespace OSFDefeat::API
 	{
 		OSFDefeatAPI::DefeatEvent data{ a_victim, a_aggressor };
 		BroadcastQuiet(OSFDefeatAPI::kOnRescueMessage, &data, static_cast<std::uint32_t>(sizeof(data)));
+	}
+
+	void Server::BroadcastConsequence(std::uint32_t a_victim, std::uint32_t a_aggressor, const char* a_tag)
+	{
+		OSFDefeatAPI::ConsequenceEvent data{ a_victim, a_aggressor, a_tag };
+		BroadcastQuiet(OSFDefeatAPI::kOnConsequenceMessage, &data, static_cast<std::uint32_t>(sizeof(data)));
 	}
 
 	std::uint32_t Server::Version() const noexcept

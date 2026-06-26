@@ -2,6 +2,7 @@
 
 #include "Core/Pipeline.h"
 
+#include "Core/Consequence.h"
 #include "Core/Decision.h"
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
@@ -128,6 +129,15 @@ namespace OSFDefeat::Pipeline
 		ApplyOutcomeRecovery(victim->GetFormID(), outcome);
 		REX::INFO("[OSFDefeat] outcome for {:08X}: class={}, {}", victim->GetFormID(),
 			Decision::ClassName(encounterClass), outcome.hold ? "held" : "auto-recover after beat");
+
+		// Fire the matched data rule's authored consequences (event broadcasts / log effects). Runs
+		// after the defeat is applied + the kOnDefeat broadcast, so consumers see the defeat first.
+		const OSFDefeatAPI::DefeatContext ctx{
+			victim->GetFormID(),
+			a_event.aggressor ? a_event.aggressor->GetFormID() : 0u,
+			static_cast<std::uint32_t>(encounterClass),
+		};
+		Consequence::Fire(ctx);
 	}
 
 	void RestoreDefeated(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)

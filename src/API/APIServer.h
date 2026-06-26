@@ -22,6 +22,7 @@ namespace OSFDefeat::API
 
 		void BroadcastDefeat(std::uint32_t a_victim, std::uint32_t a_aggressor);
 		void BroadcastRescue(std::uint32_t a_victim, std::uint32_t a_aggressor);
+		void BroadcastConsequence(std::uint32_t a_victim, std::uint32_t a_aggressor, const char* a_tag);
 
 		// --- OSFDefeatAPI::IVDefeat1 -----------------------------------------------
 		[[nodiscard]] std::uint32_t Version() const noexcept override;

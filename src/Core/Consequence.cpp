@@ -11,16 +11,34 @@ namespace OSFDefeat::Consequence
 {
 	namespace
 	{
-		// A single rule: an optional encounter-class match (nullopt = wildcard) -> an outcome.
+		// An authored effect attached to a rule. Safe effect types only for now; engine-backed
+		// effects (item transfer, faction shifts) slot in here behind their own RE later.
+		struct Effect
+		{
+			enum class Type
+			{
+				Event,  // broadcast a tagged consequence event (arg = tag) -> consumer mods react
+				Log,    // write arg to the SFSE log (author-side testing without a consumer)
+			};
+			Type        type;
+			std::string arg;
+		};
+
+		// A single rule: an optional encounter-class match (nullopt = wildcard) -> an outcome plus
+		// any authored effects.
 		struct Rule
 		{
 			std::optional<std::uint32_t> encounterClass;  // nullopt = matches any class
 			OSFDefeatAPI::DefeatOutcome  outcome;
+			std::vector<Effect>          effects;
 		};
 
-		// Loaded once at data load (game thread) and read-only during SelectOutcome (game thread),
-		// so no lock is needed.
+		// Loaded once at data load (game thread) and read-only during SelectOutcome/Fire (game
+		// thread), so no lock is needed.
 		std::vector<Rule> g_rules;
+
+		// Installed by the API layer; called to broadcast "event" effects. Set once at load.
+		EventSink g_eventSink;
 
 		// Resolve OSFDefeat/consequences.json next to THIS DLL (robust under MO2's VFS, which maps
 		// both the DLL and the sibling config into the virtual Data tree).
@@ -116,6 +134,24 @@ namespace OSFDefeat::Consequence
 					if (jsonRule.contains("outcome")) {
 						rule.outcome = ParseOutcome(jsonRule["outcome"]);
 					}
+					if (jsonRule.contains("consequences") && jsonRule["consequences"].is_array()) {
+						for (const auto& jsonEffect : jsonRule["consequences"]) {
+							const auto effectType = jsonEffect.value("type", std::string{});
+							Effect     effect;
+							if (effectType == "event") {
+								effect.type = Effect::Type::Event;
+								effect.arg = jsonEffect.value("tag", std::string{});
+							} else if (effectType == "log") {
+								effect.type = Effect::Type::Log;
+								effect.arg = jsonEffect.value("message", std::string{});
+							} else {
+								REX::WARN("[OSFDefeat] consequence rule: unknown effect type '{}' - skipped",
+									effectType);
+								continue;
+							}
+							rule.effects.push_back(std::move(effect));
+						}
+					}
 					g_rules.push_back(std::move(rule));
 				}
 			}
@@ -128,13 +164,46 @@ namespace OSFDefeat::Consequence
 		}
 	}
 
+	namespace
+	{
+		[[nodiscard]] const Rule* FindMatch(const OSFDefeatAPI::DefeatContext& a_context)
+		{
+			for (const auto& rule : g_rules) {
+				if (!rule.encounterClass || *rule.encounterClass == a_context.encounterClass) {
+					return &rule;  // first match wins
+				}
+			}
+			return nullptr;
+		}
+	}
+
+	void SetEventSink(EventSink a_sink) { g_eventSink = std::move(a_sink); }
+
 	std::optional<OSFDefeatAPI::DefeatOutcome> Evaluate(const OSFDefeatAPI::DefeatContext& a_context)
 	{
-		for (const auto& rule : g_rules) {
-			if (!rule.encounterClass || *rule.encounterClass == a_context.encounterClass) {
-				return rule.outcome;  // first match wins
-			}
+		if (const Rule* const rule = FindMatch(a_context)) {
+			return rule->outcome;
 		}
 		return std::nullopt;
+	}
+
+	void Fire(const OSFDefeatAPI::DefeatContext& a_context)
+	{
+		const Rule* const rule = FindMatch(a_context);
+		if (!rule) {
+			return;
+		}
+		for (const auto& effect : rule->effects) {
+			switch (effect.type) {
+			case Effect::Type::Event:
+				if (g_eventSink && !effect.arg.empty()) {
+					g_eventSink(a_context.victim, a_context.aggressor, effect.arg.c_str());
+				}
+				break;
+			case Effect::Type::Log:
+				REX::INFO("[OSFDefeat] consequence (victim {:08X}): {}", a_context.victim, effect.arg);
+				break;
+			}
+		}
 	}
 }
