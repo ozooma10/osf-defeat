@@ -5,14 +5,15 @@
 #include "Core/Persistence.h"
 #include "Core/Pipeline.h"
 #include "Harness/NpcProbe.h"
+#include "Trigger/HookTrigger.h"
 #include "Trigger/PollTrigger.h"
 
 // =============================================================================
 // OSF Defeat — native defeat / death-alternative *framework* for Starfield.
 //
 // Layered core (see each module's header):
-//   Engine        low-level RE'd primitives (combat-AI gate, AV owner, essential)
-//   Trigger       pluggable down-detection — PollTrigger today, hooks later
+//   Engine        low-level RE'd primitives (combat-AI gate, AV owner, essential) + the hook
+//   Trigger       pluggable down-detection — PollTrigger (player) + HookTrigger (NPC)
 //   DefeatRegistry thread-safe store of defeated actors (the heart)
 //   Defeat        actor-agnostic verbs (defeat / rescue / pacify)
 //   Validation    the gate (CanProcess / ValidatePair)
@@ -20,27 +21,41 @@
 //   Persistence   co-save serialization of the registry
 //   API           public versioned interface + event broadcasts (the framework seam)
 //
-// Hook-free for now: the only engine writes are the player's Essential flag and
-// the global combat-AI gate, driven from a per-frame SFSE task.
+// One hook: HookTrigger entry-hooks ActorValueOwner::ModActorValue (AddrLib ID 101587)
+// to clamp would-be-lethal NPC damage pre-death. The trampoline is allocated in
+// SFSE::Init below; everything else is poll/flag-driven from per-frame SFSE tasks.
 // =============================================================================
 namespace
 {
-	std::unique_ptr<OSFDefeat::Trigger::ITrigger> g_trigger;
+	std::vector<std::unique_ptr<OSFDefeat::Trigger::ITrigger>> g_triggers;
+
+	void InstallTrigger(std::unique_ptr<OSFDefeat::Trigger::ITrigger> a_trigger)
+	{
+		a_trigger->SetSink([](const OSFDefeat::Trigger::DownEvent& a_event) {
+			OSFDefeat::Pipeline::OnDown(a_event);
+		});
+		a_trigger->Install();
+		g_triggers.push_back(std::move(a_trigger));
+	}
 
 	void InstallCore()
 	{
-		if (g_trigger) {
+		if (!g_triggers.empty()) {
 			return;
 		}
-		auto trigger = std::make_unique<OSFDefeat::Trigger::PollTrigger>();
-		trigger->SetSink([](const OSFDefeat::Trigger::DownEvent& a_event) {
-			OSFDefeat::Pipeline::OnDown(a_event);
-		});
-		trigger->Install();
-		g_trigger = std::move(trigger);
+
+		// Both triggers compose on the same sink (Pipeline::OnDown is victim-keyed +
+		// idempotent via the registry):
+		//   PollTrigger — the player path (base Essential -> engine bleedout -> poll Health<=0).
+		//   HookTrigger — the NPC path (pre-death ModActorValue damage clamp -> attributed down);
+		//                 catches NPCs that die in one frame with no bleedout window to poll.
+		// PollTrigger stays installed as the player fallback — do NOT regress it. To run
+		// poll-only (e.g. if the hook ever drifts on a game update), drop the HookTrigger line.
+		InstallTrigger(std::make_unique<OSFDefeat::Trigger::PollTrigger>());
+		InstallTrigger(std::make_unique<OSFDefeat::Trigger::HookTrigger>());
 
 		OSFDefeat::API::Server::Register();
-		OSFDefeat::Harness::NpcProbe::Install();  // diagnostic: validates NPC instance-essential (1)/(2)
+		OSFDefeat::Harness::NpcProbe::Install();  // diagnostic, default-off
 		REX::INFO("[OSFDefeat] core installed");
 	}
 
@@ -59,7 +74,9 @@ namespace
 
 SFSE_PLUGIN_LOAD(const SFSE::LoadInterface* a_sfse)
 {
-	SFSE::Init(a_sfse);  // hook-free: no trampoline needed (yet)
+	// Trampoline allocated for HookTrigger's single entry hook (ModActorValue, ID 101587):
+	// the gateway (stolen prologue + jmp-back) plus the out-of-range branch stub fit easily.
+	SFSE::Init(a_sfse, { .trampoline = true, .trampolineSize = 256 });
 
 	OSFDefeat::Persistence::Register();
 
