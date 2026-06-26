@@ -2,6 +2,7 @@
 
 #include "Core/Pipeline.h"
 
+#include "Core/Decision.h"
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
 #include "Core/Validation.h"
@@ -59,13 +60,22 @@ namespace OSFDefeat::Pipeline
 			}
 		}
 
-		// Default outcome: auto-recover a beat from now. Stamps the victim's absolute game-time
-		// deadline; the tick performs the actual revive. No-op if the victim isn't registered.
-		void ScheduleRecovery(FormID a_id)
+		// Apply the selected outcome's recovery policy by stamping the victim's absolute game-time
+		// deadline; the tick performs the actual revive. `hold` => no deadline (recoverAtDay <= 0,
+		// held until an explicit rescue). No-op if the victim isn't registered.
+		void ApplyOutcomeRecovery(FormID a_id, const Decision::Outcome& a_outcome)
 		{
-			if (auto data = DefeatRegistry::Get(a_id)) {
-				data->recoverAtDay = NowDay() + RecoverySpanDays();
+			auto data = DefeatRegistry::Get(a_id);
+			if (!data) {
+				return;
 			}
+			if (a_outcome.hold) {
+				data->recoverAtDay = 0.0f;  // held; the tick skips deadlines <= 0
+				return;
+			}
+			const float span =
+				a_outcome.recoverySpanDays >= 0.0f ? a_outcome.recoverySpanDays : RecoverySpanDays();
+			data->recoverAtDay = NowDay() + span;
 		}
 	}
 
@@ -99,14 +109,18 @@ namespace OSFDefeat::Pipeline
 			return;
 		}
 
-		// TODO (Decision layer): classify the encounter (hostile / crew / civilian /
-		// security / bystander) and select an outcome. Scaffold = single default.
+		// Decision layer: classify the encounter, then select the outcome (recovery policy today;
+		// pluggable / data-driven consequences later).
+		const auto encounterClass = Decision::Classify(victim, a_event.aggressor);
+		const auto outcome = Decision::SelectOutcome(encounterClass, victim, a_event.aggressor);
+
 		if (!Defeat::DefeatActor(victim, a_event.aggressor)) {
 			return;
 		}
 
-		// Default outcome: auto-recover after the beat (game-time deadline; the tick revives).
-		ScheduleRecovery(victim->GetFormID());
+		ApplyOutcomeRecovery(victim->GetFormID(), outcome);
+		REX::INFO("[OSFDefeat] outcome for {:08X}: class={}, {}", victim->GetFormID(),
+			Decision::ClassName(encounterClass), outcome.hold ? "held" : "auto-recover after beat");
 	}
 
 	void RestoreDefeated(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)
