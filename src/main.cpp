@@ -77,6 +77,7 @@ namespace
 			OSFDefeat::API::Server::GetSingleton()->OnRequest(a_msg);
 		} else if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
 			OSFDefeat::Papyrus::Register();         // public Papyrus API (Phase 1 verbs + queries)
+			OSFDefeat::Harness::Spike::Register();  // [SPIKE] bind PoC native globals once the VM is up
 		}
 	}
 }
