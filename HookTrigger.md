@@ -1,9 +1,10 @@
 # HookTrigger — pre-death damage hook (Phase 2)
 
-Second `ITrigger` implementation. Catches a would-be-lethal hit **before** the kill commits,
-attributes the aggressor, and routes the victim into the existing held-bleedout defeat state.
-This is the trigger `PollTrigger` could never be: an NPC takes a lethal hit and dies in one
-frame with no bleedout window to poll, so the lethal hit itself must be intercepted.
+Second `ITrigger` implementation. Catches a would-be-terminal hit **before** the engine commits
+its terminal state — a lethal **Health** hit (→ death) or a would-be-incapacitating **EM Health**
+hit (→ vanilla EM shock) — attributes the aggressor, and routes the victim into the existing
+held-bleedout defeat state. This is the trigger `PollTrigger` could never be: an NPC takes a lethal
+hit and dies in one frame with no bleedout window to poll, so the hit itself must be intercepted.
 
 ## The RE'd seam (from OSF RE `gameplay.defeat_damage_hook`, PHASE 4, live 2026-06-25, 1.16.244)
 
@@ -14,13 +15,22 @@ frame with no bleedout window to poll, so the lethal hit itself must be intercep
 - **Entry detour:** steal 5 bytes `48 89 5C 24 08` (`mov [rsp+8],rbx`, clean boundary);
   verify-gate 9 bytes `48 89 5C 24 08 89 54 24 10`. Bound by **raw AddrLib ID** (this
   CommonLibSF copy is unsynced — same pattern as `EngineFns`).
-- **Mechanism (Acheron-style):** damage is written here **before** the death decision reads the
-  post value. Clamp the Health `delta` so post-hit Health lands at a small floor (`5.0`), so the
-  engine's downstream kill path never fires. **Not a negate** — always forward to the gateway;
-  the only lever is the clamped delta. The actor is left **alive at floor HP** → no death race.
+- **Mechanism (Acheron-style):** damage is written here **before** the engine's terminal decision
+  reads the post value. Clamp the `delta` so the post-hit gauge lands at a small floor (`kDownFloor
+  = 5.0`), so the engine's downstream terminal path never fires. **Not a negate** — always forward
+  to the gateway; the only lever is the clamped delta. The actor is left **alive at the floor** → no
+  death race.
+- **Two AVs reach a terminal state through this same primitive** (OSF RE `em-stun-damage-routing`,
+  2026-06-25): **Health** → death, and **Electromagnetic Health** → the vanilla EM
+  shock/incapacitation. EM/stun depletes a *separate* "Electromagnetic Health" gauge, not Health, so
+  the thunk matches **both AVIFs** and clamps them identically (one floor, one code path). EM Health
+  AVIF is resolved off `BGSDefaultObjectManager::GetSingleton()` (ID `43134`) `+ 0xd0` — see
+  `Engine::EMHealthAV()`. **Decision = CLAMP, not ADOPT:** keep one framework-owned defeat/recovery
+  state rather than layering ours on top of the engine's behavior-graph shock (which is also
+  recoverable, but invisible to the framework and needs the unresolved shock-state RE to wire onto).
 - **Aggressor:** the `a_ref` arg is the actual damage dealer on the direct combat path
   (validated by the seam body via `cmp [a_ref+0x2e],0x4b`). On the wrapper/script path `a_ref`
-  is null → attributed null for now (see Follow-ups).
+  is null → `Drain` falls back to the victim's `currentCombatTarget` (see Follow-ups).
 
 ### Dead ends (proven false in the sandbox — do not retry)
 - Hooking the keystone `HandleHealthDamage` (ID 63465): **post-write**, HP already ≤ 0.
@@ -50,14 +60,23 @@ frame with no bleedout window to poll, so the lethal hit itself must be intercep
 
 Log: `Documents\My Games\Starfield\SFSE\Logs\OSFDefeat.log`.
 
-1. **Install** — on load: `HookTrigger installed (ModActorValue pre-death clamp; NPC scope)`.
-   If instead you see `ModActorValue ID 101587 gate failed`, the prologue drifted (game update)
-   — the hook self-disables and NPCs simply have no trigger; the player is unaffected.
-2. **NPC defeat** — get a hostile NPC into normal combat and land a killing blow. Expect a line:
-   `hook: lethal hit on XXXXXXXX (preHp=… dmg=…) clamped to floor 5.0; aggressor YYYYYYYY; prevented death -> defeat`
+1. **Install** — on load: `HookTrigger installed (ModActorValue clamp: Health->death + EM
+   Health->shock; NPC scope; EM AVIF resolved=true)`. `EM AVIF resolved=false` means the
+   DefaultObjectManager getter/slot didn't resolve at install (it retries lazily on first use, so a
+   later EM hit can still work — but false here is worth noting). If instead you see `ModActorValue
+   ID 101587 gate failed`, the prologue drifted (game update) — the hook self-disables and NPCs
+   simply have no trigger; the player is unaffected.
+2. **NPC defeat (weapon/Health)** — get a hostile NPC into normal combat and land a killing blow.
+   Expect a line:
+   `hook: would-be-down Health hit on XXXXXXXX (pre=… dmg=…) clamped to floor 5.0; aggressor YYYYYYYY; prevented death -> defeat`
    followed by the existing `NPC defeat (bleedout + ghost + disengage)` / `defeated …`.
    The NPC should **drop into bleedout, not die**, others disengage, and it survives further fire
    (ghost). Aggressor `YYYYYYYY` should be **you** (or the actual attacker).
+2b. **NPC defeat (EM/stun)** — deplete a hostile NPC's EM gauge with an EM weapon. Expect the same
+   flow but `hook: would-be-down EM hit on XXXXXXXX … prevented EM shock -> defeat` — the NPC drops
+   into our bleedout instead of the vanilla EM shock. **Not yet live-validated** (RE couldn't fire an
+   EM weapon); this is the key thing to confirm. If an EM kill instead plays the vanilla shock with
+   no `EM hit` line, check `EM AVIF resolved` at install (offset drift).
 3. **Attribution** — confirm `aggressor` matches the real damage dealer on weapon kills
    (live-proven 2026-06-25: weapon kill of FF0157FE logged `aggressor 00000014` via `a_ref`). On a
    Papyrus/script `DamageValue` kill of an NPC **actively fighting you**, watch for
@@ -92,7 +111,16 @@ gate-failure path already self-disables the hook cleanly, so this is only for a 
   - **Still to validate:** `damageav`-kill an NPC that is **actively fighting you** → expect
     `hook: script-path aggressor resolved via combatTarget -> 00000014`. A non-combat NPC has no
     combat target → stays `00000000` (correct: nobody defeated it in combat).
-- **EM damage:** confirm whether EM/stun weapons deplete the Health AV through this seam or a
-  separate gauge (open gap in the module). If separate, a would-be-lethal EM hit won't be caught.
+- **EM damage — RESOLVED + IMPLEMENTED 2026-06-26 (CLAMP; awaiting in-game validation).** OSF RE
+  `em-stun-damage-routing` confirmed EM/stun depletes a *separate* "Electromagnetic Health" AV, but
+  through the **same** `ModActorValue` primitive (ID 101587) we already hook — so this was a wider AV
+  filter, not a new seam. The thunk now also matches the EM Health AVIF (`Engine::EMHealthAV()`, via
+  `BGSDefaultObjectManager` getter ID 43134 + slot 0xd0) and clamps it identically. Vanilla EM "kill"
+  is a timed, recoverable shock (not death); we CLAMP so the shock never fires and the victim enters
+  our unified `DefeatActor` state instead (see the Design "Two AVs" bullet for the CLAMP-vs-ADOPT
+  rationale). **Pending runtime cross-checks** (RE couldn't fire an EM weapon): (1) confirm an EM
+  down logs the `EM hit` line and drops the NPC into our bleedout; (2) keystone `HandleHealthDamage`
+  (ID 63465) should show 0 hits under EM damage (EM ≠ Health). Floor `5.0` assumes a 0–100-ish EM
+  gauge; revisit if the EM Health max turns out tiny.
 - **Player via the hook:** if a unified hook path is ever wanted, it needs a player DefeatActor
   variant that drives bleedout directly (not via Essential), since the clamp keeps HP > 0.

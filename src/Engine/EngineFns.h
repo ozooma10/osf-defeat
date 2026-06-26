@@ -19,6 +19,13 @@ namespace OSFDefeat::Engine
 	// Cached "Health" ActorValueInfo, or nullptr if forms aren't loaded yet.
 	[[nodiscard]] RE::ActorValueInfo* HealthAV();
 
+	// Cached "Electromagnetic Health" ActorValueInfo — the SEPARATE gauge EM/stun weapons deplete
+	// (not Health), so the defeat hook must recognize it too. Resolved off
+	// BGSDefaultObjectManager::GetSingleton() (AddrLib ID 43134) + slot 0xd0 (the getter ID is
+	// stable across patches; the 0xd0 offset is 1.16.244-specific — re-anchor on a game update).
+	// nullptr if unavailable. (OSF RE em-stun-damage-routing, 2026-06-25.)
+	[[nodiscard]] RE::ActorValueInfo* EMHealthAV();
+
 	// The ActorValueOwner subobject (CommonLibSF doesn't model it as an Actor base).
 	[[nodiscard]] RE::ActorValueOwner* AVOwnerOf(RE::Actor* a_actor);
 

@@ -24,10 +24,18 @@ namespace OSFDefeat::Trigger
 		//
 		// The slot-7 wrapper (ID 101588, a_ref = null) tail-calls slot-6, so an entry hook
 		// here catches BOTH the wrapper (Papyrus/script) and the direct combat callers. This
-		// is the universal incoming-AV-write point: damage is written here BEFORE the death
-		// decision reads the post value, so clamping the Health delta so post > 0 means the
-		// kill path never triggers. Live proof: NPC preHp=7.1, delta=-11.5 -> clamped ->
+		// is the universal incoming-AV-write point: damage is written here BEFORE the engine's
+		// terminal decision reads the post value, so clamping the delta so post > 0 means the
+		// terminal path never triggers. Live proof: NPC preHp=7.1, delta=-11.5 -> clamped ->
 		// survived -> held bleedout, SetLifeState deathSeen=0, aggressor attributed.
+		//
+		// TWO AVs reach a terminal state through this same primitive (OSF RE em-stun-damage-routing,
+		// 2026-06-25): Health (-> death) and Electromagnetic Health (-> the vanilla EM
+		// shock/incapacitation). EM/stun depletes a SEPARATE "Electromagnetic Health" gauge, not
+		// Health, so the filter recognizes both AVIFs and clamps them identically — the engine's
+		// terminal state (death OR shock) never fires and the victim routes into our one unified
+		// DefeatActor state. (CLAMP, not ADOPT: keeps a single framework-owned defeat/recovery
+		// model rather than layering our state on top of the engine's behavior-graph shock.)
 		//
 		// DEAD ENDS (proven false in the sandbox — do not retry): hooking the keystone
 		// HandleHealthDamage (ID 63465 — post-write, HP already <= 0) and rewriting
@@ -45,8 +53,9 @@ namespace OSFDefeat::Trigger
 			0x48, 0x89, 0x5C, 0x24, 0x08, 0x89, 0x54, 0x24, 0x10
 		};
 
-		// Where a clamped lethal hit lands the victim's Health: clearly alive, never <= 0.
-		constexpr float kHealthFloor = 5.0f;
+		// Where a clamped would-be-terminal hit lands the victim's gauge (Health or EM Health):
+		// clearly above 0, so neither the death path nor the EM shock fires.
+		constexpr float kDownFloor = 5.0f;
 
 		// The engine ABI of the hooked function (see the seam note above). Used for both the
 		// detour signature and the gateway call — identical, so a clamped re-entry is a normal
@@ -99,19 +108,23 @@ namespace OSFDefeat::Trigger
 		{
 			float finalDelta = a_delta;
 
-			// Fast filter: only would-be-lethal Health damage, while the framework is enabled.
-			if (a_delta < 0.0f && Engine::HealthAV() == &a_info && Validation::CanProcess()) {
+			// Fast filter: only a would-be-terminal write while the framework is enabled. delta<0
+			// is the cheap first gate; then match the AV against the two gauges that reach a
+			// terminal state through this primitive — Health (death) and EM Health (EM shock).
+			if (a_delta < 0.0f && Validation::CanProcess()) {
+				const bool isHealth = (Engine::HealthAV() == &a_info);
+				const bool isEM = !isHealth && (Engine::EMHealthAV() == &a_info);
 				RE::Actor* const victim = ActorFromAVOwner(a_avo);
 				// NPC scope: the player keeps its proven essential->bleedout + PollTrigger path.
-				if (victim && !victim->IsPlayerRef() && !Defeat::IsDefeated(victim)) {
-					const float preHp = a_avo->GetActorValue(a_info);
-					if (preHp > 0.0f && preHp + a_delta <= 0.0f) {
+				if ((isHealth || isEM) && victim && !victim->IsPlayerRef() && !Defeat::IsDefeated(victim)) {
+					const float preAV = a_avo->GetActorValue(a_info);
+					if (preAV > 0.0f && preAV + a_delta <= 0.0f) {
 						RE::Actor* const aggressor = ResolveAggressor(a_ref);
 						// Candidacy == the pipeline's gate, so a clamp always yields a defeat
-						// (no actor left stranded alive-but-undefeated at floor HP).
+						// (no actor left stranded alive-but-undefeated at the floor).
 						if (Validation::ValidatePair(victim, aggressor)) {
-							// CLAMP: post-hit Health = floor (> 0) -> the kill path never fires.
-							finalDelta = kHealthFloor - preHp;
+							// CLAMP: post-hit gauge = floor (> 0) -> the terminal path never fires.
+							finalDelta = kDownFloor - preAV;
 
 							const FormID vId = victim->GetFormID();
 							const FormID aId = aggressor ? aggressor->GetFormID() : 0;
@@ -122,9 +135,10 @@ namespace OSFDefeat::Trigger
 								}
 							}
 							REX::INFO(
-								"[OSFDefeat] hook: lethal hit on {:08X} (preHp={:.1f} dmg={:.1f}) clamped to floor "
-								"{:.1f}; aggressor {:08X}; prevented death -> defeat",
-								vId, preHp, a_delta, kHealthFloor, aId);
+								"[OSFDefeat] hook: would-be-down {} hit on {:08X} (pre={:.1f} dmg={:.1f}) clamped "
+								"to floor {:.1f}; aggressor {:08X}; prevented {} -> defeat",
+								isEM ? "EM" : "Health", vId, preAV, a_delta, kDownFloor, aId,
+								isEM ? "EM shock" : "death");
 						}
 					}
 				}
@@ -134,7 +148,7 @@ namespace OSFDefeat::Trigger
 		}
 
 		// Game-thread drain (per-frame SFSE task): route each queued down through the existing
-		// pipeline. The victim is alive at floor HP, so there is no death race with this defer.
+		// pipeline. The victim is alive at the floor gauge, so there is no death race with this defer.
 		void Drain()
 		{
 			std::vector<PendingDown> batch;
@@ -194,6 +208,9 @@ namespace OSFDefeat::Trigger
 		}
 		tasks->AddPermanentTask([]() { Drain(); });
 
-		REX::INFO("[OSFDefeat] HookTrigger installed (ModActorValue pre-death clamp; NPC scope)");
+		REX::INFO(
+			"[OSFDefeat] HookTrigger installed (ModActorValue clamp: Health->death + EM Health->shock; "
+			"NPC scope; EM AVIF resolved={})",
+			Engine::EMHealthAV() != nullptr);
 	}
 }

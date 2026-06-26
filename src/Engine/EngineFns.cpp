@@ -22,6 +22,13 @@ namespace OSFDefeat::Engine
 		constexpr std::uint64_t kSetGhostID = 100873;      // void(Actor*, bool)
 		constexpr std::uint64_t kCombatRemoveID = 103285;  // void(ProcessLists*, Actor*, bool)
 
+		// EM/stun depletes a dedicated "Electromagnetic Health" AV (NOT Health). It's resolved off
+		// BGSDefaultObjectManager: GetSingleton (ID 43134) returns the manager; the EM Health
+		// ActorValueInfo* lives at mgr + 0xd0 on 1.16.244. Getter ID is stable; re-anchor the slot
+		// on a game update. (OSF RE em-stun-damage-routing.)
+		constexpr std::uint64_t  kDefaultObjectManagerSingletonID = 43134;
+		constexpr std::ptrdiff_t kEMHealthAVSlot = 0xd0;
+
 		// The actor's current combat target = a raw u32 TESPointerHandle at Actor+0x298 (CLSF
 		// models the field but exposes no accessor). RE-proven on 1.16.244 (StopCombat clears it;
 		// gameplay.defeat_damage_hook). Sits right beside dialogueItemTarget@0x294 / myKiller@0x29C.
@@ -114,6 +121,27 @@ namespace OSFDefeat::Engine
 		static RE::ActorValueInfo* cached =
 			RE::TESForm::LookupByEditorID<RE::ActorValueInfo>("Health");
 		return cached;
+	}
+
+	RE::ActorValueInfo* EMHealthAV()
+	{
+		// Resolve once and cache — but NEVER cache a null, so an early probe (e.g. the install-time
+		// log) can't poison the cache before default objects are populated. The damage thunk calls
+		// this from worker threads, so use an atomic; racers all compute the same pointer and the
+		// redundant pre-cache getter calls are idempotent.
+		static std::atomic<RE::ActorValueInfo*> cached{ nullptr };
+		auto* av = cached.load(std::memory_order_relaxed);
+		if (!av) {
+			using GetSingletonFn = void* (*)();
+			static REL::Relocation<GetSingletonFn> getSingleton{ REL::ID(kDefaultObjectManagerSingletonID) };
+			if (auto* const mgr = static_cast<std::byte*>(getSingleton())) {
+				av = *reinterpret_cast<RE::ActorValueInfo**>(mgr + kEMHealthAVSlot);
+				if (av) {
+					cached.store(av, std::memory_order_relaxed);
+				}
+			}
+		}
+		return av;
 	}
 
 	RE::ActorValueOwner* AVOwnerOf(RE::Actor* a_actor)
