@@ -2,6 +2,7 @@
 
 #include "API/APIServer.h"
 #include "API/OSFDefeatAPI.h"
+#include "Core/Consequence.h"
 #include "Core/Persistence.h"
 #include "Core/Pipeline.h"
 #include "Harness/NpcProbe.h"
@@ -51,6 +52,8 @@ namespace
 		//                 catches NPCs that die in one frame with no bleedout window to poll.
 		// PollTrigger stays installed as the player fallback — do NOT regress it. To run
 		// poll-only (e.g. if the hook ever drifts on a game update), drop the HookTrigger line.
+		OSFDefeat::Consequence::Load();  // data-driven outcome rules (before any defeat can fire)
+
 		InstallTrigger(std::make_unique<OSFDefeat::Trigger::PollTrigger>());
 		InstallTrigger(std::make_unique<OSFDefeat::Trigger::HookTrigger>());
 

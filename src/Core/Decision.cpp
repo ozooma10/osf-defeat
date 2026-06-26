@@ -2,12 +2,31 @@
 
 #include "Core/Decision.h"
 
+#include "Core/Consequence.h"
+
 #include <algorithm>
+#include <optional>
 
 namespace OSFDefeat::Decision
 {
 	namespace
 	{
+		// Map a public verdict to an internal Outcome, or nullopt for kDefault ("decline" — defer
+		// to the next source). Shared by the provider path and the data-rule path.
+		[[nodiscard]] std::optional<Outcome> VerdictToOutcome(const OSFDefeatAPI::DefeatOutcome& a_verdict)
+		{
+			using Disposition = OSFDefeatAPI::DefeatOutcome::Disposition;
+			switch (a_verdict.disposition) {
+			case Disposition::kHold:
+				return Outcome{ /*hold*/ true, /*recoverySeconds*/ -1.0f };
+			case Disposition::kRelease:
+				return Outcome{ /*hold*/ false, a_verdict.recoverySeconds };
+			case Disposition::kDefault:
+			default:
+				return std::nullopt;
+			}
+		}
+
 		// Internal EncounterClass and the public ABI enum must agree value-for-value (we pass the
 		// internal value straight through to providers as DefeatContext::encounterClass).
 		static_assert(static_cast<std::uint32_t>(EncounterClass::Hostile) ==
@@ -97,37 +116,38 @@ namespace OSFDefeat::Decision
 	Outcome SelectOutcome(
 		EncounterClass a_class, const RE::Actor* a_victim, const RE::Actor* a_aggressor)
 	{
-		// Consult registered providers first. Copy the list under the lock, then invoke unlocked so
-		// a provider can do anything (including (un)register) without deadlocking; the first
-		// non-kDefault verdict wins.
+		const Outcome frameworkDefault{ /*hold*/ false, /*recoverySeconds*/ -1.0f };
+		if (!a_victim) {
+			return frameworkDefault;
+		}
+		const OSFDefeatAPI::DefeatContext ctx{
+			a_victim->GetFormID(),
+			a_aggressor ? a_aggressor->GetFormID() : 0u,
+			static_cast<std::uint32_t>(a_class),
+		};
+
+		// 1. Registered C++ providers (explicit integrations win). Copy the list under the lock,
+		//    then invoke unlocked so a provider may do anything (incl. (un)register) without
+		//    deadlocking; the first non-kDefault verdict wins.
 		std::vector<RegisteredProvider> providers;
 		{
 			std::scoped_lock lk{ g_providersMutex };
 			providers = g_providers;
 		}
-		if (!providers.empty() && a_victim) {
-			const OSFDefeatAPI::DefeatContext ctx{
-				a_victim->GetFormID(),
-				a_aggressor ? a_aggressor->GetFormID() : 0u,
-				static_cast<std::uint32_t>(a_class),
-			};
-			for (const auto& provider : providers) {
-				const OSFDefeatAPI::DefeatOutcome verdict = provider.fn(ctx, provider.userData);
-				switch (verdict.disposition) {
-				case OSFDefeatAPI::DefeatOutcome::Disposition::kHold:
-					return Outcome{ /*hold*/ true, /*recoverySeconds*/ -1.0f };
-				case OSFDefeatAPI::DefeatOutcome::Disposition::kRelease:
-					return Outcome{ /*hold*/ false, verdict.recoverySeconds };
-				case OSFDefeatAPI::DefeatOutcome::Disposition::kDefault:
-				default:
-					break;  // decline -> try the next provider
-				}
+		for (const auto& provider : providers) {
+			if (const auto outcome = VerdictToOutcome(provider.fn(ctx, provider.userData))) {
+				return *outcome;
 			}
 		}
 
-		// Framework default (no provider claimed it): auto-recover after the default beat. The
-		// scaffold does not yet vary by class; that is where Phase-3 built-in policies will diverge.
-		(void)a_class;
-		return Outcome{ /*hold*/ false, /*recoverySeconds*/ -1.0f };
+		// 2. Data-driven rules (the authored content/config layer).
+		if (const auto verdict = Consequence::Evaluate(ctx)) {
+			if (const auto outcome = VerdictToOutcome(*verdict)) {
+				return *outcome;
+			}
+		}
+
+		// 3. Built-in framework default: auto-recover after the default beat.
+		return frameworkDefault;
 	}
 }

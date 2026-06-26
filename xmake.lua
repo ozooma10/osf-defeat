@@ -12,6 +12,9 @@ set_warnings("allextra")
 add_rules("mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
+-- dependencies
+add_requires("nlohmann_json")  -- data-driven consequence config (header-only)
+
 -- define targets
 -- target name == MO2 mod folder: deploy goes to XSE_SF_MODS_PATH\<target name>\SFSE\Plugins
 target("OSF Defeat")
@@ -28,6 +31,9 @@ target("OSF Defeat")
     add_includedirs("src")
     set_pcxxheader("src/pch.h")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
+
+    -- packages
+    add_packages("nlohmann_json")
 
     -- deploy the built plugin + symbols into the MO2 mod folder after each build
     after_build(function(target)
@@ -51,5 +57,16 @@ target("OSF Defeat")
                 os.trycp(src, path.join(plugindir, path.filename(src)))
                 cprint("${green}[OSF Defeat] copied:${clear} %s", path.filename(src))
             end
+        end
+
+        -- deploy the default data-driven consequence config next to the DLL (in an OSFDefeat
+        -- subfolder, where Consequence::Load looks). Do NOT overwrite an existing one the user
+        -- may have edited.
+        local cfgsrc = path.join(os.projectdir(), "data", "consequences.json")
+        local cfgdst = path.join(plugindir, "OSFDefeat", "consequences.json")
+        if os.isfile(cfgsrc) and not os.isfile(cfgdst) then
+            os.mkdir(path.directory(cfgdst))
+            os.trycp(cfgsrc, cfgdst)
+            cprint("${green}[OSF Defeat] deployed default config:${clear} OSFDefeat/consequences.json")
         end
     end)
