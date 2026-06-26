@@ -30,6 +30,17 @@ namespace OSFDefeat::Pipeline
 			return cal ? cal->GetDaysPassedExact() : 0.0f;
 		}
 
+		// Convert a REAL-seconds duration into game-days using the live timescale, so a span pauses
+		// with the game and scales with sleep/wait yet still feels like that many real seconds during
+		// normal play. timeScale = game-minutes per real-minute (== game-seconds per real-second);
+		// gameSeconds = realSeconds * timeScale, gameDays = / 86400. Fallback 20 (franchise default).
+		[[nodiscard]] float RealSecondsToGameDays(float a_realSeconds)
+		{
+			const auto* const cal = RE::Calendar::GetSingleton();
+			const float       timeScale = (cal && cal->timeScale) ? cal->GetTimeScale() : 20.0f;
+			return (a_realSeconds * timeScale) / kSecondsPerDay;
+		}
+
 		// Game-thread recovery tick (registered as a permanent SFSE task). Revives every defeated
 		// actor whose absolute game-time deadline has passed. Because the deadline is game-time,
 		// this naturally stalls while the game is paused (NowDay frozen) and trips through any
@@ -73,20 +84,16 @@ namespace OSFDefeat::Pipeline
 				data->recoverAtDay = 0.0f;  // held; the tick skips deadlines <= 0
 				return;
 			}
-			const float span =
-				a_outcome.recoverySpanDays >= 0.0f ? a_outcome.recoverySpanDays : RecoverySpanDays();
-			data->recoverAtDay = NowDay() + span;
+			const float spanDays = a_outcome.recoverySeconds >= 0.0f
+									 ? RealSecondsToGameDays(a_outcome.recoverySeconds)
+									 : RecoverySpanDays();
+			data->recoverAtDay = NowDay() + spanDays;
 		}
 	}
 
 	float RecoverySpanDays()
 	{
-		const auto* const cal = RE::Calendar::GetSingleton();
-		// timeScale = game-minutes per real-minute (== game-seconds per real-second). So
-		// gameSeconds = realSeconds * timeScale, and gameDays = gameSeconds / 86400. Fallback 20
-		// (the franchise default) if the calendar/global isn't ready.
-		const float timeScale = (cal && cal->timeScale) ? cal->GetTimeScale() : 20.0f;
-		return (kBeatRealSeconds * timeScale) / kSecondsPerDay;
+		return RealSecondsToGameDays(kBeatRealSeconds);
 	}
 
 	void Install()

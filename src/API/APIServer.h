@@ -9,7 +9,7 @@ namespace OSFDefeat::API
 	// Concrete implementation of the public framework interface + the messaging
 	// bridge (request/response + event broadcasts). Other SFSE plugins reach the
 	// core only through here.
-	class Server final : public OSFDefeatAPI::IVDefeat1
+	class Server final : public OSFDefeatAPI::IVDefeat2
 	{
 	public:
 		[[nodiscard]] static Server* GetSingleton();
@@ -28,5 +28,9 @@ namespace OSFDefeat::API
 		bool                        DefeatActor(RE::Actor* a_victim) override;
 		bool                        RescueActor(RE::Actor* a_victim, bool a_undoPacify) override;
 		[[nodiscard]] bool          IsDefeated(RE::Actor* a_victim) override;
+
+		// --- OSFDefeatAPI::IVDefeat2 -----------------------------------------------
+		std::uint32_t RegisterOutcomeProvider(OSFDefeatAPI::OutcomeProvider a_provider, void* a_userData) override;
+		bool          UnregisterOutcomeProvider(std::uint32_t a_token) override;
 	};
 }

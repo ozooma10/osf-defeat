@@ -2,6 +2,7 @@
 
 #include "API/APIServer.h"
 
+#include "Core/Decision.h"
 #include "Core/Defeat.h"
 #include "Core/Pipeline.h"
 
@@ -116,5 +117,17 @@ namespace OSFDefeat::API
 	bool Server::IsDefeated(RE::Actor* a_victim)
 	{
 		return Defeat::IsDefeated(a_victim);
+	}
+
+	std::uint32_t Server::RegisterOutcomeProvider(OSFDefeatAPI::OutcomeProvider a_provider, void* a_userData)
+	{
+		// The registry lives in the Decision layer (so SelectOutcome can consult it without a
+		// Core->API dependency); the server is just the public messaging-reachable facade.
+		return Decision::RegisterOutcomeProvider(a_provider, a_userData);
+	}
+
+	bool Server::UnregisterOutcomeProvider(std::uint32_t a_token)
+	{
+		return Decision::UnregisterOutcomeProvider(a_token);
 	}
 }

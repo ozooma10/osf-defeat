@@ -2,6 +2,8 @@
 
 #include "pch.h"
 
+#include "API/OSFDefeatAPI.h"  // OutcomeProvider / DefeatContext / DefeatOutcome (public ABI types)
+
 // =============================================================================
 // Decision — the policy layer between "an actor went down" and "what happens to
 // it". Two jobs:
@@ -36,13 +38,23 @@ namespace OSFDefeat::Decision
 	[[nodiscard]] bool IsDefeatExcluded(const RE::Actor* a_victim, const RE::Actor* a_aggressor);
 
 	// What to do with an actor that IS being defeated. Today this is purely the recovery policy;
-	// Phase 3 grows it (pluggable / data-driven; hostility resolution; consequence hooks).
+	// Phase 3 grows it (data-driven; hostility resolution; consequence hooks). recoverySeconds is
+	// REAL seconds (Pipeline converts to game-time at apply); <0 means "use the default beat".
 	struct Outcome
 	{
-		bool  hold = false;              // true -> held until an explicit rescue (recoverAtDay <= 0)
-		float recoverySpanDays = -1.0f;  // <0 -> use the pipeline default beat; >=0 -> explicit span
+		bool  hold = false;             // true -> held until an explicit rescue (recoverAtDay <= 0)
+		float recoverySeconds = -1.0f;  // <0 -> default beat; >=0 -> explicit real-seconds span
 	};
 
+	// Selects the outcome for a defeat: consults registered outcome providers (first non-default
+	// verdict wins), else returns the framework default (auto-recover after the beat).
 	[[nodiscard]] Outcome SelectOutcome(
 		EncounterClass a_class, const RE::Actor* a_victim, const RE::Actor* a_aggressor);
+
+	// --- Outcome provider registry (the public API's RegisterOutcomeProvider forwards here, so the
+	// registry lives in Core and SelectOutcome can consult it without a Core->API dependency).
+	// Thread-safe; providers are consulted on the game thread, copied out before invocation so a
+	// provider may freely (un)register afterwards.
+	std::uint32_t RegisterOutcomeProvider(OSFDefeatAPI::OutcomeProvider a_provider, void* a_userData);
+	bool          UnregisterOutcomeProvider(std::uint32_t a_token);
 }
