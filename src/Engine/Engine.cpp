@@ -2,6 +2,7 @@
 
 #include "Engine/Engine.h"
 
+#include "RE/B/BSPointerHandle.h"
 #include "RE/C/Console.h"
 #include "RE/P/ProcessLists.h"
 
@@ -24,9 +25,35 @@ namespace OSFDefeat::Engine
         return avs ? avs->health : nullptr;
     }
 
+    RE::ActorValueInfo* EMHealthAV()
+    {
+        // EM/stun damage depletes a separate "Electromagnetic Health" gauge through the same
+        // ModActorValue primitive as Health (OSF RE em-stun-damage-routing, 2026-06-25). This is
+        // the typed equivalent of the proven BGSDefaultObjectManager getter (ID 43134) + 0xD0.
+        const auto* const avs = RE::ActorValue::GetSingleton();
+        return avs ? avs->electromagneticHealth : nullptr;
+    }
+
     RE::ActorValueOwner* AVOwnerOf(RE::Actor* a_actor)
     {
         return a_actor ? static_cast<RE::ActorValueOwner*>(static_cast<RE::TESObjectREFR*>(a_actor)) : nullptr;
+    }
+
+    RE::Actor* ResolveCombatTarget(RE::Actor* a_victim)
+    {
+        if (!a_victim) {
+            return nullptr;
+        }
+
+        // currentCombatTarget is a raw TESPointerHandle in this CommonLibSF fork; reinterpret it
+        // as the typed handle and resolve via GetSmartPointer (ID 35638). The age-checked manager
+        // returns null for a stale/empty handle, so this is safe on the game thread.
+        const auto& handle = reinterpret_cast<const RE::BSPointerHandle<RE::Actor>&>(a_victim->currentCombatTarget);
+        if (!handle) {
+            return nullptr;
+        }
+        const RE::NiPointer<RE::Actor> target = handle.get();
+        return target.get();
     }
 
     float GetHealth(RE::Actor* a_actor)

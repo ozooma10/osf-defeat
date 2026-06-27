@@ -62,13 +62,43 @@ namespace OSFDefeat::PlayerDefeat
             const FormID aggressorId = a_ref ? a_ref->GetFormID() : 0;
             if (const auto* const tasks = SFSE::GetTaskInterface()) {
                 tasks->AddTask([aggressorId]() {
-                    auto* const aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
+                    auto* aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
+                    // The slot-7 wrapper (Papyrus/console DamageValue) passes a_ref=null, so there is
+                    // no direct dealer. Fall back to who the player was fighting (currentCombatTarget),
+                    // resolved here on the game thread. NOT myKiller — that is only written once a kill
+                    // commits, which the clamp prevents (disproven in-game; see HookTrigger.md).
+                    if (!aggressor) {
+                        aggressor = Engine::ResolveCombatTarget(PlayerActor());
+                    }
                     BeginPlayerDefeat(aggressor);
                     g_pendingDefeat.store(false);
                 });
             } else {
                 g_pendingDefeat.store(false);
             }
+        }
+
+        // Both AVs reach a terminal state through this same ModActorValue primitive: Health -> death,
+        // Electromagnetic Health -> the vanilla EM shock/incapacitation (OSF RE em-stun-damage-routing,
+        // 2026-06-25). We clamp both identically so neither terminal path fires.
+        [[nodiscard]] bool IsLethalGauge(const RE::ActorValueInfo& a_info)
+        {
+            return &a_info == Engine::HealthAV() || &a_info == Engine::EMHealthAV();
+        }
+
+        // Health keeps its flat floor (unchanged behavior). The EM Health gauge can be far smaller, so
+        // cap the floor below its max — em-stun-damage-routing flagged a flat 5.0 as too high for a tiny
+        // EM gauge. Falls back to the flat floor if the gauge max is unavailable.
+        [[nodiscard]] float LethalFloorFor(RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info)
+        {
+            if (&a_info == Engine::HealthAV()) {
+                return kLethalHealthFloor;
+            }
+            const float maxValue = a_owner ? a_owner->GetPermanentActorValue(a_info) : 0.0f;
+            if (maxValue <= 0.0f) {
+                return kLethalHealthFloor;
+            }
+            return std::min(kLethalHealthFloor, std::max(1.0f, maxValue * 0.05f));
         }
 
         void ModActorValueDetour(
@@ -78,14 +108,14 @@ namespace OSFDefeat::PlayerDefeat
             float a_delta,
             RE::TESObjectREFR* a_ref)
         {
-            if (g_original && IsPlayerAVOwner(a_owner) && &a_info == Engine::HealthAV() &&
-                a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f) {
+            if (g_original && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f &&
+                IsPlayerAVOwner(a_owner) && IsLethalGauge(a_info)) {
                 auto* const player = PlayerActor();
-                const float currentHealth = player ? Engine::GetHealth(player) : 0.0f;
-                const bool lethal = currentHealth + a_delta <= 0.0f;
+                const float current = a_owner->GetActorValue(a_info);
+                const bool lethal = current + a_delta <= 0.0f;
                 auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
                 if (lethal && Validation::CanProcess() && Validation::ValidatePair(player, aggressor) && !Defeat::IsDefeated(player)) {
-                    a_delta = std::max(a_delta, kLethalHealthFloor - currentHealth);
+                    a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
                     QueueBegin(a_ref);
                 }
             }
