@@ -16,6 +16,11 @@ Bool Function IsDefeated(Actor akActor) global native
 Bool Function IsPacified(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native
 
+; Classification for NPC-consequence routing. ClassifyActor: 0 = flesh, 1 = robot, 2 = turret.
+Int Function ClassifyActor(Actor akActor) global native
+Bool Function IsNonFlesh(Actor akActor) global native
+Bool Function IsHostile(Actor akActor, Actor akTarget) global native
+
 Function DisableProcessing(Bool abDisable) global native
 Bool Function IsProcessingDisabled() global native
 

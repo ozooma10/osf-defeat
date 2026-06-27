@@ -8,6 +8,7 @@
 
 #include "Core/Config.h"
 #include "Core/Consequence.h"
+#include "Core/Decision.h"
 #include "Core/Defeat.h"
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
@@ -98,6 +99,23 @@ namespace OSFDefeat::Papyrus
         bool IsPacified(std::monostate, RE::Actor* a_actor)
         {
             return Defeat::IsPacified(a_actor);
+        }
+
+        // Classification for content NPC-consequence routing (and the future NPC auto-defeat gate):
+        // 0 = flesh, 1 = robot, 2 = turret.
+        std::int32_t ClassifyActor(std::monostate, RE::Actor* a_actor)
+        {
+            return static_cast<std::int32_t>(Decision::Classify(a_actor));
+        }
+
+        bool IsNonFlesh(std::monostate, RE::Actor* a_actor)
+        {
+            return Decision::IsNonFlesh(a_actor);
+        }
+
+        bool IsHostile(std::monostate, RE::Actor* a_actor, RE::Actor* a_target)
+        {
+            return Decision::IsHostile(a_actor, a_target);
         }
 
         std::vector<RE::Actor*> GetDefeated(std::monostate, bool a_loadedOnly)
@@ -240,6 +258,9 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "ReleaseActor", &ReleaseActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsDefeated", &IsDefeated, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsPacified", &IsPacified, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ClassifyActor", &ClassifyActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsNonFlesh", &IsNonFlesh, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsHostile", &IsHostile, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetDefeated", &GetDefeated, std::nullopt, false);
         vm->BindNativeMethod(kClass, "DisableProcessing", &DisableProcessing, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsProcessingDisabled", &IsProcessingDisabled, std::nullopt, false);
