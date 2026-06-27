@@ -165,8 +165,14 @@ namespace OSFDefeat::PlayerDefeat
 
         REX::INFO("[OSFDefeat] player outcome '{}' selected; recovery in {:.2f}s", outcome.name, outcome.recoverySeconds);
         if (outcome.quest) {
-            REX::INFO("[OSFDefeat] outcome '{}' requested quest '{}'; quest start is deferred post-alpha", outcome.name, *outcome.quest);
+            REX::INFO("[OSFDefeat] outcome '{}' carries quest token '{}'; handing off to consequence consumers", outcome.name, *outcome.quest);
         }
+
+        // Stage the handoff payload (read back through the GetLastPlayer* Papyrus
+        // getters), then notify content consumers such as OSF Surrender. We are on
+        // the game thread here, so the VM SendEvent inside Broadcast is safe.
+        DefeatContext::SetPlayerContext(player, a_aggressor, outcome);
+        Events::BroadcastPlayerConsequenceStarted();
     }
 
     void TickRecovery()
