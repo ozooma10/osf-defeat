@@ -66,6 +66,10 @@ namespace OSFDefeat::Trigger
 		ModActorValueFn g_gateway = nullptr;  // call to run the original ModActorValue
 		ITrigger::Sink  g_sink;               // copied from the instance on Install()
 
+		// Player surrender threshold as a fraction of max Health [0..1]; 0 disables it (default).
+		// A surrender consumer raises it (e.g. 0.30) via IVDefeat3::SetPlayerSurrenderThreshold.
+		std::atomic<float> g_playerSurrenderFraction{ 0.0f };
+
 		// Worker-thread -> game-thread handoff. The clamp runs on the damage worker thread
 		// (arithmetic + forwarding the call = safe there). The held-bleedout treatment
 		// (DefeatActor: SetLifeState/SetGhost/combat-remove) MUST run on the game thread, so we
@@ -100,6 +104,52 @@ namespace OSFDefeat::Trigger
 			return nullptr;
 		}
 
+		// Player surrender (no clamp): a non-lethal Health hit in combat that leaves the player below
+		// the configured surrender fraction queues an attributed down. Lethal player hits are left to
+		// fall through to the gateway -> essential -> engine bleedout (PollTrigger catches those); we
+		// never clamp the player, which would suppress that bleedout path. Worker-thread safe: flag /
+		// AV reads + the same pending queue the NPC path uses.
+		void MaybeQueuePlayerSurrender(
+			RE::ActorValueOwner* a_avo, const RE::ActorValueInfo& a_info, float a_delta, RE::TESObjectREFR* a_ref)
+		{
+			const float threshold = g_playerSurrenderFraction.load();
+			if (threshold <= 0.0f || a_delta >= 0.0f || !Validation::CanProcess()) {
+				return;  // surrender disabled, not a damaging Health write, or globally paused
+			}
+			if (Engine::HealthAV() != &a_info) {
+				return;  // surrender keys on Health only (EM is the NPC clamp's domain)
+			}
+			RE::Actor* const victim = ActorFromAVOwner(a_avo);
+			if (!victim || !victim->IsPlayerRef() || Defeat::IsDefeated(victim)) {
+				return;
+			}
+			const float preAV = a_avo->GetActorValue(a_info);
+			const float postAV = preAV + a_delta;
+			const float maxAV = a_avo->GetPermanentActorValue(a_info);
+			if (postAV <= 0.0f || maxAV <= 0.0f || (postAV / maxAV) >= threshold) {
+				return;  // lethal (-> bleedout path) or still above the surrender fraction
+			}
+			if (!Engine::HasCombatTarget(victim)) {
+				return;  // only surrender to an actual fight, not environmental / out-of-combat damage
+			}
+			RE::Actor* const aggressor = ResolveAggressor(a_ref);
+			if (!Validation::ValidatePair(victim, aggressor)) {
+				return;
+			}
+			const FormID vId = victim->GetFormID();
+			const FormID aId = aggressor ? aggressor->GetFormID() : 0;
+			{
+				std::scoped_lock lk{ g_pendingMutex };
+				if (!g_pendingIds.insert(vId).second) {
+					return;  // already queued this beat
+				}
+				g_pending.push_back({ vId, aId });
+			}
+			REX::INFO(
+				"[OSFDefeat] hook: player surrender (hp {:.1f}/{:.0f} = {:.0f}% < {:.0f}%); aggressor {:08X}",
+				postAV, maxAV, (postAV / maxAV) * 100.0f, threshold * 100.0f, aId);
+		}
+
 		// THE DETOUR. Reached via JMP at the function entry, so registers/stack are exactly
 		// what the engine set up for ModActorValue. Runs on the damage worker thread.
 		void ModActorValueThunk(
@@ -107,6 +157,9 @@ namespace OSFDefeat::Trigger
 			float a_delta, RE::TESObjectREFR* a_ref)
 		{
 			float finalDelta = a_delta;
+
+			// Player surrender path (separate from the NPC clamp; never alters finalDelta).
+			MaybeQueuePlayerSurrender(a_avo, a_info, a_delta, a_ref);
 
 			// Fast filter: only a would-be-terminal write while the framework is enabled. delta<0
 			// is the cheap first gate; then match the AV against the two gauges that reach a
@@ -210,7 +263,19 @@ namespace OSFDefeat::Trigger
 
 		REX::INFO(
 			"[OSFDefeat] HookTrigger installed (ModActorValue clamp: Health->death + EM Health->shock; "
-			"NPC scope; EM AVIF resolved={})",
-			Engine::EMHealthAV() != nullptr);
+			"NPC scope; EM AVIF resolved={}; player surrender fraction={:.2f})",
+			Engine::EMHealthAV() != nullptr, g_playerSurrenderFraction.load());
+	}
+
+	void SetPlayerSurrenderFraction(float a_fraction)
+	{
+		const float clamped = a_fraction < 0.0f ? 0.0f : (a_fraction > 1.0f ? 1.0f : a_fraction);
+		g_playerSurrenderFraction.store(clamped);
+		REX::INFO("[OSFDefeat] player surrender fraction set to {:.2f}", clamped);
+	}
+
+	float GetPlayerSurrenderFraction()
+	{
+		return g_playerSurrenderFraction.load();
 	}
 }

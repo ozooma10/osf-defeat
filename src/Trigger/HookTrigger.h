@@ -29,4 +29,11 @@ namespace OSFDefeat::Trigger
 	private:
 		Sink _sink;
 	};
+
+	// Player surrender trigger configuration (free functions; the hook reads this on each hit). The
+	// hook downs the player — firing the normal defeat pipeline + OnDefeat — when an in-combat Health
+	// hit leaves them below this FRACTION of max health [0..1]. 0 = disabled (death-alternative only);
+	// OFF by default. Exposed to consumers via IVDefeat3::SetPlayerSurrenderThreshold.
+	void                SetPlayerSurrenderFraction(float a_fraction);
+	[[nodiscard]] float GetPlayerSurrenderFraction();
 }

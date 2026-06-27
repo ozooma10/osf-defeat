@@ -149,7 +149,7 @@ namespace OSFDefeat::Pipeline
 
 		// Fire the matched data rule's authored consequences (event broadcasts / log effects). Runs
 		// after the defeat is applied + the kOnDefeat broadcast, so consumers see the defeat first.
-		const OSFDefeatAPI::DefeatContext ctx{
+		const Decision::Context ctx{
 			victim->GetFormID(),
 			a_event.aggressor ? a_event.aggressor->GetFormID() : 0u,
 			static_cast<std::uint32_t>(encounterClass),
