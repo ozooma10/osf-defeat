@@ -66,8 +66,10 @@ namespace OSFDefeat::Events
             REX::INFO("[OSFDefeat] broadcast {} to {} receiver(s)", a_event, receivers.size());
         }
 
-        // Like Send, but carries (Actor akVictim, Actor akAggressor) event args.
-        void SendActor(RE::TESForm* a_receiver, const RE::BSFixedString& a_event, RE::Actor* a_victim, RE::Actor* a_aggressor)
+        // Like Send, but carries (Actor akVictim, Actor akAggressor) event args. The args functor
+        // captures FormIDs (not pointers) and resolves them when it runs, so a deferred VM dispatch
+        // can't dangle on an actor that unloaded between broadcast and delivery.
+        void SendActor(RE::TESForm* a_receiver, const RE::BSFixedString& a_event, FormID a_victim, FormID a_aggressor)
         {
             auto* const vm = VM();
             if (!vm || !a_receiver) {
@@ -86,8 +88,8 @@ namespace OSFDefeat::Events
                 a_event,
                 [a_victim, a_aggressor](RE::BSScrapArray<RE::BSScript::Variable>& a_args) {
                     a_args.resize(2);
-                    RE::BSScript::PackVariable(a_args[0], a_victim);
-                    RE::BSScript::PackVariable(a_args[1], a_aggressor);
+                    RE::BSScript::PackVariable(a_args[0], a_victim ? RE::TESForm::LookupByID<RE::Actor>(a_victim) : nullptr);
+                    RE::BSScript::PackVariable(a_args[1], a_aggressor ? RE::TESForm::LookupByID<RE::Actor>(a_aggressor) : nullptr);
                     return true;
                 },
                 [](const RE::BSTSmartPointer<RE::BSScript::Object>&) { return true; },
@@ -106,12 +108,10 @@ namespace OSFDefeat::Events
                 return;
             }
 
-            auto* const victim = a_victim ? RE::TESForm::LookupByID<RE::Actor>(a_victim) : nullptr;
-            auto* const aggressor = a_aggressor ? RE::TESForm::LookupByID<RE::Actor>(a_aggressor) : nullptr;
             const RE::BSFixedString eventName{ a_event };
             for (const auto id : receivers) {
                 if (auto* const receiver = RE::TESForm::LookupByID(id)) {
-                    SendActor(receiver, eventName, victim, aggressor);
+                    SendActor(receiver, eventName, a_victim, a_aggressor);
                 }
             }
             REX::INFO("[OSFDefeat] broadcast {} (victim {:08X}) to {} receiver(s)", a_event, a_victim, receivers.size());
