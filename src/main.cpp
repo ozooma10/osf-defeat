@@ -4,6 +4,7 @@
 #include "Core/Consequence.h"
 #include "Core/Persistence.h"
 #include "Core/PlayerDefeat.h"
+#include "Core/Reattach.h"
 #include "Papyrus/Functions.h"
 
 namespace
@@ -18,6 +19,7 @@ namespace
             OSFDefeat::Config::Load();
             OSFDefeat::Consequence::Load();
             OSFDefeat::PlayerDefeat::Install();
+            OSFDefeat::Reattach::Install();
             OSFDefeat::Papyrus::Register();
         }
     }
