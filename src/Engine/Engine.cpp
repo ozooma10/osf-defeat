@@ -148,4 +148,60 @@ namespace OSFDefeat::Engine
         }
         SetCombatAIDisabled(false);
     }
+
+    void SetNpcDownState(RE::Actor* a_actor)
+    {
+        if (!a_actor || a_actor->IsPlayerRef()) {
+            return;
+        }
+
+        // Live-validated per-actor recipe (OSF RE npc-defeat-recover-pacify, 2026-06-25): bleedout +
+        // ghost (invulnerable so the defeat sticks) + manager-level combat removal so other attackers
+        // disengage. The actor is left at its (clamped/current) HP; ghost makes it damage-immune.
+        a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+        a_actor->SetGhost(true);
+        a_actor->SetLifeState(kBleedOut);
+        a_actor->StopCombat();
+        if (auto* const lists = RE::ProcessLists::GetSingleton()) {
+            lists->StopCombatAndAlarmOnActor(a_actor);
+        }
+    }
+
+    void RestoreNpcState(RE::Actor* a_actor)
+    {
+        if (!a_actor || a_actor->IsPlayerRef()) {
+            return;
+        }
+
+        RestoreHealthToMax(a_actor);
+        a_actor->boolFlags.reset(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+        a_actor->SetGhost(false);
+        a_actor->SetLifeState(kAlive);
+        a_actor->SetAIEnabled(true);
+        a_actor->EvaluatePackage(true, true);
+    }
+
+    void ApplyDownState(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return;
+        }
+        if (a_actor->IsPlayerRef()) {
+            SetPlayerDownState(a_actor);
+        } else {
+            SetNpcDownState(a_actor);
+        }
+    }
+
+    void RestoreState(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return;
+        }
+        if (a_actor->IsPlayerRef()) {
+            RestorePlayerState(a_actor);
+        } else {
+            RestoreNpcState(a_actor);
+        }
+    }
 }

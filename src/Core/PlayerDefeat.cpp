@@ -207,17 +207,19 @@ namespace OSFDefeat::PlayerDefeat
 
     void TickRecovery()
     {
-        auto* const player = PlayerActor();
-        if (!player || !Defeat::IsDefeated(player)) {
-            return;
+        // Auto-recover every defeated actor whose deadline has passed. Held entries (recoverAtDay <= 0,
+        // e.g. an NPC awaiting an explicit RescueActor from content) are skipped. Snapshot is a copy of
+        // IDs, so RescueActor mutating the registry mid-loop is safe.
+        const float now = NowDay();
+        for (const auto id : DefeatRegistry::Snapshot()) {
+            const auto data = DefeatRegistry::Get(id);
+            if (!data || data->recoverAtDay <= 0.0f || now < data->recoverAtDay) {
+                continue;
+            }
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                Defeat::RescueActor(actor, true);
+            }
         }
-
-        const auto data = DefeatRegistry::Get(player->GetFormID());
-        if (!data || data->recoverAtDay <= 0.0f || NowDay() < data->recoverAtDay) {
-            return;
-        }
-
-        Defeat::RescueActor(player, true);
     }
 
     void Install()

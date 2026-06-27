@@ -37,9 +37,9 @@ namespace OSFDefeat::Reattach
             tasks->AddTask([a_id]() {
                 auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id);
                 if (actor && Defeat::IsDefeated(actor)) {
-                    // Idempotent: the essential snapshot is guarded by a one-shot flag, so this only
-                    // re-applies bleedout + ghost + combat suppression on the freshly rebuilt actor.
-                    Engine::SetPlayerDownState(actor);
+                    // Idempotent: the player essential snapshot is guarded by a one-shot flag, so this
+                    // only re-applies bleedout + ghost + combat suppression on the freshly rebuilt actor.
+                    Engine::ApplyDownState(actor);
                 }
             });
         }

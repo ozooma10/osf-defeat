@@ -38,9 +38,7 @@ namespace OSFDefeat::Defeat
         }
 
         data->state.store(DefeatState::Defeated);
-        if (a_victim->IsPlayerRef()) {
-            Engine::SetPlayerDownState(a_victim);
-        }
+        Engine::ApplyDownState(a_victim);
         REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
 
         if (a_victim->IsPlayerRef()) {
@@ -71,9 +69,7 @@ namespace OSFDefeat::Defeat
 
         const FormID aggressorId = data->aggressor;
         DefeatRegistry::Remove(id);
-        if (a_victim->IsPlayerRef()) {
-            Engine::RestorePlayerState(a_victim);
-        }
+        Engine::RestoreState(a_victim);
         if (a_undoPacify) {
             UndoPacify(a_victim);
         }
@@ -114,8 +110,10 @@ namespace OSFDefeat::Defeat
         auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor, a_recoverAtDay);
         if (data) {
             data->state.store(DefeatState::Defeated);
-            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id); actor && actor->IsPlayerRef()) {
-                Engine::SetPlayerDownState(actor);
+            // Re-apply down-state on load. The flag writes are safe on an unloaded actor; the Set3D
+            // hook re-asserts again once its 3D (re)builds, so this covers both loaded and unloaded.
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id)) {
+                Engine::ApplyDownState(actor);
             }
         }
     }
@@ -125,8 +123,15 @@ namespace OSFDefeat::Defeat
         if (!a_victim) {
             return;
         }
-        std::unique_lock lock{ g_pacifiedLock };
-        g_pacified.insert(a_victim->GetFormID());
+        {
+            std::unique_lock lock{ g_pacifiedLock };
+            g_pacified.insert(a_victim->GetFormID());
+        }
+        // Per-actor AI suppression — the `tai`/kProcessMe primitive (OSF RE, ID 101266). Halts the
+        // actor's own AI (useful to hold a captive) at the cost of freezing its pose. Never the player.
+        if (!a_victim->IsPlayerRef()) {
+            a_victim->SetAIEnabled(false);
+        }
     }
 
     void UndoPacify(RE::Actor* a_victim)
@@ -134,8 +139,13 @@ namespace OSFDefeat::Defeat
         if (!a_victim) {
             return;
         }
-        std::unique_lock lock{ g_pacifiedLock };
-        g_pacified.erase(a_victim->GetFormID());
+        {
+            std::unique_lock lock{ g_pacifiedLock };
+            g_pacified.erase(a_victim->GetFormID());
+        }
+        if (!a_victim->IsPlayerRef()) {
+            a_victim->SetAIEnabled(true);
+        }
     }
 
     bool IsPacified(const RE::Actor* a_victim)
