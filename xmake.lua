@@ -69,4 +69,19 @@ target("OSF Defeat")
             os.trycp(cfgsrc, cfgdst)
             cprint("${green}[OSF Defeat] deployed default config:${clear} OSFDefeat/consequences.json")
         end
+
+        -- deploy the Papyrus API scripts. The .pex is compiled out-of-band (CK PapyrusCompiler,
+        -- against C:\Modding\Starfield\PapyrusSource) into dist\Scripts; we copy whatever is present,
+        -- so the build still works before the first compile.
+        local scriptroot = (modsroot and #modsroot > 0) and path.join(modsroot, target:name(), "Scripts")
+                           or path.join(gameroot, "Data", "Scripts")
+        for _, pex in ipairs(os.files(path.join(os.projectdir(), "dist", "Scripts", "*.pex"))) do
+            os.mkdir(scriptroot)
+            os.trycp(pex, path.join(scriptroot, path.filename(pex)))
+            cprint("${green}[OSF Defeat] deployed script:${clear} %s", path.filename(pex))
+        end
+        for _, psc in ipairs(os.files(path.join(os.projectdir(), "dist", "Scripts", "Source", "*.psc"))) do
+            os.mkdir(path.join(scriptroot, "Source"))
+            os.trycp(psc, path.join(scriptroot, "Source", path.filename(psc)))
+        end
     end)
