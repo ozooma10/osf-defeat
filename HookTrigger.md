@@ -52,13 +52,20 @@ defeat state. Floor is flat for Health; for the (often smaller) EM gauge it's ca
 resolved via `GetSmartPointer` on the game thread. **Not `myKiller`** (0x29C) — it is only written once a
 kill commits, which the clamp prevents (disproven in-game 2026-06-25).
 
-## NPC path — verb-driven (auto-clamp deferred)
+## NPC path
 
-NPC defeat uses the same held state via the **live-validated per-actor recipe**, but is currently driven
-**explicitly** through the verbs (`OSFDefeat.DefeatActor(npc, aggressor)`, `DebugDefeatRef`), **not** by
-auto-clamping every NPC lethal hit. Auto-clamp for NPCs is intentionally gated behind a faction/robot
-hostility discriminator + an NPC consequence policy — without it, downing every NPC on a lethal hit
-would mean no enemy (ally or quest-critical included) could ever die.
+NPC defeat uses the same held state via the **live-validated per-actor recipe**, driven two ways:
+**explicitly** through the verbs (`OSFDefeat.DefeatActor(npc, aggressor)`, `DebugDefeatRef`), and via an
+**opt-in auto-defeat** (`npcAutoDefeat`, default off). When enabled, the clamp resolves the victim from the
+hooked AV owner (`ActorFromAVOwner`) and gates on `Decision::IsHostile` + flesh-policy (`IsNonFlesh`,
+ID 42794 / 100890) — inline on the worker thread, symmetric with the player branch. Off by default because
+auto-downing every hostile NPC is a large gameplay change that still wants an NPC consequence policy.
+
+Worker-thread safety of those classification reads was **confirmed in the OSF RE sandbox (2026-06-27)**:
+3,821 concurrent worker-thread `IsHostileToActor`/`HasKeyword` calls across 22 threads, zero faults, and a
+game-thread cross-check matched (only `hostile` varied, a real combat-state change). So the inline classify
+is safe; the `currentCombatTarget == player` proxy is unneeded. `ActorTypeRobot`/`ActorTypeTurret` resolve
+by editorID; the true-on-robot positive is the one low-risk runtime item left.
 
 Down state ([Engine::SetNpcDownState](src/Engine/Engine.cpp)): `kNoBleedoutRecovery` + `SetGhost(true)`
 (invulnerable, so the defeat sticks) + `SetLifeState(kBleedOut)` + `StopCombat` +

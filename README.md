@@ -119,7 +119,7 @@ To compile Papyrus manually:
 
 ## Limitations
 
-Not yet supported: NPC consequence content (what happens to a defeated NPC beyond down/recover), follower-specific bleedout, Hunter Pride-style UI, teleport capture scenes, quest start/handoff, complex Acheron condition grammar, and interaction-menu options. NPC auto-defeat is opt-in and still pending in-game validation (including a worker-thread read-safety check on the classification calls).
+Not yet supported: NPC consequence content (what happens to a defeated NPC beyond down/recover), follower-specific bleedout, Hunter Pride-style UI, teleport capture scenes, quest start/handoff, complex Acheron condition grammar, and interaction-menu options. NPC auto-defeat is opt-in; its worker-thread classification reads are sandbox-confirmed safe, with broader in-game validation still recommended.
 
 ## License
 

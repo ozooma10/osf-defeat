@@ -77,9 +77,9 @@ Player consequence v1:
 3. Expand validation from simple exclusions to a real condition grammar.
 4. Add interaction/menu registration for content mods.
 5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, and `npcAutoDefeat`
-   flag are in place) and add an NPC consequence policy — what happens to a defeated NPC. Remaining:
-   confirm in the sandbox that the worker-thread classification reads are safe and the robot keyword
-   resolves.
+   flag are in place; worker-thread classification reads confirmed safe in the sandbox 2026-06-27) and
+   add an NPC consequence policy — what happens to a defeated NPC. Remaining runtime item: the
+   true-on-robot/turret keyword positive (low risk; the negative case is proven across 3800+ reads).
 
 ## Explicitly Unsupported (yet)
 

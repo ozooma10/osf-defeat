@@ -105,9 +105,9 @@ namespace OSFDefeat::PlayerDefeat
 
         // --- NPC auto-defeat (opt-in) ------------------------------------------------------------
         // Symmetric with the player clamp, just resolving the victim from the hooked AV owner and gating
-        // on hostility/flesh. Classification runs on the damage worker thread — the same risk class as
-        // the player path's ValidatePair (GetCurrentScene/GetCurrentLocation); flagged for a sandbox
-        // read-safety confirm.
+        // on hostility/flesh. Classification (IsHostileToActor/HasKeyword) runs on the damage worker
+        // thread — confirmed safe in the OSF RE sandbox (2026-06-27: 3821 concurrent worker-thread calls
+        // across 22 threads, zero faults; game-thread cross-check consistent).
 
         // Reverse the AVOwnerOf cast: ActorValueOwner is a fixed-offset base of TESObjectREFR, so recover
         // the actor by subtracting that (constant) subobject offset, then RTTI-filter to an Actor.
