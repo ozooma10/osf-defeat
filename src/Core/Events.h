@@ -4,19 +4,31 @@
 
 #include "Core/DefeatRegistry.h"
 
+namespace RE::BSScript
+{
+    class Object;
+}
+
 namespace OSFDefeat::Events
 {
-    void RegisterPlayerDefeated(RE::TESForm* a_receiver);
-    void UnregisterPlayerDefeated(RE::TESForm* a_receiver);
-    void RegisterPlayerRecovered(RE::TESForm* a_receiver);
-    void UnregisterPlayerRecovered(RE::TESForm* a_receiver);
-    void RegisterPlayerConsequenceStarted(RE::TESForm* a_receiver);
-    void UnregisterPlayerConsequenceStarted(RE::TESForm* a_receiver);
+    using Token = std::int32_t;
+    using Receiver = RE::BSTSmartPointer<RE::BSScript::Object>;
 
-    void RegisterActorDefeated(RE::TESForm* a_receiver);
-    void UnregisterActorDefeated(RE::TESForm* a_receiver);
-    void RegisterActorRecovered(RE::TESForm* a_receiver);
-    void UnregisterActorRecovered(RE::TESForm* a_receiver);
+    // Callback registration. A consumer passes its own script instance (ScriptObject) plus the name
+    // of a regular Function to invoke, and gets back a token to Unregister with. Starfield cannot
+    // deliver Papyrus *events* to non-native scripts, so we DispatchMethodCall a function instead
+    // (the proven OSF Animation pattern). A token of 0 means registration failed.
+    Token RegisterPlayerDefeated(const Receiver& a_receiver, std::string_view a_callback);
+    bool  UnregisterPlayerDefeated(Token a_token);
+    Token RegisterPlayerRecovered(const Receiver& a_receiver, std::string_view a_callback);
+    bool  UnregisterPlayerRecovered(Token a_token);
+    Token RegisterPlayerConsequenceStarted(const Receiver& a_receiver, std::string_view a_callback);
+    bool  UnregisterPlayerConsequenceStarted(Token a_token);
+
+    Token RegisterActorDefeated(const Receiver& a_receiver, std::string_view a_callback);
+    bool  UnregisterActorDefeated(Token a_token);
+    Token RegisterActorRecovered(const Receiver& a_receiver, std::string_view a_callback);
+    bool  UnregisterActorRecovered(Token a_token);
 
     void BroadcastPlayerDefeated();
     void BroadcastPlayerRecovered();

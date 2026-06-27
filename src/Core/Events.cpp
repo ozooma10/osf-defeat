@@ -6,19 +6,13 @@
 
 #include "RE/B/BSScriptUtil.h"
 #include "RE/G/GameVM.h"
-#include "RE/I/IObjectHandlePolicy.h"
 #include "RE/I/IVirtualMachine.h"
 
 namespace OSFDefeat::Events
 {
     namespace
     {
-        std::set<FormID> g_playerDefeated;
-        std::set<FormID> g_playerRecovered;
-        std::set<FormID> g_playerConsequenceStarted;
-        std::set<FormID> g_actorDefeated;
-        std::set<FormID> g_actorRecovered;
-        std::shared_mutex g_lock;
+        using ArgsBuilder = RE::BSTThreadScrapFunction<bool(RE::BSScrapArray<RE::BSScript::Variable>&)>;
 
         [[nodiscard]] RE::BSScript::IVirtualMachine* VM()
         {
@@ -26,150 +20,158 @@ namespace OSFDefeat::Events
             return gameVM ? gameVM->GetVM() : nullptr;
         }
 
-        void Send(RE::TESForm* a_receiver, const RE::BSFixedString& a_event)
+        // Token-based registry of Papyrus callbacks for one event channel. Consumers register a
+        // script instance + a function name; on broadcast we DispatchMethodCall that function on
+        // each. (Starfield can't deliver events to non-native scripts — see Events.h.)
+        class CallbackList
         {
-            auto* const vm = VM();
-            if (!vm || !a_receiver) {
-                return;
-            }
-
-            auto& handles = vm->GetObjectHandlePolicy();
-            const auto handle = handles.GetHandleForObject(static_cast<std::uint32_t>(a_receiver->GetFormType()), a_receiver);
-            if (handle == handles.EmptyHandle()) {
-                REX::WARN("[OSFDefeat] no VM handle for event receiver {:08X}", a_receiver->GetFormID());
-                return;
-            }
-
-            vm->SendEvent(
-                handle,
-                a_event,
-                [](RE::BSScrapArray<RE::BSScript::Variable>&) { return true; },
-                [](const RE::BSTSmartPointer<RE::BSScript::Object>&) { return true; },
-                nullptr,
-                0);
-        }
-
-        void Broadcast(const std::set<FormID>& a_receivers, std::string_view a_event)
-        {
-            std::vector<FormID> receivers;
+        public:
+            Token Add(const Receiver& a_receiver, std::string_view a_fn)
             {
-                std::shared_lock lock{ g_lock };
-                receivers.assign(a_receivers.begin(), a_receivers.end());
+                if (!a_receiver.get() || a_fn.empty()) {
+                    return 0;
+                }
+                std::unique_lock lock{ _lock };
+                for (std::uint16_t slot = 0; slot < _slots.size(); ++slot) {
+                    if (_slots[slot].generation == 0) {
+                        _slots[slot] = Entry{ NextGen(), a_receiver, RE::BSFixedString{ a_fn } };
+                        return MakeToken(_slots[slot].generation, slot);
+                    }
+                }
+                if (_slots.size() >= 0xFFFF) {
+                    return 0;
+                }
+                const auto slot = static_cast<std::uint16_t>(_slots.size());
+                _slots.push_back(Entry{ NextGen(), a_receiver, RE::BSFixedString{ a_fn } });
+                return MakeToken(_slots[slot].generation, slot);
             }
 
-            const RE::BSFixedString eventName{ a_event };
-            for (const auto id : receivers) {
-                if (auto* const receiver = RE::TESForm::LookupByID(id)) {
-                    Send(receiver, eventName);
+            bool Remove(Token a_token)
+            {
+                if (a_token == 0) {
+                    return false;
+                }
+                const auto slot = static_cast<std::uint16_t>(a_token & 0xFFFF);
+                const auto gen = static_cast<std::uint16_t>((a_token >> 16) & 0xFFFF);
+                std::unique_lock lock{ _lock };
+                if (slot >= _slots.size() || _slots[slot].generation != gen) {
+                    return false;
+                }
+                _slots[slot] = Entry{};
+                return true;
+            }
+
+            void Dispatch(const ArgsBuilder& a_args)
+            {
+                std::vector<Entry> targets;
+                {
+                    std::unique_lock lock{ _lock };
+                    for (const auto& entry : _slots) {
+                        if (entry.generation != 0 && entry.receiver.get()) {
+                            targets.push_back(entry);
+                        }
+                    }
+                }
+                if (targets.empty()) {
+                    return;
+                }
+                auto* const vm = VM();
+                if (!vm) {
+                    return;
+                }
+                const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> noCallback{};
+                for (auto& target : targets) {
+                    vm->DispatchMethodCall(target.receiver, target.fn, a_args, noCallback, 0);
                 }
             }
-            REX::INFO("[OSFDefeat] broadcast {} to {} receiver(s)", a_event, receivers.size());
-        }
 
-        // Like Send, but carries (Actor akVictim, Actor akAggressor) event args. The args functor
-        // captures FormIDs (not pointers) and resolves them when it runs, so a deferred VM dispatch
-        // can't dangle on an actor that unloaded between broadcast and delivery.
-        void SendActor(RE::TESForm* a_receiver, const RE::BSFixedString& a_event, FormID a_victim, FormID a_aggressor)
-        {
-            auto* const vm = VM();
-            if (!vm || !a_receiver) {
-                return;
-            }
-
-            auto&      handles = vm->GetObjectHandlePolicy();
-            const auto handle = handles.GetHandleForObject(static_cast<std::uint32_t>(a_receiver->GetFormType()), a_receiver);
-            if (handle == handles.EmptyHandle()) {
-                REX::WARN("[OSFDefeat] no VM handle for event receiver {:08X}", a_receiver->GetFormID());
-                return;
-            }
-
-            vm->SendEvent(
-                handle,
-                a_event,
-                [a_victim, a_aggressor](RE::BSScrapArray<RE::BSScript::Variable>& a_args) {
-                    a_args.resize(2);
-                    RE::BSScript::PackVariable(a_args[0], a_victim ? RE::TESForm::LookupByID<RE::Actor>(a_victim) : nullptr);
-                    RE::BSScript::PackVariable(a_args[1], a_aggressor ? RE::TESForm::LookupByID<RE::Actor>(a_aggressor) : nullptr);
-                    return true;
-                },
-                [](const RE::BSTSmartPointer<RE::BSScript::Object>&) { return true; },
-                nullptr,
-                0);
-        }
-
-        void BroadcastActors(const std::set<FormID>& a_receivers, std::string_view a_event, FormID a_victim, FormID a_aggressor)
-        {
-            std::vector<FormID> receivers;
+            void Clear()
             {
-                std::shared_lock lock{ g_lock };
-                receivers.assign(a_receivers.begin(), a_receivers.end());
-            }
-            if (receivers.empty()) {
-                return;
+                std::unique_lock lock{ _lock };
+                _slots.clear();
+                _nextGen = 1;
             }
 
-            const RE::BSFixedString eventName{ a_event };
-            for (const auto id : receivers) {
-                if (auto* const receiver = RE::TESForm::LookupByID(id)) {
-                    SendActor(receiver, eventName, a_victim, a_aggressor);
-                }
+        private:
+            struct Entry
+            {
+                std::uint16_t     generation = 0;  // 0 = empty slot
+                Receiver          receiver;
+                RE::BSFixedString fn;
+            };
+
+            std::uint16_t NextGen()
+            {
+                _nextGen = (_nextGen == 0xFFFF) ? 1 : static_cast<std::uint16_t>(_nextGen + 1);
+                return _nextGen;
             }
-            REX::INFO("[OSFDefeat] broadcast {} (victim {:08X}) to {} receiver(s)", a_event, a_victim, receivers.size());
+
+            static Token MakeToken(std::uint16_t a_gen, std::uint16_t a_slot)
+            {
+                return (static_cast<Token>(a_gen) << 16) | a_slot;
+            }
+
+            std::mutex         _lock;
+            std::vector<Entry> _slots;
+            std::uint16_t      _nextGen = 1;
+        };
+
+        CallbackList g_playerDefeated;
+        CallbackList g_playerRecovered;
+        CallbackList g_playerConsequenceStarted;
+        CallbackList g_actorDefeated;
+        CallbackList g_actorRecovered;
+
+        // (Actor akVictim, Actor akAggressor) args, resolved when the call runs so a deferred
+        // dispatch can't dangle on an actor that unloaded after the broadcast.
+        [[nodiscard]] auto ActorArgs(FormID a_victim, FormID a_aggressor)
+        {
+            return [a_victim, a_aggressor](RE::BSScrapArray<RE::BSScript::Variable>& a_args) -> bool {
+                a_args.resize(2);
+                RE::BSScript::PackVariable(a_args[0], a_victim ? RE::TESForm::LookupByID<RE::Actor>(a_victim) : nullptr);
+                RE::BSScript::PackVariable(a_args[1], a_aggressor ? RE::TESForm::LookupByID<RE::Actor>(a_aggressor) : nullptr);
+                return true;
+            };
         }
 
-        void Add(std::set<FormID>& a_set, RE::TESForm* a_receiver)
+        bool NoArgs(RE::BSScrapArray<RE::BSScript::Variable>&)
         {
-            if (!a_receiver) {
-                return;
-            }
-            std::unique_lock lock{ g_lock };
-            a_set.insert(a_receiver->GetFormID());
-        }
-
-        void Remove(std::set<FormID>& a_set, RE::TESForm* a_receiver)
-        {
-            if (!a_receiver) {
-                return;
-            }
-            std::unique_lock lock{ g_lock };
-            a_set.erase(a_receiver->GetFormID());
+            return true;
         }
     }
 
-    void RegisterPlayerDefeated(RE::TESForm* a_receiver) { Add(g_playerDefeated, a_receiver); }
-    void UnregisterPlayerDefeated(RE::TESForm* a_receiver) { Remove(g_playerDefeated, a_receiver); }
-    void RegisterPlayerRecovered(RE::TESForm* a_receiver) { Add(g_playerRecovered, a_receiver); }
-    void UnregisterPlayerRecovered(RE::TESForm* a_receiver) { Remove(g_playerRecovered, a_receiver); }
-    void RegisterPlayerConsequenceStarted(RE::TESForm* a_receiver) { Add(g_playerConsequenceStarted, a_receiver); }
-    void UnregisterPlayerConsequenceStarted(RE::TESForm* a_receiver) { Remove(g_playerConsequenceStarted, a_receiver); }
+    Token RegisterPlayerDefeated(const Receiver& a_receiver, std::string_view a_callback) { return g_playerDefeated.Add(a_receiver, a_callback); }
+    bool  UnregisterPlayerDefeated(Token a_token) { return g_playerDefeated.Remove(a_token); }
+    Token RegisterPlayerRecovered(const Receiver& a_receiver, std::string_view a_callback) { return g_playerRecovered.Add(a_receiver, a_callback); }
+    bool  UnregisterPlayerRecovered(Token a_token) { return g_playerRecovered.Remove(a_token); }
+    Token RegisterPlayerConsequenceStarted(const Receiver& a_receiver, std::string_view a_callback) { return g_playerConsequenceStarted.Add(a_receiver, a_callback); }
+    bool  UnregisterPlayerConsequenceStarted(Token a_token) { return g_playerConsequenceStarted.Remove(a_token); }
 
-    void BroadcastPlayerDefeated() { Broadcast(g_playerDefeated, "OnPlayerDefeated"); }
-    void BroadcastPlayerRecovered() { Broadcast(g_playerRecovered, "OnPlayerRecovered"); }
-    void BroadcastPlayerConsequenceStarted() { Broadcast(g_playerConsequenceStarted, "OnPlayerConsequenceStarted"); }
+    Token RegisterActorDefeated(const Receiver& a_receiver, std::string_view a_callback) { return g_actorDefeated.Add(a_receiver, a_callback); }
+    bool  UnregisterActorDefeated(Token a_token) { return g_actorDefeated.Remove(a_token); }
+    Token RegisterActorRecovered(const Receiver& a_receiver, std::string_view a_callback) { return g_actorRecovered.Add(a_receiver, a_callback); }
+    bool  UnregisterActorRecovered(Token a_token) { return g_actorRecovered.Remove(a_token); }
 
-    void RegisterActorDefeated(RE::TESForm* a_receiver) { Add(g_actorDefeated, a_receiver); }
-    void UnregisterActorDefeated(RE::TESForm* a_receiver) { Remove(g_actorDefeated, a_receiver); }
-    void RegisterActorRecovered(RE::TESForm* a_receiver) { Add(g_actorRecovered, a_receiver); }
-    void UnregisterActorRecovered(RE::TESForm* a_receiver) { Remove(g_actorRecovered, a_receiver); }
-
-    void BroadcastActorDefeated(FormID a_victim, FormID a_aggressor) { BroadcastActors(g_actorDefeated, "OnActorDefeated", a_victim, a_aggressor); }
-    void BroadcastActorRecovered(FormID a_victim, FormID a_aggressor) { BroadcastActors(g_actorRecovered, "OnActorRecovered", a_victim, a_aggressor); }
+    void BroadcastPlayerDefeated() { g_playerDefeated.Dispatch(&NoArgs); }
+    void BroadcastPlayerRecovered() { g_playerRecovered.Dispatch(&NoArgs); }
+    void BroadcastPlayerConsequenceStarted() { g_playerConsequenceStarted.Dispatch(&NoArgs); }
+    void BroadcastActorDefeated(FormID a_victim, FormID a_aggressor) { g_actorDefeated.Dispatch(ActorArgs(a_victim, a_aggressor)); }
+    void BroadcastActorRecovered(FormID a_victim, FormID a_aggressor) { g_actorRecovered.Dispatch(ActorArgs(a_victim, a_aggressor)); }
 
     void Install()
     {
         // Light up the dormant Defeat observers so every defeat/rescue (player AND NPC) fans out to
-        // OnActorDefeated/OnActorRecovered receivers. Fires on the game thread (DefeatActor/RescueActor).
+        // OnActorDefeated/OnActorRecovered callbacks. Fires on the game thread (DefeatActor/RescueActor).
         Defeat::SetOnDefeat([](FormID a_victim, FormID a_aggressor) { BroadcastActorDefeated(a_victim, a_aggressor); });
         Defeat::SetOnRescue([](FormID a_victim, FormID a_aggressor) { BroadcastActorRecovered(a_victim, a_aggressor); });
     }
 
     void Clear()
     {
-        std::unique_lock lock{ g_lock };
-        g_playerDefeated.clear();
-        g_playerRecovered.clear();
-        g_playerConsequenceStarted.clear();
-        g_actorDefeated.clear();
-        g_actorRecovered.clear();
+        g_playerDefeated.Clear();
+        g_playerRecovered.Clear();
+        g_playerConsequenceStarted.Clear();
+        g_actorDefeated.Clear();
+        g_actorRecovered.Clear();
     }
 }

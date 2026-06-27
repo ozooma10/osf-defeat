@@ -133,55 +133,56 @@ namespace OSFDefeat::Papyrus
             return !Validation::IsEnabled();
         }
 
-        void RegisterForPlayerDefeated(std::monostate, RE::TESForm* a_receiver)
+        // Event delivery is callback-style (Starfield can't deliver Papyrus events to non-native
+        // scripts): a consumer registers its script + a function name and gets a token back.
+        std::int32_t RegisterForPlayerDefeated(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
         {
-            Events::RegisterPlayerDefeated(a_receiver);
+            return Events::RegisterPlayerDefeated(a_receiver, a_callback.c_str());
         }
 
-        void UnregisterForPlayerDefeated(std::monostate, RE::TESForm* a_receiver)
+        bool UnregisterForPlayerDefeated(std::monostate, std::int32_t a_token)
         {
-            Events::UnregisterPlayerDefeated(a_receiver);
+            return Events::UnregisterPlayerDefeated(a_token);
         }
 
-        void RegisterForPlayerRecovered(std::monostate, RE::TESForm* a_receiver)
+        std::int32_t RegisterForPlayerRecovered(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
         {
-            Events::RegisterPlayerRecovered(a_receiver);
+            return Events::RegisterPlayerRecovered(a_receiver, a_callback.c_str());
         }
 
-        void UnregisterForPlayerRecovered(std::monostate, RE::TESForm* a_receiver)
+        bool UnregisterForPlayerRecovered(std::monostate, std::int32_t a_token)
         {
-            Events::UnregisterPlayerRecovered(a_receiver);
+            return Events::UnregisterPlayerRecovered(a_token);
         }
 
-
-        void RegisterForPlayerConsequenceStarted(std::monostate, RE::TESForm* a_receiver)
+        std::int32_t RegisterForPlayerConsequenceStarted(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
         {
-            Events::RegisterPlayerConsequenceStarted(a_receiver);
+            return Events::RegisterPlayerConsequenceStarted(a_receiver, a_callback.c_str());
         }
 
-        void UnregisterForPlayerConsequenceStarted(std::monostate, RE::TESForm* a_receiver)
+        bool UnregisterForPlayerConsequenceStarted(std::monostate, std::int32_t a_token)
         {
-            Events::UnregisterPlayerConsequenceStarted(a_receiver);
+            return Events::UnregisterPlayerConsequenceStarted(a_token);
         }
 
-        void RegisterForActorDefeated(std::monostate, RE::TESForm* a_receiver)
+        std::int32_t RegisterForActorDefeated(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
         {
-            Events::RegisterActorDefeated(a_receiver);
+            return Events::RegisterActorDefeated(a_receiver, a_callback.c_str());
         }
 
-        void UnregisterForActorDefeated(std::monostate, RE::TESForm* a_receiver)
+        bool UnregisterForActorDefeated(std::monostate, std::int32_t a_token)
         {
-            Events::UnregisterActorDefeated(a_receiver);
+            return Events::UnregisterActorDefeated(a_token);
         }
 
-        void RegisterForActorRecovered(std::monostate, RE::TESForm* a_receiver)
+        std::int32_t RegisterForActorRecovered(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
         {
-            Events::RegisterActorRecovered(a_receiver);
+            return Events::RegisterActorRecovered(a_receiver, a_callback.c_str());
         }
 
-        void UnregisterForActorRecovered(std::monostate, RE::TESForm* a_receiver)
+        bool UnregisterForActorRecovered(std::monostate, std::int32_t a_token)
         {
-            Events::UnregisterActorRecovered(a_receiver);
+            return Events::UnregisterActorRecovered(a_token);
         }
 
         RE::Actor* GetLastPlayerAggressor(std::monostate)

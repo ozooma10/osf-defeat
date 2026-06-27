@@ -2,14 +2,26 @@ Scriptname OSFDefeat Native Hidden
 
 ; OSF Defeat - public Papyrus API foundation.
 ;
-; Receivers registered below should implement OnPlayerDefeated(),
-; OnPlayerConsequenceStarted(), and/or OnPlayerRecovered(). Consequence-start
-; receivers can query the current payload through GetLastPlayer* functions.
+; Events are delivered as CALLBACKS, not Papyrus events (Starfield can't deliver events to
+; non-native scripts). Register your script plus the name of a regular Function to call back; keep
+; the returned token to Unregister. Your callback is an ordinary Function you implement, e.g.:
 ;
-; Actor-event receivers (RegisterForActorDefeated/Recovered) fire for ANY defeated
-; actor — player and NPC — and should implement:
-;   Event OnActorDefeated(Actor akVictim, Actor akAggressor)
-;   Event OnActorRecovered(Actor akVictim, Actor akAggressor)
+;   Int property DefeatToken auto hidden
+;   Event OnInit()
+;       DefeatToken = OSFDefeat.RegisterForActorDefeated(Self, "OnActorDefeated")
+;   EndEvent
+;   Function OnActorDefeated(Actor akVictim, Actor akAggressor)
+;       ; ... your consequence routing ...
+;   EndFunction
+;
+; Callback signatures:
+;   Player (no args; read context via GetLastPlayer*):
+;     Function OnPlayerDefeated()
+;     Function OnPlayerRecovered()
+;     Function OnPlayerConsequenceStarted()
+;   Actor (player + NPC):
+;     Function OnActorDefeated(Actor akVictim, Actor akAggressor)
+;     Function OnActorRecovered(Actor akVictim, Actor akAggressor)
 
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
@@ -29,18 +41,19 @@ Bool Function IsHostile(Actor akActor, Actor akTarget) global native
 Function DisableProcessing(Bool abDisable) global native
 Bool Function IsProcessingDisabled() global native
 
-Function RegisterForPlayerDefeated(Form akReceiver) global native
-Function UnregisterForPlayerDefeated(Form akReceiver) global native
-Function RegisterForPlayerRecovered(Form akReceiver) global native
-Function UnregisterForPlayerRecovered(Form akReceiver) global native
-Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
-Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+; Player events. Register returns a token; pass it to Unregister.
+Int Function RegisterForPlayerDefeated(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerDefeated(Int aiToken) global native
+Int Function RegisterForPlayerRecovered(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerRecovered(Int aiToken) global native
+Int Function RegisterForPlayerConsequenceStarted(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerConsequenceStarted(Int aiToken) global native
 
-; Any-actor defeat/recover events (player + NPC). Callback signatures above.
-Function RegisterForActorDefeated(Form akReceiver) global native
-Function UnregisterForActorDefeated(Form akReceiver) global native
-Function RegisterForActorRecovered(Form akReceiver) global native
-Function UnregisterForActorRecovered(Form akReceiver) global native
+; Any-actor defeat/recover events (player + NPC).
+Int Function RegisterForActorDefeated(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForActorDefeated(Int aiToken) global native
+Int Function RegisterForActorRecovered(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForActorRecovered(Int aiToken) global native
 
 Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native

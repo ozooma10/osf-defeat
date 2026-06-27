@@ -30,23 +30,36 @@ Bool Function IsProcessingDisabled() global native
 
 Use this around scripted scenes or other content that wants vanilla death/behavior to proceed without OSF Defeat handling.
 
+## Events are callbacks
+
+Starfield Papyrus cannot deliver *events* to non-native scripts, so OSF Defeat uses **callbacks** (the same mechanism as OSF Animation): you register your script plus the name of a regular `Function` to call, and get back an `Int` token to unregister with. Your handler is an ordinary `Function`, not an `Event`.
+
+```papyrus
+Int  Function RegisterForActorDefeated(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForActorDefeated(Int aiToken) global native
+```
+
 ## Player Events
 
 ```papyrus
-Function RegisterForPlayerDefeated(Form akReceiver) global native
-Function UnregisterForPlayerDefeated(Form akReceiver) global native
-Function RegisterForPlayerRecovered(Form akReceiver) global native
-Function UnregisterForPlayerRecovered(Form akReceiver) global native
+Int  Function RegisterForPlayerDefeated(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerDefeated(Int aiToken) global native
+Int  Function RegisterForPlayerRecovered(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerRecovered(Int aiToken) global native
 ```
 
-Registered forms receive no-argument events:
+The callbacks take no arguments:
 
 ```papyrus
-Event OnPlayerDefeated()
+Event OnInit()
+    OSFDefeat.RegisterForPlayerDefeated(Self, "OnPlayerDefeated")
 EndEvent
 
-Event OnPlayerRecovered()
-EndEvent
+Function OnPlayerDefeated()
+EndFunction
+
+Function OnPlayerRecovered()
+EndFunction
 ```
 
 ## Classification
@@ -73,52 +86,52 @@ These are alpha test hooks for in-game validation. `DebugDefeatRef`/`DebugRecove
 ## Player Consequence Handoff
 
 ```papyrus
-Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
-Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+Int  Function RegisterForPlayerConsequenceStarted(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerConsequenceStarted(Int aiToken) global native
 Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
 Float Function GetLastPlayerRecoverySeconds() global native
 ```
 
-Registered forms receive:
+The callback takes no arguments:
 
 ```papyrus
-Event OnPlayerConsequenceStarted()
-EndEvent
+Function OnPlayerConsequenceStarted()
+EndFunction
 ```
 
-Use this event for content mods such as OSF Surrender. The event has no direct parameters; content reads the payload through the `GetLastPlayer*` functions so the native event broadcaster stays simple and stable.
+Use this for content mods such as OSF Surrender. The callback has no direct parameters; content reads the payload through the `GetLastPlayer*` functions so the broadcaster stays simple and stable.
 
 ## Actor Events (player + NPC)
 
 ```papyrus
-Function RegisterForActorDefeated(Form akReceiver) global native
-Function UnregisterForActorDefeated(Form akReceiver) global native
-Function RegisterForActorRecovered(Form akReceiver) global native
-Function UnregisterForActorRecovered(Form akReceiver) global native
+Int  Function RegisterForActorDefeated(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForActorDefeated(Int aiToken) global native
+Int  Function RegisterForActorRecovered(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForActorRecovered(Int aiToken) global native
 ```
 
-Unlike the player events, these fire for **any** defeated actor — player and NPC — and carry the victim and aggressor:
+Unlike the player events, these fire for **any** defeated actor — player and NPC — and the callbacks carry the victim and aggressor:
 
 ```papyrus
-Event OnActorDefeated(Actor akVictim, Actor akAggressor)
-EndEvent
+Function OnActorDefeated(Actor akVictim, Actor akAggressor)
+EndFunction
 
-Event OnActorRecovered(Actor akVictim, Actor akAggressor)
-EndEvent
+Function OnActorRecovered(Actor akVictim, Actor akAggressor)
+EndFunction
 ```
 
 ### NPC consequence content (consumer recipe)
 
-OSF Defeat owns the neutral defeat state; **content mods own what a defeat means**. To author NPC consequences, react to `OnActorDefeated`, classify the victim, and run your own scene/outcome:
+OSF Defeat owns the neutral defeat state; **content mods own what a defeat means**. To author NPC consequences, register a callback, classify the victim, and run your own scene/outcome:
 
 ```papyrus
 Event OnInit()
-    OSFDefeat.RegisterForActorDefeated(Self)
+    OSFDefeat.RegisterForActorDefeated(Self, "OnActorDefeated")
 EndEvent
 
-Event OnActorDefeated(Actor akVictim, Actor akAggressor)
+Function OnActorDefeated(Actor akVictim, Actor akAggressor)
     If akVictim == Game.GetPlayer()
         Return ; the player path has its own consequence handoff
     EndIf
@@ -128,7 +141,7 @@ Event OnActorDefeated(Actor akVictim, Actor akAggressor)
     Else
         ; robot / turret: salvage, disable, etc.
     EndIf
-EndEvent
+EndFunction
 ```
 
 Recovery: an actor downed via `DefeatActor` is **held** until you call `RescueActor`, so content fully controls its lifetime. An auto-defeated NPC (the opt-in `npcAutoDefeat`) carries the default recovery timer instead — defeat it yourself via `DefeatActor` if you need a longer hold.
