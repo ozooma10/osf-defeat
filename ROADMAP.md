@@ -22,8 +22,8 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
 - Player defeated/recovered Papyrus event registration.
 - Player consequence handoff context and `OnPlayerConsequenceStarted` registration for content mods.
 - Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
-- Opt-in **NPC auto-defeat** (`npcAutoDefeat`): hostile NPCs are auto-downed on a would-be-lethal hit,
-  gated by a game-thread-classified eligibility map so the worker-thread clamp never strands an actor.
+- Opt-in **NPC auto-defeat** (`npcAutoDefeat`): hostile NPCs are auto-downed on a would-be-lethal hit
+  (clamp + inline hostility/flesh classification, symmetric with the player path).
 - Debug Papyrus helpers: `DebugDefeatPlayer`, `DebugRecoverPlayer`, `DebugDefeatRef`,
   `DebugRecoverRef`, `ReloadJSON`.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
@@ -76,10 +76,10 @@ Player consequence v1:
 2. Add direct quest start/fill behavior for configured player consequences. The current alpha exposes a registered handoff event plus queryable context.
 3. Expand validation from simple exclusions to a real condition grammar.
 4. Add interaction/menu registration for content mods.
-5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, eligibility gate,
-   and `npcAutoDefeat` flag are in place) and add an NPC consequence policy — what happens to a
-   defeated NPC. Remaining gaps: one-shot kills bypass (classification lands after the first hit),
-   eligibility cache staleness within a session, and the runtime keyword confirm.
+5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, and `npcAutoDefeat`
+   flag are in place) and add an NPC consequence policy — what happens to a defeated NPC. Remaining:
+   confirm in the sandbox that the worker-thread classification reads are safe and the robot keyword
+   resolves.
 
 ## Explicitly Unsupported (yet)
 

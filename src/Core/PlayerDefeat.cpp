@@ -103,21 +103,11 @@ namespace OSFDefeat::PlayerDefeat
             return std::min(kLethalHealthFloor, std::max(1.0f, maxValue * 0.05f));
         }
 
-        // --- NPC auto-defeat gate (opt-in) -------------------------------------------------------
-        // Classification (hostility/keyword) is only game-thread-safe, but the clamp decides on the
-        // damage worker thread. Bridge that with a pre-classified eligibility map: the worker sees every
-        // hit on an NPC, queues a one-shot game-thread classification on the first, and only clamps a
-        // later lethal hit once the victim is marked Eligible. So a clamp always yields a defeat (no
-        // actor stranded alive-but-undefeated), with no combatant enumeration. One-shot kills (first hit
-        // already lethal, before classification lands) fall through to vanilla death — acceptable for v1.
-        enum class Gate : std::uint8_t
-        {
-            Pending,
-            Eligible,
-            Rejected
-        };
-        std::map<FormID, Gate> g_npcGate;
-        std::shared_mutex      g_npcGateLock;
+        // --- NPC auto-defeat (opt-in) ------------------------------------------------------------
+        // Symmetric with the player clamp, just resolving the victim from the hooked AV owner and gating
+        // on hostility/flesh. Classification runs on the damage worker thread — the same risk class as
+        // the player path's ValidatePair (GetCurrentScene/GetCurrentLocation); flagged for a sandbox
+        // read-safety confirm.
 
         // Reverse the AVOwnerOf cast: ActorValueOwner is a fixed-offset base of TESObjectREFR, so recover
         // the actor by subtracting that (constant) subobject offset, then RTTI-filter to an Actor.
@@ -161,69 +151,14 @@ namespace OSFDefeat::PlayerDefeat
             });
         }
 
-        void QueueNpcClassify(FormID a_victimId, FormID a_aggressorId)
+        // Worker-thread classification: auto-defeat hostile NPCs (flesh, or robots when configured).
+        [[nodiscard]] bool ShouldAutoDefeatNpc(RE::Actor* a_victim)
         {
-            const auto* const tasks = SFSE::GetTaskInterface();
-            if (!tasks) {
-                std::unique_lock lock{ g_npcGateLock };  // drop the pending mark so a later hit retries
-                g_npcGate.erase(a_victimId);
-                return;
+            auto* const player = PlayerActor();
+            if (!player || !Decision::IsHostile(a_victim, player)) {
+                return false;
             }
-            tasks->AddTask([a_victimId, a_aggressorId]() {
-                auto* const victim = RE::TESForm::LookupByID<RE::Actor>(a_victimId);
-                auto* const player = PlayerActor();
-                bool        eligible = false;
-                if (victim && player && Validation::CanProcess() && Validation::ValidatePair(victim, nullptr) &&
-                    Decision::IsHostile(victim, player)) {
-                    eligible = !Decision::IsNonFlesh(victim) || Config::NpcAutoDefeatIncludesRobots();
-                }
-                std::unique_lock lock{ g_npcGateLock };
-                g_npcGate[a_victimId] = eligible ? Gate::Eligible : Gate::Rejected;
-                (void)a_aggressorId;
-            });
-        }
-
-        // Worker thread. Returns the (possibly clamped) delta for a non-player lethal-gauge hit.
-        [[nodiscard]] float HandleNpcHit(
-            RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info, float a_delta, RE::TESObjectREFR* a_ref)
-        {
-            auto* const victim = ActorFromAVOwner(a_owner);
-            if (!victim || victim->IsPlayerRef()) {
-                return a_delta;
-            }
-            const FormID id = victim->GetFormID();
-            const FormID aggressorId = a_ref ? a_ref->GetFormID() : 0;
-
-            Gate state{};
-            bool known = false;
-            {
-                std::shared_lock lock{ g_npcGateLock };
-                if (const auto it = g_npcGate.find(id); it != g_npcGate.end()) {
-                    state = it->second;
-                    known = true;
-                }
-            }
-
-            if (!known) {
-                bool queue = false;
-                {
-                    std::unique_lock lock{ g_npcGateLock };
-                    queue = g_npcGate.try_emplace(id, Gate::Pending).second;
-                }
-                if (queue) {
-                    QueueNpcClassify(id, aggressorId);
-                }
-                return a_delta;  // first hit never clamps (classification is in flight)
-            }
-
-            if (state == Gate::Eligible) {
-                const float current = a_owner->GetActorValue(a_info);
-                if (current + a_delta <= 0.0f && !Defeat::IsDefeated(victim)) {
-                    QueueNpcDefeat(id, aggressorId);
-                    return std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
-                }
-            }
-            return a_delta;  // Pending or Rejected -> let it resolve normally
+            return !Decision::IsNonFlesh(a_victim) || Config::NpcAutoDefeatIncludesRobots();
         }
 
         void ModActorValueDetour(
@@ -244,7 +179,17 @@ namespace OSFDefeat::PlayerDefeat
                         QueueBegin(a_ref);
                     }
                 } else if (Config::IsNpcAutoDefeatEnabled()) {
-                    a_delta = HandleNpcHit(a_owner, a_info, a_delta, a_ref);
+                    auto* const victim = ActorFromAVOwner(a_owner);
+                    if (victim && !victim->IsPlayerRef()) {
+                        const float current = a_owner->GetActorValue(a_info);
+                        const bool  lethal = current + a_delta <= 0.0f;
+                        auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
+                        if (lethal && Validation::CanProcess() && Validation::ValidatePair(victim, aggressor) &&
+                            ShouldAutoDefeatNpc(victim) && !Defeat::IsDefeated(victim)) {
+                            a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
+                            QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0);
+                        }
+                    }
                 }
             }
 
@@ -357,11 +302,5 @@ namespace OSFDefeat::PlayerDefeat
         }
         g_hooked.store(InstallHook());
         StartRecoveryWorker();
-    }
-
-    void ResetNpcGate()
-    {
-        std::unique_lock lock{ g_npcGateLock };
-        g_npcGate.clear();
     }
 }
