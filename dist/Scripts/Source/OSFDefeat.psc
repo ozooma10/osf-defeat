@@ -5,6 +5,11 @@ Scriptname OSFDefeat Native Hidden
 ; Receivers registered below should implement OnPlayerDefeated(),
 ; OnPlayerConsequenceStarted(), and/or OnPlayerRecovered(). Consequence-start
 ; receivers can query the current payload through GetLastPlayer* functions.
+;
+; Actor-event receivers (RegisterForActorDefeated/Recovered) fire for ANY defeated
+; actor — player and NPC — and should implement:
+;   Event OnActorDefeated(Actor akVictim, Actor akAggressor)
+;   Event OnActorRecovered(Actor akVictim, Actor akAggressor)
 
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
@@ -30,6 +35,12 @@ Function RegisterForPlayerRecovered(Form akReceiver) global native
 Function UnregisterForPlayerRecovered(Form akReceiver) global native
 Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
 Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+
+; Any-actor defeat/recover events (player + NPC). Callback signatures above.
+Function RegisterForActorDefeated(Form akReceiver) global native
+Function UnregisterForActorDefeated(Form akReceiver) global native
+Function RegisterForActorRecovered(Form akReceiver) global native
+Function UnregisterForActorRecovered(Form akReceiver) global native
 
 Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native

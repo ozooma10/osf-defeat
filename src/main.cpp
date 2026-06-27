@@ -2,6 +2,7 @@
 
 #include "Core/Config.h"
 #include "Core/Consequence.h"
+#include "Core/Events.h"
 #include "Core/Persistence.h"
 #include "Core/PlayerDefeat.h"
 #include "Core/Reattach.h"
@@ -18,6 +19,7 @@ namespace
         if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
             OSFDefeat::Config::Load();
             OSFDefeat::Consequence::Load();
+            OSFDefeat::Events::Install();
             OSFDefeat::PlayerDefeat::Install();
             OSFDefeat::Reattach::Install();
             OSFDefeat::Papyrus::Register();

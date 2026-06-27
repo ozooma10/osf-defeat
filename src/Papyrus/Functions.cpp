@@ -164,6 +164,26 @@ namespace OSFDefeat::Papyrus
             Events::UnregisterPlayerConsequenceStarted(a_receiver);
         }
 
+        void RegisterForActorDefeated(std::monostate, RE::TESForm* a_receiver)
+        {
+            Events::RegisterActorDefeated(a_receiver);
+        }
+
+        void UnregisterForActorDefeated(std::monostate, RE::TESForm* a_receiver)
+        {
+            Events::UnregisterActorDefeated(a_receiver);
+        }
+
+        void RegisterForActorRecovered(std::monostate, RE::TESForm* a_receiver)
+        {
+            Events::RegisterActorRecovered(a_receiver);
+        }
+
+        void UnregisterForActorRecovered(std::monostate, RE::TESForm* a_receiver)
+        {
+            Events::UnregisterActorRecovered(a_receiver);
+        }
+
         RE::Actor* GetLastPlayerAggressor(std::monostate)
         {
             return DefeatContext::GetLastPlayerAggressor();
@@ -270,6 +290,10 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "UnregisterForPlayerRecovered", &UnregisterForPlayerRecovered, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RegisterForPlayerConsequenceStarted", &RegisterForPlayerConsequenceStarted, std::nullopt, false);
         vm->BindNativeMethod(kClass, "UnregisterForPlayerConsequenceStarted", &UnregisterForPlayerConsequenceStarted, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RegisterForActorDefeated", &RegisterForActorDefeated, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "UnregisterForActorDefeated", &UnregisterForActorDefeated, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RegisterForActorRecovered", &RegisterForActorRecovered, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "UnregisterForActorRecovered", &UnregisterForActorRecovered, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerAggressor", &GetLastPlayerAggressor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceName", &GetLastPlayerConsequenceName, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceQuest", &GetLastPlayerConsequenceQuest, std::nullopt, false);
