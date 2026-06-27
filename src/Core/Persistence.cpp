@@ -4,6 +4,7 @@
 
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
+#include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
 #include "Engine/Engine.h"

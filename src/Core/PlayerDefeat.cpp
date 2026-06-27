@@ -4,6 +4,8 @@
 
 #include "Core/Consequence.h"
 #include "Core/Defeat.h"
+#include "Core/DefeatContext.h"
+#include "Core/Events.h"
 #include "Core/DefeatRegistry.h"
 #include "Core/Validation.h"
 #include "Engine/Engine.h"

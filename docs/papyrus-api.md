@@ -58,3 +58,22 @@ Function ReloadJSON() global native
 ```
 
 These are alpha test hooks for in-game validation. `ReloadJSON()` reloads validation and consequence files without restarting the game.
+## Player Consequence Handoff
+
+```papyrus
+Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
+Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+Actor Function GetLastPlayerAggressor() global native
+String Function GetLastPlayerConsequenceName() global native
+String Function GetLastPlayerConsequenceQuest() global native
+Float Function GetLastPlayerRecoverySeconds() global native
+```
+
+Registered forms receive:
+
+```papyrus
+Event OnPlayerConsequenceStarted()
+EndEvent
+```
+
+Use this event for content mods such as OSF Surrender. The event has no direct parameters; content reads the payload through the `GetLastPlayer*` functions so the native event broadcaster stays simple and stable.

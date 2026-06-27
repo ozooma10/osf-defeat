@@ -13,6 +13,7 @@ namespace OSFDefeat::Events
     {
         std::set<FormID> g_playerDefeated;
         std::set<FormID> g_playerRecovered;
+        std::set<FormID> g_playerConsequenceStarted;
         std::shared_mutex g_lock;
 
         [[nodiscard]] RE::BSScript::IVirtualMachine* VM()
@@ -84,14 +85,18 @@ namespace OSFDefeat::Events
     void UnregisterPlayerDefeated(RE::TESForm* a_receiver) { Remove(g_playerDefeated, a_receiver); }
     void RegisterPlayerRecovered(RE::TESForm* a_receiver) { Add(g_playerRecovered, a_receiver); }
     void UnregisterPlayerRecovered(RE::TESForm* a_receiver) { Remove(g_playerRecovered, a_receiver); }
+    void RegisterPlayerConsequenceStarted(RE::TESForm* a_receiver) { Add(g_playerConsequenceStarted, a_receiver); }
+    void UnregisterPlayerConsequenceStarted(RE::TESForm* a_receiver) { Remove(g_playerConsequenceStarted, a_receiver); }
 
     void BroadcastPlayerDefeated() { Broadcast(g_playerDefeated, "OnPlayerDefeated"); }
     void BroadcastPlayerRecovered() { Broadcast(g_playerRecovered, "OnPlayerRecovered"); }
+    void BroadcastPlayerConsequenceStarted() { Broadcast(g_playerConsequenceStarted, "OnPlayerConsequenceStarted"); }
 
     void Clear()
     {
         std::unique_lock lock{ g_lock };
         g_playerDefeated.clear();
         g_playerRecovered.clear();
+        g_playerConsequenceStarted.clear();
     }
 }

@@ -2,8 +2,9 @@ Scriptname OSFDefeat Native Hidden
 
 ; OSF Defeat - public Papyrus API foundation.
 ;
-; Alpha adds player defeat/recovery notifications and debug helpers. Receivers
-; registered below should implement OnPlayerDefeated() and/or OnPlayerRecovered().
+; Receivers registered below should implement OnPlayerDefeated(),
+; OnPlayerConsequenceStarted(), and/or OnPlayerRecovered(). Consequence-start
+; receivers can query the current payload through GetLastPlayer* functions.
 
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
@@ -22,6 +23,13 @@ Function RegisterForPlayerDefeated(Form akReceiver) global native
 Function UnregisterForPlayerDefeated(Form akReceiver) global native
 Function RegisterForPlayerRecovered(Form akReceiver) global native
 Function UnregisterForPlayerRecovered(Form akReceiver) global native
+Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
+Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+
+Actor Function GetLastPlayerAggressor() global native
+String Function GetLastPlayerConsequenceName() global native
+String Function GetLastPlayerConsequenceQuest() global native
+Float Function GetLastPlayerRecoverySeconds() global native
 
 Bool Function DebugDefeatPlayer() global native
 Bool Function DebugRecoverPlayer() global native

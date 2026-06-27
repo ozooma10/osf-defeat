@@ -14,6 +14,7 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
 - JSON player consequences under `Data/SFSE/OSFDefeat/Consequences/Player/*.json`.
 - Highest-priority, weighted-random player outcome selection with built-in fallback.
 - Player defeated/recovered Papyrus event registration.
+- Player consequence handoff context and `OnPlayerConsequenceStarted` registration for content mods.
 - Debug Papyrus helpers: `DebugDefeatPlayer`, `DebugRecoverPlayer`, `ReloadJSON`.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
 
@@ -60,7 +61,7 @@ Player consequence v1:
 ## Post-Alpha Milestones
 
 1. Runtime-test and harden the player hook across Starfield updates.
-2. Add quest start/handoff for configured player consequences.
+2. Add direct quest start/fill behavior for configured player consequences. The current alpha exposes a registered handoff event plus queryable context.
 3. Expand validation from simple exclusions to a real condition grammar.
 4. Add interaction/menu registration for content mods.
 5. Revisit NPC/follower defeat only after the player path is stable.

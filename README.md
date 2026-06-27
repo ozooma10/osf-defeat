@@ -77,12 +77,18 @@ Function RegisterForPlayerDefeated(Form akReceiver) global native
 Function UnregisterForPlayerDefeated(Form akReceiver) global native
 Function RegisterForPlayerRecovered(Form akReceiver) global native
 Function UnregisterForPlayerRecovered(Form akReceiver) global native
+Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
+Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+Actor Function GetLastPlayerAggressor() global native
+String Function GetLastPlayerConsequenceName() global native
+String Function GetLastPlayerConsequenceQuest() global native
+Float Function GetLastPlayerRecoverySeconds() global native
 Bool Function DebugDefeatPlayer() global native
 Bool Function DebugRecoverPlayer() global native
 Function ReloadJSON() global native
 ```
 
-Registered receivers should implement `OnPlayerDefeated()` and/or `OnPlayerRecovered()`.
+Registered receivers should implement `OnPlayerDefeated()`, `OnPlayerConsequenceStarted()`, and/or `OnPlayerRecovered()`. Consequence receivers should use the `GetLastPlayer*` functions to read the selected outcome context. See `docs/osf-surrender-port.md` for the OSF Surrender handoff pattern.
 
 ## Build
 

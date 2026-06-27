@@ -9,6 +9,7 @@
 #include "Core/Config.h"
 #include "Core/Consequence.h"
 #include "Core/Defeat.h"
+#include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
 #include "Core/Validation.h"
@@ -134,6 +135,36 @@ namespace OSFDefeat::Papyrus
             Events::UnregisterPlayerRecovered(a_receiver);
         }
 
+
+        void RegisterForPlayerConsequenceStarted(std::monostate, RE::TESForm* a_receiver)
+        {
+            Events::RegisterPlayerConsequenceStarted(a_receiver);
+        }
+
+        void UnregisterForPlayerConsequenceStarted(std::monostate, RE::TESForm* a_receiver)
+        {
+            Events::UnregisterPlayerConsequenceStarted(a_receiver);
+        }
+
+        RE::Actor* GetLastPlayerAggressor(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerAggressor();
+        }
+
+        std::string GetLastPlayerConsequenceName(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerConsequenceName();
+        }
+
+        std::string GetLastPlayerConsequenceQuest(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerConsequenceQuest();
+        }
+
+        float GetLastPlayerRecoverySeconds(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerRecoverySeconds();
+        }
         bool DebugDefeatPlayer(std::monostate)
         {
             return QueueGameTask([]() { PlayerDefeat::BeginPlayerDefeat(nullptr); });
@@ -184,6 +215,12 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "UnregisterForPlayerDefeated", &UnregisterForPlayerDefeated, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RegisterForPlayerRecovered", &RegisterForPlayerRecovered, std::nullopt, false);
         vm->BindNativeMethod(kClass, "UnregisterForPlayerRecovered", &UnregisterForPlayerRecovered, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RegisterForPlayerConsequenceStarted", &RegisterForPlayerConsequenceStarted, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "UnregisterForPlayerConsequenceStarted", &UnregisterForPlayerConsequenceStarted, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerAggressor", &GetLastPlayerAggressor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceName", &GetLastPlayerConsequenceName, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceQuest", &GetLastPlayerConsequenceQuest, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerRecoverySeconds", &GetLastPlayerRecoverySeconds, std::nullopt, false);
         vm->BindNativeMethod(kClass, "DebugDefeatPlayer", &DebugDefeatPlayer, std::nullopt, false);
         vm->BindNativeMethod(kClass, "DebugRecoverPlayer", &DebugRecoverPlayer, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReloadJSON", &ReloadJSON, std::nullopt, false);
