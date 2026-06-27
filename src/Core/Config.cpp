@@ -99,6 +99,12 @@ namespace OSFDefeat::Config
                 if (json.contains("defaultRecoverySeconds")) {
                     a_config.defaultRecoverySeconds = std::max(1.0f, json.value("defaultRecoverySeconds", 8.0f));
                 }
+                if (json.contains("npcAutoDefeat")) {
+                    a_config.npcAutoDefeat = json.value("npcAutoDefeat", false);
+                }
+                if (json.contains("npcAutoDefeatIncludeRobots")) {
+                    a_config.npcAutoDefeatIncludeRobots = json.value("npcAutoDefeatIncludeRobots", false);
+                }
                 ReadFormSet(json, "excludedLocations", a_config.excludedLocations);
                 ReadFormSet(json, "excludedQuests", a_config.excludedQuests);
                 REX::INFO("[OSFDefeat] loaded validation JSON {}", a_path.string());
@@ -156,6 +162,18 @@ namespace OSFDefeat::Config
     {
         std::shared_lock lock{ g_lock };
         return g_config.disableInScenes;
+    }
+
+    bool IsNpcAutoDefeatEnabled()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.npcAutoDefeat;
+    }
+
+    bool NpcAutoDefeatIncludesRobots()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.npcAutoDefeatIncludeRobots;
     }
 
     std::filesystem::path RootPath()

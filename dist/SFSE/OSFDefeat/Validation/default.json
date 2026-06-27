@@ -3,6 +3,8 @@
   "processingEnabled": true,
   "disableInScenes": false,
   "defaultRecoverySeconds": 8.0,
+  "npcAutoDefeat": false,
+  "npcAutoDefeatIncludeRobots": false,
   "excludedLocations": [],
   "excludedQuests": []
 }

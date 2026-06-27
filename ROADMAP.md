@@ -21,6 +21,9 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
 - Highest-priority, weighted-random player outcome selection with built-in fallback.
 - Player defeated/recovered Papyrus event registration.
 - Player consequence handoff context and `OnPlayerConsequenceStarted` registration for content mods.
+- Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
+- Opt-in **NPC auto-defeat** (`npcAutoDefeat`): hostile NPCs are auto-downed on a would-be-lethal hit,
+  gated by a game-thread-classified eligibility map so the worker-thread clamp never strands an actor.
 - Debug Papyrus helpers: `DebugDefeatPlayer`, `DebugRecoverPlayer`, `DebugDefeatRef`,
   `DebugRecoverRef`, `ReloadJSON`.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
@@ -35,6 +38,8 @@ Validation v1:
   "processingEnabled": true,
   "disableInScenes": false,
   "defaultRecoverySeconds": 8.0,
+  "npcAutoDefeat": false,
+  "npcAutoDefeatIncludeRobots": false,
   "excludedLocations": [],
   "excludedQuests": []
 }
@@ -71,12 +76,13 @@ Player consequence v1:
 2. Add direct quest start/fill behavior for configured player consequences. The current alpha exposes a registered handoff event plus queryable context.
 3. Expand validation from simple exclusions to a real condition grammar.
 4. Add interaction/menu registration for content mods.
-5. NPC defeat: add the faction/robot hostility discriminator and an NPC consequence policy, then
-   enable auto-defeat on NPC lethal hits (generalize the clamp past the player-only gate). The
-   per-actor down/recover recipe and verbs are already in place.
+5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, eligibility gate,
+   and `npcAutoDefeat` flag are in place) and add an NPC consequence policy — what happens to a
+   defeated NPC. Remaining gaps: one-shot kills bypass (classification lands after the first hit),
+   eligibility cache staleness within a session, and the runtime keyword confirm.
 
 ## Explicitly Unsupported (yet)
 
-Automatic NPC defeat on every lethal hit (needs the faction/robot gate above), follower-specific
+NPC consequence content (what happens to a defeated NPC beyond down/recover), follower-specific
 bleedout behavior, Hunter Pride-style UI, teleport capture scenes, full content event packs, complex
 Acheron condition grammar, and automatic quest/capture scene startup.

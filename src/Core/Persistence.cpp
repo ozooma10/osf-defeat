@@ -85,6 +85,7 @@ namespace OSFDefeat::Persistence
         {
             DefeatRegistry::Clear();
             Events::Clear();
+            PlayerDefeat::ResetNpcGate();
             Engine::SetCombatAIDisabled(false);
             REX::INFO("[OSFDefeat] reverted defeat state");
         }
