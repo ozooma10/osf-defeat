@@ -3,8 +3,6 @@
 #include "RE/Starfield.h"
 #include "SFSE/SFSE.h"
 
-#include <Windows.h>  // VirtualQuery / GetTickCount64
-
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -12,8 +10,10 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>

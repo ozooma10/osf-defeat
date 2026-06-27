@@ -2,32 +2,19 @@
 
 #include "Core/Defeat.h"
 
-#include "Engine/EngineFns.h"
-
 namespace OSFDefeat::Defeat
 {
 	namespace
 	{
 		Observer g_onDefeat;
 		Observer g_onRescue;
+		std::set<FormID> g_pacified;
+		std::shared_mutex g_pacifiedLock;
 
 		[[nodiscard]] float NowDay()
 		{
 			const auto* const cal = RE::Calendar::GetSingleton();
 			return cal ? cal->GetDaysPassedExact() : 0.0f;
-		}
-
-		// The OSF RE-proven, base-form-agnostic per-actor NPC down treatment (live-validated
-		// 2026-06-25): force the bleedout life state, hold it with kNoBleedoutRecovery, make it
-		// invulnerable so the defeat sticks through ongoing fire, and remove it from combat at the
-		// manager level so other actors disengage. Idempotent, so it doubles as the re-assertion
-		// applied when a defeated actor's state drifts (e.g. its 3D reloaded and reset it).
-		void ApplyNpcDownState(RE::Actor* a_victim)
-		{
-			a_victim->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-			Engine::SetLifeState(a_victim, Engine::kBleedOut);
-			Engine::SetGhost(a_victim, true);
-			Engine::StopCombatAndAlarmOnActor(a_victim);
 		}
 	}
 
@@ -36,34 +23,19 @@ namespace OSFDefeat::Defeat
 
 	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor)
 	{
-		if (!a_victim) {
-			return false;
-		}
-		if (a_victim->IsDead()) {
-			REX::WARN("[OSFDefeat] {:08X} is dead and cannot be defeated", a_victim->GetFormID());
+		if (!a_victim || a_victim->IsDead()) {
 			return false;
 		}
 
 		const FormID id = a_victim->GetFormID();
 		const FormID aggressorId = a_aggressor ? a_aggressor->GetFormID() : 0;
-
 		auto data = DefeatRegistry::Add(id, NowDay(), aggressorId);
 		if (!data) {
-			REX::WARN("[OSFDefeat] {:08X} is already defeated", id);
 			return false;
 		}
 
-		if (a_victim->IsPlayerRef()) {
-			// Player path = the validated PoC: essential -> bleedout, global combat gate.
-			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
-			Engine::SetCombatAIDisabled(true);
-		} else {
-			ApplyNpcDownState(a_victim);
-			REX::INFO("[OSFDefeat] NPC defeat (bleedout + ghost + disengage): {:08X}", id);
-		}
-
 		data->state.store(DefeatState::Defeated);
-		REX::INFO("[OSFDefeat] defeated {:08X} (aggressor {:08X})", id, aggressorId);
+		REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
 
 		if (g_onDefeat) {
 			g_onDefeat(id, aggressorId);
@@ -71,38 +43,30 @@ namespace OSFDefeat::Defeat
 		return true;
 	}
 
-	bool RescueActor(RE::Actor* a_victim, bool /*a_undoPacify*/)
+	bool RescueActor(RE::Actor* a_victim, bool a_undoPacify)
 	{
 		if (!a_victim) {
 			return false;
 		}
-		const FormID id = a_victim->GetFormID();
 
+		const FormID id = a_victim->GetFormID();
 		auto data = DefeatRegistry::Get(id);
 		if (!data) {
-			REX::WARN("[OSFDefeat] {:08X} is not defeated and cannot be rescued", id);
-			return false;
-		}
-		auto expected = DefeatState::Defeated;
-		if (!data->state.compare_exchange_strong(expected, DefeatState::Rescuing)) {
-			REX::INFO("[OSFDefeat] {:08X} rescue skipped (state busy)", id);
 			return false;
 		}
 
-		if (a_victim->IsPlayerRef()) {
-			Engine::RestoreHealthToMax(a_victim);
-			Engine::SetCombatAIDisabled(false);
-		} else {
-			Engine::SetLifeState(a_victim, Engine::kAlive);
-			Engine::RestoreHealthToMax(a_victim);  // exit bleedout + get up
-			Engine::SetGhost(a_victim, false);     // drop invulnerability
-			a_victim->boolFlags.reset(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+		auto expected = DefeatState::Defeated;
+		if (!data->state.compare_exchange_strong(expected, DefeatState::Rescuing)) {
+			return false;
 		}
 
 		const FormID aggressorId = data->aggressor;
 		DefeatRegistry::Remove(id);
-		REX::INFO("[OSFDefeat] rescued {:08X}", id);
+		if (a_undoPacify) {
+			UndoPacify(a_victim);
+		}
 
+		REX::INFO("[OSFDefeat] rescued actor {:08X}", id);
 		if (g_onRescue) {
 			g_onRescue(id, aggressorId);
 		}
@@ -121,7 +85,6 @@ namespace OSFDefeat::Defeat
 
 	std::vector<RE::Actor*> GetAllDefeated(bool /*a_loadedOnly*/)
 	{
-		// TODO: honor a_loadedOnly once a 3D-loaded check is wired in.
 		std::vector<RE::Actor*> out;
 		for (const auto id : DefeatRegistry::Snapshot()) {
 			if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
@@ -131,33 +94,11 @@ namespace OSFDefeat::Defeat
 		return out;
 	}
 
-	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)
+	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor)
 	{
-		auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor, a_recoverAtDay);
-		if (!data) {
-			return;
-		}
-		data->state.store(DefeatState::Defeated);
-
-		auto* const victim = RE::TESForm::LookupByID<RE::Actor>(a_id);
-		if (!victim) {
-			return;  // not loaded yet; keyword/flag reapplied when it loads (TODO: Load3D hook)
-		}
-		if (victim->IsPlayerRef()) {
-			Engine::EnsureEssential(RE::PlayerCharacter::GetSingleton());
-			Engine::SetCombatAIDisabled(true);
-		} else {
-			ApplyNpcDownState(victim);
-		}
-	}
-
-	void ReapplyDownState(RE::Actor* a_victim)
-	{
-		// Re-assert the held down state on an already-registered defeated NPC whose state drifted
-		// (e.g. its 3D reloaded and reset its life state). NPC-only: the player's down state is
-		// re-applied every frame by PollTrigger (EnsureEssential), so skip it here.
-		if (a_victim && !a_victim->IsPlayerRef()) {
-			ApplyNpcDownState(a_victim);
+		auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor);
+		if (data) {
+			data->state.store(DefeatState::Defeated);
 		}
 	}
 
@@ -166,23 +107,25 @@ namespace OSFDefeat::Defeat
 		if (!a_victim) {
 			return;
 		}
-		// Per-actor pacify = remove the actor from combat at the MANAGER level so every other
-		// combatant disengages (OSF RE-proven). This is the per-actor analog of the global tcai
-		// gate, and the lever plain per-actor StopCombat lacked (others re-acquire after StopCombat).
-		Engine::StopCombatAndAlarmOnActor(a_victim);
-		REX::INFO("[OSFDefeat] pacified {:08X}", a_victim->GetFormID());
+		std::unique_lock lock{ g_pacifiedLock };
+		g_pacified.insert(a_victim->GetFormID());
 	}
 
-	void UndoPacify(RE::Actor* /*a_victim*/)
+	void UndoPacify(RE::Actor* a_victim)
 	{
-		// Nothing to undo explicitly: once the actor is alive with AI active it re-evaluates
-		// combat on its own (RescueActor restores life state + AI). No-op by design.
+		if (!a_victim) {
+			return;
+		}
+		std::unique_lock lock{ g_pacifiedLock };
+		g_pacified.erase(a_victim->GetFormID());
 	}
 
 	bool IsPacified(const RE::Actor* a_victim)
 	{
-		// A defeated actor is combat-removed for the duration of its defeat. (Standalone Pacify
-		// of a non-defeated actor is not separately tracked.)
-		return IsDefeated(a_victim);
+		if (!a_victim) {
+			return false;
+		}
+		std::shared_lock lock{ g_pacifiedLock };
+		return g_pacified.contains(a_victim->GetFormID());
 	}
 }
