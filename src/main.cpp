@@ -1,32 +1,38 @@
 #include "pch.h"
 
+#include "Core/Config.h"
+#include "Core/Consequence.h"
 #include "Core/Persistence.h"
+#include "Core/PlayerDefeat.h"
 #include "Papyrus/Functions.h"
 
 namespace
 {
-	void OnMessage(SFSE::MessagingInterface::Message* a_msg)
-	{
-		if (!a_msg) {
-			return;
-		}
+    void OnMessage(SFSE::MessagingInterface::Message* a_msg)
+    {
+        if (!a_msg) {
+            return;
+        }
 
-		if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
-			OSFDefeat::Papyrus::Register();
-		}
-	}
+        if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
+            OSFDefeat::Config::Load();
+            OSFDefeat::Consequence::Load();
+            OSFDefeat::PlayerDefeat::Install();
+            OSFDefeat::Papyrus::Register();
+        }
+    }
 }
 
 SFSE_PLUGIN_LOAD(const SFSE::LoadInterface* a_sfse)
 {
-	SFSE::Init(a_sfse);
+    SFSE::Init(a_sfse, { .trampoline = true, .trampolineSize = 1024 });
 
-	OSFDefeat::Persistence::Register();
+    OSFDefeat::Persistence::Register();
 
-	if (const auto* const messaging = SFSE::GetMessagingInterface()) {
-		messaging->RegisterListener(OnMessage);
-	}
+    if (const auto* const messaging = SFSE::GetMessagingInterface()) {
+        messaging->RegisterListener(OnMessage);
+    }
 
-	REX::INFO("OSF Defeat loaded");
-	return true;
+    REX::INFO("OSF Defeat loaded");
+    return true;
 }

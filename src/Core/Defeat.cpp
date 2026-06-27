@@ -2,130 +2,148 @@
 
 #include "Core/Defeat.h"
 
+#include "Core/Events.h"
+#include "Engine/Engine.h"
+
 namespace OSFDefeat::Defeat
 {
-	namespace
-	{
-		Observer g_onDefeat;
-		Observer g_onRescue;
-		std::set<FormID> g_pacified;
-		std::shared_mutex g_pacifiedLock;
+    namespace
+    {
+        Observer g_onDefeat;
+        Observer g_onRescue;
+        std::set<FormID> g_pacified;
+        std::shared_mutex g_pacifiedLock;
 
-		[[nodiscard]] float NowDay()
-		{
-			const auto* const cal = RE::Calendar::GetSingleton();
-			return cal ? cal->GetDaysPassedExact() : 0.0f;
-		}
-	}
+        [[nodiscard]] float NowDay()
+        {
+            const auto* const cal = RE::Calendar::GetSingleton();
+            return cal ? cal->GetDaysPassedExact() : 0.0f;
+        }
+    }
 
-	void SetOnDefeat(Observer a_observer) { g_onDefeat = std::move(a_observer); }
-	void SetOnRescue(Observer a_observer) { g_onRescue = std::move(a_observer); }
+    void SetOnDefeat(Observer a_observer) { g_onDefeat = std::move(a_observer); }
+    void SetOnRescue(Observer a_observer) { g_onRescue = std::move(a_observer); }
 
-	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor)
-	{
-		if (!a_victim || a_victim->IsDead()) {
-			return false;
-		}
+    bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor)
+    {
+        if (!a_victim || a_victim->IsDead()) {
+            return false;
+        }
 
-		const FormID id = a_victim->GetFormID();
-		const FormID aggressorId = a_aggressor ? a_aggressor->GetFormID() : 0;
-		auto data = DefeatRegistry::Add(id, NowDay(), aggressorId);
-		if (!data) {
-			return false;
-		}
+        const FormID id = a_victim->GetFormID();
+        const FormID aggressorId = a_aggressor ? a_aggressor->GetFormID() : 0;
+        auto data = DefeatRegistry::Add(id, NowDay(), aggressorId);
+        if (!data) {
+            return false;
+        }
 
-		data->state.store(DefeatState::Defeated);
-		REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
+        data->state.store(DefeatState::Defeated);
+        if (a_victim->IsPlayerRef()) {
+            Engine::SetPlayerDownState(a_victim);
+        }
+        REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
 
-		if (g_onDefeat) {
-			g_onDefeat(id, aggressorId);
-		}
-		return true;
-	}
+        if (a_victim->IsPlayerRef()) {
+            Events::BroadcastPlayerDefeated();
+        }
+        if (g_onDefeat) {
+            g_onDefeat(id, aggressorId);
+        }
+        return true;
+    }
 
-	bool RescueActor(RE::Actor* a_victim, bool a_undoPacify)
-	{
-		if (!a_victim) {
-			return false;
-		}
+    bool RescueActor(RE::Actor* a_victim, bool a_undoPacify)
+    {
+        if (!a_victim) {
+            return false;
+        }
 
-		const FormID id = a_victim->GetFormID();
-		auto data = DefeatRegistry::Get(id);
-		if (!data) {
-			return false;
-		}
+        const FormID id = a_victim->GetFormID();
+        auto data = DefeatRegistry::Get(id);
+        if (!data) {
+            return false;
+        }
 
-		auto expected = DefeatState::Defeated;
-		if (!data->state.compare_exchange_strong(expected, DefeatState::Rescuing)) {
-			return false;
-		}
+        auto expected = DefeatState::Defeated;
+        if (!data->state.compare_exchange_strong(expected, DefeatState::Rescuing)) {
+            return false;
+        }
 
-		const FormID aggressorId = data->aggressor;
-		DefeatRegistry::Remove(id);
-		if (a_undoPacify) {
-			UndoPacify(a_victim);
-		}
+        const FormID aggressorId = data->aggressor;
+        DefeatRegistry::Remove(id);
+        if (a_victim->IsPlayerRef()) {
+            Engine::RestorePlayerState(a_victim);
+        }
+        if (a_undoPacify) {
+            UndoPacify(a_victim);
+        }
 
-		REX::INFO("[OSFDefeat] rescued actor {:08X}", id);
-		if (g_onRescue) {
-			g_onRescue(id, aggressorId);
-		}
-		return true;
-	}
+        REX::INFO("[OSFDefeat] rescued actor {:08X}", id);
+        if (a_victim->IsPlayerRef()) {
+            Events::BroadcastPlayerRecovered();
+        }
+        if (g_onRescue) {
+            g_onRescue(id, aggressorId);
+        }
+        return true;
+    }
 
-	bool IsDefeated(const RE::Actor* a_victim)
-	{
-		return a_victim && DefeatRegistry::Contains(a_victim->GetFormID());
-	}
+    bool IsDefeated(const RE::Actor* a_victim)
+    {
+        return a_victim && DefeatRegistry::Contains(a_victim->GetFormID());
+    }
 
-	bool IsDamageImmune(const RE::Actor* a_victim)
-	{
-		return IsDefeated(a_victim);
-	}
+    bool IsDamageImmune(const RE::Actor* a_victim)
+    {
+        return IsDefeated(a_victim);
+    }
 
-	std::vector<RE::Actor*> GetAllDefeated(bool /*a_loadedOnly*/)
-	{
-		std::vector<RE::Actor*> out;
-		for (const auto id : DefeatRegistry::Snapshot()) {
-			if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
-				out.push_back(actor);
-			}
-		}
-		return out;
-	}
+    std::vector<RE::Actor*> GetAllDefeated(bool /*a_loadedOnly*/)
+    {
+        std::vector<RE::Actor*> out;
+        for (const auto id : DefeatRegistry::Snapshot()) {
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                out.push_back(actor);
+            }
+        }
+        return out;
+    }
 
-	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor)
-	{
-		auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor);
-		if (data) {
-			data->state.store(DefeatState::Defeated);
-		}
-	}
+    void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)
+    {
+        auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor, a_recoverAtDay);
+        if (data) {
+            data->state.store(DefeatState::Defeated);
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id); actor && actor->IsPlayerRef()) {
+                Engine::SetPlayerDownState(actor);
+            }
+        }
+    }
 
-	void Pacify(RE::Actor* a_victim)
-	{
-		if (!a_victim) {
-			return;
-		}
-		std::unique_lock lock{ g_pacifiedLock };
-		g_pacified.insert(a_victim->GetFormID());
-	}
+    void Pacify(RE::Actor* a_victim)
+    {
+        if (!a_victim) {
+            return;
+        }
+        std::unique_lock lock{ g_pacifiedLock };
+        g_pacified.insert(a_victim->GetFormID());
+    }
 
-	void UndoPacify(RE::Actor* a_victim)
-	{
-		if (!a_victim) {
-			return;
-		}
-		std::unique_lock lock{ g_pacifiedLock };
-		g_pacified.erase(a_victim->GetFormID());
-	}
+    void UndoPacify(RE::Actor* a_victim)
+    {
+        if (!a_victim) {
+            return;
+        }
+        std::unique_lock lock{ g_pacifiedLock };
+        g_pacified.erase(a_victim->GetFormID());
+    }
 
-	bool IsPacified(const RE::Actor* a_victim)
-	{
-		if (!a_victim) {
-			return false;
-		}
-		std::shared_lock lock{ g_pacifiedLock };
-		return g_pacified.contains(a_victim->GetFormID());
-	}
+    bool IsPacified(const RE::Actor* a_victim)
+    {
+        if (!a_victim) {
+            return false;
+        }
+        std::shared_lock lock{ g_pacifiedLock };
+        return g_pacified.contains(a_victim->GetFormID());
+    }
 }

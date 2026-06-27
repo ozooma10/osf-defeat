@@ -18,7 +18,7 @@ namespace OSFDefeat::Defeat
 	[[nodiscard]] bool IsDamageImmune(const RE::Actor* a_victim);
 	[[nodiscard]] std::vector<RE::Actor*> GetAllDefeated(bool a_loadedOnly);
 
-	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor);
+	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay);
 
 	void               Pacify(RE::Actor* a_victim);
 	void               UndoPacify(RE::Actor* a_victim);

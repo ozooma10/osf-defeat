@@ -10,6 +10,8 @@ set_warnings("allextra")
 add_rules("mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
+add_requires("nlohmann_json")
+
 target("OSF Defeat")
     add_rules("commonlibsf.plugin", {
         name = "OSF Defeat",
@@ -21,8 +23,9 @@ target("OSF Defeat")
     add_files("src/**.cpp")
     add_headerfiles("src/**.h")
     add_includedirs("src")
+    add_packages("nlohmann_json")
     set_pcxxheader("src/pch.h")
-    add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
+    add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", "_CRT_SECURE_NO_WARNINGS")
 
     after_build(function(target)
         local modsroot = os.getenv("XSE_SF_MODS_PATH")
@@ -57,5 +60,14 @@ target("OSF Defeat")
         for _, psc in ipairs(os.files(path.join(os.projectdir(), "dist", "Scripts", "Source", "*.psc"))) do
             os.mkdir(path.join(scriptroot, "Source"))
             os.trycp(psc, path.join(scriptroot, "Source", path.filename(psc)))
+        end
+        local dataroot = (modsroot and #modsroot > 0) and path.join(modsroot, target:name())
+                         or path.join(gameroot, "Data")
+        for _, config in ipairs(os.files(path.join(os.projectdir(), "dist", "SFSE", "OSFDefeat", "**"))) do
+            local rel = path.relative(config, path.join(os.projectdir(), "dist"))
+            local dst = path.join(dataroot, rel)
+            os.mkdir(path.directory(dst))
+            os.trycp(config, dst)
+            cprint("${green}[OSF Defeat] deployed config:${clear} %s", rel)
         end
     end)

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "processingEnabled": true,
+  "disableInScenes": false,
+  "defaultRecoverySeconds": 8.0,
+  "excludedLocations": [],
+  "excludedQuests": []
+}

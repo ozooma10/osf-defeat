@@ -4,16 +4,27 @@
 #include "SFSE/SFSE.h"
 
 #include <atomic>
+#include <array>
+#include <algorithm>
 #include <chrono>
+#include <charconv>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
+#include <cstring>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <unordered_set>
 #include <variant>
 #include <vector>

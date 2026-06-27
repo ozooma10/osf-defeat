@@ -2,9 +2,8 @@ Scriptname OSFDefeat Native Hidden
 
 ; OSF Defeat - public Papyrus API foundation.
 ;
-; This script exposes the durable framework verbs. It deliberately does not own
-; trigger detection, resolution selection, or authored consequences yet. Content
-; mods decide when to call DefeatActor and when to call RescueActor.
+; Alpha adds player defeat/recovery notifications and debug helpers. Receivers
+; registered below should implement OnPlayerDefeated() and/or OnPlayerRecovered().
 
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
@@ -18,3 +17,12 @@ Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native
 
 Function DisableProcessing(Bool abDisable) global native
 Bool Function IsProcessingDisabled() global native
+
+Function RegisterForPlayerDefeated(Form akReceiver) global native
+Function UnregisterForPlayerDefeated(Form akReceiver) global native
+Function RegisterForPlayerRecovered(Form akReceiver) global native
+Function UnregisterForPlayerRecovered(Form akReceiver) global native
+
+Bool Function DebugDefeatPlayer() global native
+Bool Function DebugRecoverPlayer() global native
+Function ReloadJSON() global native
