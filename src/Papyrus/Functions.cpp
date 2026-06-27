@@ -179,6 +179,38 @@ namespace OSFDefeat::Papyrus
             });
         }
 
+        // Force-defeat an arbitrary ref by FormID (the value from Form.GetFormID()), bypassing the
+        // validation gate so it works anywhere for testing. Aggressor is attributed to the player.
+        bool DebugDefeatRef(std::monostate, std::int32_t aiFormID)
+        {
+            const FormID id = static_cast<FormID>(aiFormID);
+            if (!id) {
+                return false;
+            }
+            return QueueGameTask([id]() {
+                auto* const victim = RE::TESForm::LookupByID<RE::Actor>(id);
+                if (!victim) {
+                    REX::WARN("[OSFDefeat] DebugDefeatRef: no actor {:08X}", id);
+                    return;
+                }
+                auto* const player = static_cast<RE::Actor*>(RE::PlayerCharacter::GetSingleton());
+                Defeat::DefeatActor(victim, player);
+            });
+        }
+
+        bool DebugRecoverRef(std::monostate, std::int32_t aiFormID)
+        {
+            const FormID id = static_cast<FormID>(aiFormID);
+            if (!id) {
+                return false;
+            }
+            return QueueGameTask([id]() {
+                if (auto* const victim = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                    Defeat::RescueActor(victim, true);
+                }
+            });
+        }
+
         void ReloadJSON(std::monostate)
         {
             Config::Reload();
@@ -223,6 +255,8 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "GetLastPlayerRecoverySeconds", &GetLastPlayerRecoverySeconds, std::nullopt, false);
         vm->BindNativeMethod(kClass, "DebugDefeatPlayer", &DebugDefeatPlayer, std::nullopt, false);
         vm->BindNativeMethod(kClass, "DebugRecoverPlayer", &DebugRecoverPlayer, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "DebugDefeatRef", &DebugDefeatRef, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "DebugRecoverRef", &DebugRecoverRef, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReloadJSON", &ReloadJSON, std::nullopt, false);
 
         g_bound = true;

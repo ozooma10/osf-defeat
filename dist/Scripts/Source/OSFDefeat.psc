@@ -33,4 +33,10 @@ Float Function GetLastPlayerRecoverySeconds() global native
 
 Bool Function DebugDefeatPlayer() global native
 Bool Function DebugRecoverPlayer() global native
+
+; Force-defeat / recover an arbitrary ref by FormID (the value from Form.GetFormID()),
+; bypassing the validation gate. Handy for testing NPC defeat from the console.
+Bool Function DebugDefeatRef(Int aiFormID) global native
+Bool Function DebugRecoverRef(Int aiFormID) global native
+
 Function ReloadJSON() global native
