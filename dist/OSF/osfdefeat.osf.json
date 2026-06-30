@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "OSF Defeat (player down-state scenes)",
+  "scenes": [
+    {
+      "id": "osf.defeat.cower",
+      "name": "vanilla cower",
+      "stages": [
+        {
+          "loops": 0,
+          "clips": "meshes/actors/human/animations/common/cower_idle.af"
+        }
+      ]
+    }
+  ]
+}

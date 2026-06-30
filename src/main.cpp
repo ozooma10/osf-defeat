@@ -5,6 +5,7 @@
 #include "Core/Events.h"
 #include "Core/Persistence.h"
 #include "Core/PlayerDefeat.h"
+#include "Core/Presentation.h"
 #include "Core/Reattach.h"
 #include "Papyrus/Functions.h"
 
@@ -23,6 +24,10 @@ namespace
             OSFDefeat::PlayerDefeat::Install();
             OSFDefeat::Reattach::Install();
             OSFDefeat::Papyrus::Register();
+        } else if (a_msg->type == SFSE::MessagingInterface::kPostPostDataLoad) {
+            // OSF Animation marks its native scene API ready at kPostDataLoad; fetch + cache it the
+            // phase after, to dodge the intra-phase race (a too-early fetch is a safe null + retry).
+            OSFDefeat::Presentation::AcquireSceneApi();
         }
     }
 }

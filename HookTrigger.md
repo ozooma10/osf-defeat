@@ -55,7 +55,7 @@ kill commits, which the clamp prevents (disproven in-game 2026-06-25).
 ## NPC path
 
 NPC defeat uses the same held state via the **live-validated per-actor recipe**, driven two ways:
-**explicitly** through the verbs (`OSFDefeat.DefeatActor(npc, aggressor)`, `DebugDefeatRef`), and via an
+**explicitly** through the verb (`OSFDefeat.DefeatActor(npc, aggressor)`), and via an
 **opt-in auto-defeat** (`npcAutoDefeat`, default off). When enabled, the clamp resolves the victim from the
 hooked AV owner (`ActorFromAVOwner`) and gates on `Decision::IsHostile` + flesh-policy (`IsNonFlesh`,
 ID 42794 / 100890) — inline on the worker thread, symmetric with the player branch. Off by default because
@@ -103,7 +103,7 @@ recoverAtDay) and is re-applied on load.
 - [src/Engine/Engine.cpp](src/Engine/Engine.cpp) — player/NPC down & restore recipes, AV + combat-target helpers.
 - [src/Core/Defeat.cpp](src/Core/Defeat.cpp) — registry verbs + dispatch.
 - [src/Core/Reattach.cpp](src/Core/Reattach.cpp) — Set3D re-assert hook.
-- [src/Papyrus/Functions.cpp](src/Papyrus/Functions.cpp) — Papyrus API incl. `DebugDefeatRef`/`DebugRecoverRef`.
+- [src/Papyrus/Functions.cpp](src/Papyrus/Functions.cpp) — Papyrus API surface (defeat/rescue/pacify verbs, events, classification).
 
 ## In-game validation
 
@@ -116,8 +116,8 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\OSFDefeat.log`.
 3. **Player EM** — a lethal EM hit routes into defeat instead of the vanilla shock.
 4. **Attribution** — a console `damageav health 9999` while fighting an NPC attributes that NPC (via
    `currentCombatTarget`); a non-combat `damageav` stays `00000000`.
-5. **NPC defeat** — `OSFDefeat.DebugDefeatRef(<formID>)` drops the NPC into bleedout+ghost, others
-   disengage; `DebugRecoverRef` gets it back up.
+5. **NPC defeat** — with `npcAutoDefeat` enabled, a would-be-lethal hit on a hostile NPC drops it into
+   bleedout+ghost and others disengage; it recovers on the timer (or via a content `OSFDefeat.RescueActor`).
 6. **3D re-assert** — defeat, then `coc` round-trip → state holds.
 
 ### Fallback

@@ -4,6 +4,7 @@
 
 #include "RE/B/BSPointerHandle.h"
 #include "RE/C/Console.h"
+#include "RE/P/PlayerCamera.h"
 #include "RE/P/ProcessLists.h"
 
 namespace OSFDefeat::Engine
@@ -121,7 +122,9 @@ namespace OSFDefeat::Engine
         a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
         a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kCanSpeakToEssentialDown);
         a_actor->SetGhost(true);
-        a_actor->SetAIEnabled(false);
+        // NOTE: no SetAIEnabled(false) for the player — kProcessMe-off can suppress the player's camera/
+        // look (and it's the NPC lever per OSF RE; the player uses the global tcai gate below). The OSF
+        // Animation scene's input lock (movement/combat off, looking free) handles "can't act".
         a_actor->SetLifeState(kBleedOut);
         a_actor->StopCombat();
         if (auto* const lists = RE::ProcessLists::GetSingleton()) {
@@ -142,7 +145,10 @@ namespace OSFDefeat::Engine
         a_actor->SetGhost(false);
         a_actor->SetAIEnabled(true);
         a_actor->SetLifeState(kAlive);
-        a_actor->EvaluatePackage(true, true);
+        // EvaluatePackage is intentionally NOT called: its AddressLib ID is unbound (0) in commonlibsf
+        // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
+        // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
+        // re-eval isn't required for recovery. Re-add only once 150640 is RE-proven for the live build.
         if (g_hasEssentialSnapshot.exchange(false)) {
             SetPlayerEssential(g_wasEssential);
         }
@@ -178,7 +184,10 @@ namespace OSFDefeat::Engine
         a_actor->SetGhost(false);
         a_actor->SetLifeState(kAlive);
         a_actor->SetAIEnabled(true);
-        a_actor->EvaluatePackage(true, true);
+        // EvaluatePackage is intentionally NOT called: its AddressLib ID is unbound (0) in commonlibsf
+        // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
+        // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
+        // re-eval isn't required for recovery. Re-add only once 150640 is RE-proven for the live build.
     }
 
     void ApplyDownState(RE::Actor* a_actor)

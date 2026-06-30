@@ -72,17 +72,13 @@ Bool Function IsHostile(Actor akActor, Actor akTarget) global native
 
 `ClassifyActor` reads the actor's ActorType keywords; `IsHostile` checks combat hostility. Safe to call inline.
 
-## Debug Helpers
+## Utilities
 
 ```papyrus
-Bool Function DebugDefeatPlayer() global native
-Bool Function DebugRecoverPlayer() global native
-Bool Function DebugDefeatRef(Int aiFormID) global native
-Bool Function DebugRecoverRef(Int aiFormID) global native
 Function ReloadJSON() global native
 ```
 
-These are alpha test hooks for in-game validation. `DebugDefeatRef`/`DebugRecoverRef` force-defeat or recover an arbitrary ref by FormID (`Form.GetFormID()`), bypassing validation. `ReloadJSON()` reloads validation and consequence files without restarting the game.
+`ReloadJSON()` reloads validation and consequence files without restarting the game.
 ## Player Consequence Handoff
 
 ```papyrus

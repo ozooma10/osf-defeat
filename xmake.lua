@@ -70,4 +70,12 @@ target("OSF Defeat")
             os.trycp(config, dst)
             cprint("${green}[OSF Defeat] deployed config:${clear} %s", rel)
         end
+        -- OSF Animation scene defs (Data/OSF/*.osf.json) — the player down-state cower scene.
+        for _, scene in ipairs(os.files(path.join(os.projectdir(), "dist", "OSF", "**"))) do
+            local rel = path.relative(scene, path.join(os.projectdir(), "dist"))
+            local dst = path.join(dataroot, rel)
+            os.mkdir(path.directory(dst))
+            os.trycp(scene, dst)
+            cprint("${green}[OSF Defeat] deployed scene:${clear} %s", rel)
+        end
     end)

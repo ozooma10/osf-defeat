@@ -3,6 +3,7 @@
 #include "Core/Defeat.h"
 
 #include "Core/Events.h"
+#include "Core/Presentation.h"
 #include "Engine/Engine.h"
 
 namespace OSFDefeat::Defeat
@@ -42,6 +43,9 @@ namespace OSFDefeat::Defeat
         REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
 
         if (a_victim->IsPlayerRef()) {
+            // The framework state holds the player safe; the cower pose + control lock are what make the
+            // down VISIBLE (lifeState can't pose the player). Cleared on rescue below.
+            Presentation::ShowPlayerDown();
             Events::BroadcastPlayerDefeated();
         }
         if (g_onDefeat) {
@@ -70,6 +74,9 @@ namespace OSFDefeat::Defeat
         const FormID aggressorId = data->aggressor;
         DefeatRegistry::Remove(id);
         Engine::RestoreState(a_victim);
+        if (a_victim->IsPlayerRef()) {
+            Presentation::ClearPlayerDown();  // stop the cower + release the lock + restore camera
+        }
         if (a_undoPacify) {
             UndoPacify(a_victim);
         }

@@ -24,8 +24,7 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
 - Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
 - Opt-in **NPC auto-defeat** (`npcAutoDefeat`): hostile NPCs are auto-downed on a would-be-lethal hit
   (clamp + inline hostility/flesh classification, symmetric with the player path).
-- Debug Papyrus helpers: `DebugDefeatPlayer`, `DebugRecoverPlayer`, `DebugDefeatRef`,
-  `DebugRecoverRef`, `ReloadJSON`.
+- `ReloadJSON` Papyrus helper to hot-reload validation/consequence JSON without a restart.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
 
 ## JSON Schemas

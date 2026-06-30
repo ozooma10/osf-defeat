@@ -15,7 +15,7 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
 - Defeat / Rescue / Pacify verbs backed by `DefeatRegistry` and SFSE co-save persistence.
 - Player defeated/recovered/consequence-started Papyrus events.
 - JSON validation/config and player consequences under `Data/SFSE/OSFDefeat/`.
-- Debug Papyrus helpers for forcing defeat/recovery (player or by ref) and reloading JSON.
+- `ReloadJSON` Papyrus helper to hot-reload validation/consequence JSON without a restart.
 
 ## Current Architecture
 
@@ -93,10 +93,6 @@ Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
 Float Function GetLastPlayerRecoverySeconds() global native
-Bool Function DebugDefeatPlayer() global native
-Bool Function DebugRecoverPlayer() global native
-Bool Function DebugDefeatRef(Int aiFormID) global native
-Bool Function DebugRecoverRef(Int aiFormID) global native
 Function ReloadJSON() global native
 ```
 

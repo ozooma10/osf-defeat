@@ -31,6 +31,4 @@ String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
 Float Function GetLastPlayerRecoverySeconds() global native
 
-Bool Function DebugDefeatPlayer() global native
-Bool Function DebugRecoverPlayer() global native
 Function ReloadJSON() global native
