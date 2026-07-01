@@ -91,6 +91,13 @@ namespace OSFDefeat::Engine
     void SetCombatAIDisabled(bool a_disabled)
     {
         RE::Console::SetCombatAIProcessing(!a_disabled);
+        // Read the gate back so the SFSE log shows whether the write actually landed. If the tcai
+        // handler (ID 66826) failed to resolve, SetCombatAIProcessing no-ops and the gate reads as
+        // nullptr -> IsCombatAIProcessingEnabled() returns true regardless. So a down-call that logs
+        // "disabled (processingEnabled=true)" means the gate never resolved (bug: combat AI never
+        // actually suppressed); a recover-call should log "enabled (processingEnabled=true)".
+        REX::INFO("[OSFDefeat] combat AI gate -> {} (processingEnabled={})",
+            a_disabled ? "disabled" : "enabled", RE::Console::IsCombatAIProcessingEnabled());
     }
 
     void SetPlayerEssential(bool a_essential)
@@ -126,10 +133,14 @@ namespace OSFDefeat::Engine
         // Animation scene's input lock (movement/combat off, looking free) handles "can't act".
         a_actor->SetLifeState(kBleedOut);
         a_actor->StopCombat();
-        if (auto* const lists = RE::ProcessLists::GetSingleton()) {
-            lists->StopCombatAndAlarmOnActor(a_actor);
-        }
-        SetCombatAIDisabled(true);
+        // No combat-AI pacify during the down beat. We tried the global tcai gate: it froze the enemies'
+        // combat controllers, and ONLY the console command's own execution context can cleanly un-freeze
+        // them (its setting-change broadcast is gated on thread state we can't reproduce from a plugin) —
+        // so combat stayed dead on recovery until the player typed `tcai` (in-game confirmed 2026-07-01).
+        // Ghost (set above) makes the player invulnerable, so enemies simply keep firing harmlessly while
+        // the player is down/posed, and combat continues seamlessly the instant they recover — no gate,
+        // no freeze, no manual tcai. (ProcessLists::StopCombatAndAlarmOnActor is also avoided here: it
+        // permanently drops the player from every target list, which likewise blocks re-engagement.)
     }
 
     void RestorePlayerState(RE::Actor* a_actor)
@@ -151,7 +162,8 @@ namespace OSFDefeat::Engine
         if (g_hasEssentialSnapshot.exchange(false)) {
             SetPlayerEssential(g_wasEssential);
         }
-        SetCombatAIDisabled(false);
+        // No combat-AI gate to restore — the down beat no longer touches it (see SetPlayerDownState).
+        // Enemies were never paused, so combat is already live; unghosting above lets their fire land.
     }
 
     void SetNpcDownState(RE::Actor* a_actor)
