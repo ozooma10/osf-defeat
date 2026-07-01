@@ -99,6 +99,7 @@ namespace OSFDefeat::Presentation
 		opts.lockPlayerMode    = 1;  // force movement/combat lock
 		opts.stripMode         = 0;  // never strip armor on defeat
 		opts.playerControlMode = 0;  // revoke advance/navigate/end — player can't escape the scene
+		std::strncpy(opts.camera, "scene_orbit", sizeof(opts.camera) - 1);
 
 		RE::Actor* actors[1]{ player };
 		const std::int32_t handle = api->StartScene(actors, 1, kDownSceneId, opts);
