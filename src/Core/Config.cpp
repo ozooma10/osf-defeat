@@ -105,6 +105,16 @@ namespace OSFDefeat::Config
                 if (json.contains("npcAutoDefeatIncludeRobots")) {
                     a_config.npcAutoDefeatIncludeRobots = json.value("npcAutoDefeatIncludeRobots", false);
                 }
+                if (json.contains("factionPacify")) {
+                    a_config.factionPacify = json.value("factionPacify", true);
+                }
+                if (const auto it = json.find("captiveFaction"); it != json.end()) {
+                    if (const auto id = ParseFormID(*it)) {
+                        a_config.captiveFaction = *id;
+                    } else {
+                        REX::WARN("[OSFDefeat] captiveFaction is not a numeric formID; keeping default");
+                    }
+                }
                 ReadFormSet(json, "excludedLocations", a_config.excludedLocations);
                 ReadFormSet(json, "excludedQuests", a_config.excludedQuests);
                 REX::INFO("[OSFDefeat] loaded validation JSON {}", a_path.string());
@@ -180,6 +190,18 @@ namespace OSFDefeat::Config
     {
         std::shared_lock lock{ g_lock };
         return g_config.npcAutoDefeatIncludeRobots;
+    }
+
+    bool IsFactionPacifyEnabled()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.factionPacify;
+    }
+
+    FormID CaptiveFactionID()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.captiveFaction;
     }
 
     std::filesystem::path RootPath()

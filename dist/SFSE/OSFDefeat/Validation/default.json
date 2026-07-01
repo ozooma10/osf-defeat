@@ -5,6 +5,8 @@
   "defaultRecoverySeconds": 8.0,
   "npcAutoDefeat": false,
   "npcAutoDefeatIncludeRobots": false,
+  "factionPacify": true,
+  "captiveFaction": "0x0003E0C8",
   "excludedLocations": [],
   "excludedQuests": []
 }

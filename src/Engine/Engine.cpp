@@ -2,9 +2,12 @@
 
 #include "Engine/Engine.h"
 
+#include "Core/Config.h"
+
 #include "RE/B/BSPointerHandle.h"
 #include "RE/C/Console.h"
 #include "RE/P/ProcessLists.h"
+#include "RE/T/TESFaction.h"
 
 namespace OSFDefeat::Engine
 {
@@ -13,10 +16,27 @@ namespace OSFDefeat::Engine
         std::atomic_bool g_hasEssentialSnapshot{ false };
         bool g_wasEssential{ false };
 
+        // FormID of the "captive" faction we added the downed player to (SAF Surrender-style pacify), or 0
+        // when we didn't add one. Remembering the exact FormID (not re-reading config on recover) means a
+        // config change mid-down can't retarget the removal, and we only ever remove a membership WE added.
+        std::atomic<std::uint32_t> g_captiveFactionApplied{ 0 };
+
         [[nodiscard]] bool PlayerIsEssential(RE::Actor* a_actor)
         {
             auto* const npc = a_actor ? a_actor->GetNPC() : nullptr;
             return npc ? npc->IsEssential() : false;
+        }
+
+        // Resolves the configured captive faction the downed player joins so hostiles disengage. Returns
+        // nullptr when faction-pacify is disabled, the FormID is 0, or it doesn't resolve to a TESFaction —
+        // callers then simply skip the pacify (leaving Ghost as the only protection).
+        [[nodiscard]] RE::TESFaction* CaptiveFaction()
+        {
+            if (!Config::IsFactionPacifyEnabled()) {
+                return nullptr;
+            }
+            const auto id = Config::CaptiveFactionID();
+            return id ? RE::TESForm::LookupByID<RE::TESFaction>(id) : nullptr;
         }
     }
     RE::ActorValueInfo* HealthAV()
@@ -133,14 +153,21 @@ namespace OSFDefeat::Engine
         // Animation scene's input lock (movement/combat off, looking free) handles "can't act".
         a_actor->SetLifeState(kBleedOut);
         a_actor->StopCombat();
-        // No combat-AI pacify during the down beat. We tried the global tcai gate: it froze the enemies'
-        // combat controllers, and ONLY the console command's own execution context can cleanly un-freeze
-        // them (its setting-change broadcast is gated on thread state we can't reproduce from a plugin) —
-        // so combat stayed dead on recovery until the player typed `tcai` (in-game confirmed 2026-07-01).
-        // Ghost (set above) makes the player invulnerable, so enemies simply keep firing harmlessly while
-        // the player is down/posed, and combat continues seamlessly the instant they recover — no gate,
-        // no freeze, no manual tcai. (ProcessLists::StopCombatAndAlarmOnActor is also avoided here: it
-        // permanently drops the player from every target list, which likewise blocks re-engagement.)
+        // Pacify via FACTION membership, not the global tcai gate. The tcai gate froze the enemies' combat
+        // controllers, and ONLY the console command's own execution context can cleanly un-freeze them (its
+        // setting-change broadcast is gated on thread state a plugin can't reproduce) — so combat stayed
+        // dead on recovery until the player typed `tcai`. Instead we mirror SAF Surrender: add the player to
+        // a "captive" faction (default vanilla 0x3E0C8) whose reactions make hostiles disengage;
+        // RestorePlayerState removes it and normal AI re-hostiles them on the next think — no freeze, no
+        // manual tcai. Ghost (set above) is belt-and-suspenders invulnerability for the pose beat.
+        // (ProcessLists::StopCombatAndAlarmOnActor is still avoided: it permanently drops the player from
+        // every target list, which would block re-engagement.) Add is create-or-update at rank 0; we record
+        // the FormID so recovery removes exactly the membership we introduced.
+        if (auto* const faction = CaptiveFaction()) {
+            a_actor->AddToFaction(faction, 0);
+            g_captiveFactionApplied.store(faction->GetFormID());
+            REX::INFO("[OSFDefeat] captive-faction pacify: player added to faction {:08X}", faction->GetFormID());
+        }
     }
 
     void RestorePlayerState(RE::Actor* a_actor)
@@ -162,8 +189,16 @@ namespace OSFDefeat::Engine
         if (g_hasEssentialSnapshot.exchange(false)) {
             SetPlayerEssential(g_wasEssential);
         }
-        // No combat-AI gate to restore — the down beat no longer touches it (see SetPlayerDownState).
-        // Enemies were never paused, so combat is already live; unghosting above lets their fire land.
+        // Undo the captive-faction pacify from SetPlayerDownState: remove exactly the faction we added
+        // (tracked by FormID so a config change mid-down can't retarget the removal, and a pre-existing
+        // membership we didn't add is left untouched). Normal AI re-hostiles the enemies on the next think;
+        // unghosting above lets their fire land again.
+        if (const std::uint32_t applied = g_captiveFactionApplied.exchange(0); applied != 0) {
+            if (auto* const faction = RE::TESForm::LookupByID<RE::TESFaction>(applied)) {
+                a_actor->RemoveFromFaction(faction);
+                REX::INFO("[OSFDefeat] captive-faction pacify: player removed from faction {:08X}", applied);
+            }
+        }
     }
 
     void SetNpcDownState(RE::Actor* a_actor)

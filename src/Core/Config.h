@@ -13,6 +13,8 @@ namespace OSFDefeat::Config
         float defaultRecoverySeconds{ 8.0f };
         bool npcAutoDefeat{ false };             // auto-down hostile NPCs on a would-be-lethal hit
         bool npcAutoDefeatIncludeRobots{ false };  // include robots/turrets in NPC auto-defeat
+        bool factionPacify{ true };              // add the downed player to captiveFaction so hostiles disengage
+        FormID captiveFaction{ 0x0003E0C8 };     // vanilla Starfield.esm captive faction (SAF Surrender parity)
         std::set<FormID> excludedLocations;
         std::set<FormID> excludedQuests;
     };
@@ -27,5 +29,7 @@ namespace OSFDefeat::Config
     [[nodiscard]] bool ShouldDisableInScenes();
     [[nodiscard]] bool IsNpcAutoDefeatEnabled();
     [[nodiscard]] bool NpcAutoDefeatIncludesRobots();
+    [[nodiscard]] bool IsFactionPacifyEnabled();
+    [[nodiscard]] FormID CaptiveFactionID();
     [[nodiscard]] std::filesystem::path RootPath();
 }
