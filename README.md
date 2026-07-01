@@ -12,6 +12,10 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
 - Aggressor attribution, including the script/null path via `currentCombatTarget`.
 - 3D-reload re-assert (`Actor::Set3D`) so defeat state survives cell change / save load / `coc`.
 - Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
+- **Defeat cause** (`GetDefeatCause` / `GetLastPlayerDefeatCause`): Health-down vs EM-down vs
+  scripted, persisted — content routes a stunned target differently from a beaten one.
+- **Struggle primitives**: `OnPlayerDefeatImminent` fires below a configurable health fraction;
+  `ResistDefeat` opens a no-defeat grace window (vanilla lethality) for QTE/struggle content.
 - Defeat / Rescue / Pacify verbs backed by `DefeatRegistry` and SFSE co-save persistence.
 - **Ownership lease + watchdog**: content claims a held down-state under its name with a deadline
   (`ClaimDefeat` / `ReleaseClaim`, or `holdRecovery` JSON auto-claims); a lapsed deadline
@@ -100,6 +104,12 @@ Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds 
 Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
 String Function GetClaimOwner(Actor akActor) global native
 Bool Function ForceRecoverAll() global native
+Int Function GetDefeatCause(Actor akActor) global native
+Int Function GetLastPlayerDefeatCause() global native
+Bool Function ResistDefeat(Actor akActor, Float afSeconds) global native
+Bool Function IsResistingDefeat(Actor akActor) global native
+Int Function RegisterForPlayerDefeatImminent(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerDefeatImminent(Int aiToken) global native
 Bool Function IsDefeated(Actor akActor) global native
 Bool Function IsPacified(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native

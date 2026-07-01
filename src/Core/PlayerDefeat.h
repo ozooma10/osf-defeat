@@ -2,10 +2,12 @@
 
 #include "pch.h"
 
+#include "Core/DefeatRegistry.h"
+
 namespace OSFDefeat::PlayerDefeat
 {
     void Install();
-    void BeginPlayerDefeat(RE::Actor* a_aggressor = nullptr);
+    void BeginPlayerDefeat(RE::Actor* a_aggressor = nullptr, DefeatCause a_cause = DefeatCause::kScripted);
     void TickRecovery();
 
     [[nodiscard]] float RecoveryDeadlineForSeconds(float a_realSeconds);
@@ -25,4 +27,12 @@ namespace OSFDefeat::PlayerDefeat
     bool ClaimDefeat(RE::Actor* a_actor, std::string_view a_owner, float a_maxHoldSeconds);
     bool ReleaseClaim(RE::Actor* a_actor, std::string_view a_owner);
     [[nodiscard]] std::string GetClaimOwner(RE::Actor* a_actor);
+
+    // Struggle primitive: a per-actor no-defeat grace window. While active, would-be-lethal hits
+    // on the actor pass through the clamp untouched — vanilla lethality returns; they can win the
+    // fight or genuinely die. Content builds the QTE/struggle beat around the defeat-imminent
+    // event and grants this on a successful resist. a_seconds <= 0 clears the window. Refused for
+    // an already-defeated actor (a resist window is not a rescue). Thread-safe (POD map).
+    bool SetResistWindow(RE::Actor* a_actor, float a_seconds);
+    [[nodiscard]] bool IsResistWindowActive(RE::Actor* a_actor);
 }

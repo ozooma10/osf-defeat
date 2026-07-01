@@ -14,10 +14,11 @@ namespace OSFDefeat::DefeatContext
         std::string consequenceName;
         std::string consequenceQuest;
         float recoverySeconds{ 0.0f };
+        DefeatCause cause{ DefeatCause::kNone };  // how the player went down (EM-down != beaten-down)
         std::vector<FormID> participants;  // hostiles near the player at defeat time (incl. aggressor if hostile)
     };
 
-    void SetPlayerContext(RE::Actor* a_player, RE::Actor* a_aggressor, const Consequence::PlayerOutcome& a_outcome, const std::vector<RE::Actor*>& a_participants = {});
+    void SetPlayerContext(RE::Actor* a_player, RE::Actor* a_aggressor, const Consequence::PlayerOutcome& a_outcome, const std::vector<RE::Actor*>& a_participants = {}, DefeatCause a_cause = DefeatCause::kNone);
     void ClearPlayerContext();
 
     [[nodiscard]] PlayerContext GetPlayerContext();
@@ -25,6 +26,7 @@ namespace OSFDefeat::DefeatContext
     [[nodiscard]] std::string GetLastPlayerConsequenceName();
     [[nodiscard]] std::string GetLastPlayerConsequenceQuest();
     [[nodiscard]] float GetLastPlayerRecoverySeconds();
+    [[nodiscard]] DefeatCause GetLastPlayerDefeatCause();
 
     // Defeat-time participant snapshot resolved back to live actors (unloaded/dead-since entries drop out). Scene casting for content mods; "who else was in the fight".
     [[nodiscard]] std::vector<RE::Actor*> GetLastPlayerParticipants();

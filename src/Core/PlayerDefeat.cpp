@@ -109,6 +109,65 @@ namespace OSFDefeat::PlayerDefeat
             return out;
         }
 
+        // --- Resist windows (struggle primitive) ---------------------------------------------------
+        // Per-actor no-defeat grace: while active, would-be-lethal hits pass through untouched.
+        // POD map + mutex so the damage worker thread can check it inline.
+        std::map<FormID, std::chrono::steady_clock::time_point> g_resistWindows;
+        std::mutex g_resistLock;
+
+        [[nodiscard]] bool ResistWindowActive(FormID a_id)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            std::unique_lock lock{ g_resistLock };
+            const auto it = g_resistWindows.find(a_id);
+            if (it == g_resistWindows.end()) {
+                return false;
+            }
+            if (now >= it->second) {
+                g_resistWindows.erase(it);
+                return false;
+            }
+            return true;
+        }
+
+        // --- Defeat-imminent (struggle primitive) --------------------------------------------------
+        // One-shot signal when a Health hit takes the player below imminentHealthFraction x max.
+        // Re-arms when a later hit lands while the player is back above the threshold (healing), and
+        // on defeat itself (so the next fight can fire again). Worker thread sets, game thread
+        // consumes via a queued broadcast.
+        std::atomic_bool g_imminentSignaled{ false };
+
+        void QueueImminentBroadcast()
+        {
+            if (const auto* const tasks = SFSE::GetTaskInterface()) {
+                tasks->AddTask([]() {
+                    auto* const player = static_cast<RE::Actor*>(RE::PlayerCharacter::GetSingleton());
+                    if (player && !Defeat::IsDefeated(player)) {
+                        Events::BroadcastPlayerDefeatImminent();
+                    }
+                });
+            }
+        }
+
+        void MaybeSignalImminent(RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info, float a_current, float a_delta)
+        {
+            const float fraction = Config::ImminentHealthFraction();
+            if (fraction <= 0.0f || &a_info != Engine::HealthAV()) {
+                return;
+            }
+            const float maxValue = a_owner->GetPermanentActorValue(a_info);
+            if (maxValue <= 0.0f) {
+                return;
+            }
+            if (a_current + a_delta <= maxValue * fraction) {
+                if (!g_imminentSignaled.exchange(true)) {
+                    QueueImminentBroadcast();
+                }
+            } else {
+                g_imminentSignaled.store(false);  // back above the threshold: re-arm
+            }
+        }
+
         [[nodiscard]] float NowDay()
         {
             const auto* const cal = RE::Calendar::GetSingleton();
@@ -132,7 +191,7 @@ namespace OSFDefeat::PlayerDefeat
             return player && a_owner == Engine::AVOwnerOf(player);
         }
 
-        void QueueBegin(RE::TESObjectREFR* a_ref)
+        void QueueBegin(RE::TESObjectREFR* a_ref, DefeatCause a_cause)
         {
             bool expected = false;
             if (!g_pendingDefeat.compare_exchange_strong(expected, true)) {
@@ -141,7 +200,7 @@ namespace OSFDefeat::PlayerDefeat
 
             const FormID aggressorId = a_ref ? a_ref->GetFormID() : 0;
             if (const auto* const tasks = SFSE::GetTaskInterface()) {
-                tasks->AddTask([aggressorId]() {
+                tasks->AddTask([aggressorId, a_cause]() {
                     auto* aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
                     // The slot-7 wrapper (Papyrus/console DamageValue) passes a_ref=null, so there is
                     // no direct dealer. Fall back to who the player was fighting (currentCombatTarget),
@@ -150,7 +209,7 @@ namespace OSFDefeat::PlayerDefeat
                     if (!aggressor) {
                         aggressor = Engine::ResolveCombatTarget(PlayerActor());
                     }
-                    BeginPlayerDefeat(aggressor);
+                    BeginPlayerDefeat(aggressor, a_cause);
                     g_pendingDefeat.store(false);
                 });
             } else {
@@ -203,13 +262,13 @@ namespace OSFDefeat::PlayerDefeat
             return refr->As<RE::Actor>();
         }
 
-        void QueueNpcDefeat(FormID a_victimId, FormID a_aggressorId)
+        void QueueNpcDefeat(FormID a_victimId, FormID a_aggressorId, DefeatCause a_cause)
         {
             const auto* const tasks = SFSE::GetTaskInterface();
             if (!tasks) {
                 return;
             }
-            tasks->AddTask([a_victimId, a_aggressorId]() {
+            tasks->AddTask([a_victimId, a_aggressorId, a_cause]() {
                 auto* const victim = a_victimId ? RE::TESForm::LookupByID<RE::Actor>(a_victimId) : nullptr;
                 if (!victim || Defeat::IsDefeated(victim)) {
                     return;
@@ -221,7 +280,7 @@ namespace OSFDefeat::PlayerDefeat
                 if (!Validation::CanProcess() || !Validation::ValidatePair(victim, aggressor)) {
                     return;
                 }
-                if (Defeat::DefeatActor(victim, aggressor)) {
+                if (Defeat::DefeatActor(victim, aggressor, a_cause)) {
                     if (auto data = DefeatRegistry::Get(a_victimId)) {
                         data->recoverAtDay = RecoveryDeadlineForSeconds(Config::Get().defaultRecoverySeconds);
                     }
@@ -242,7 +301,7 @@ namespace OSFDefeat::PlayerDefeat
         // Legible death boundary: every deliberate player passthrough is logged with its reason, so
         // "why didn't it save me" is answerable from the log. Debounced (repeat hits while dying all
         // share one reason) and INFO-level — a player death is rare and always worth a line.
-        void LogPlayerPassthrough(Validation::Verdict a_verdict)
+        void LogPlayerPassthrough(std::string_view a_reason)
         {
             static std::atomic<std::int64_t> lastLogMs{ 0 };
             const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -251,7 +310,7 @@ namespace OSFDefeat::PlayerDefeat
             if (nowMs - last < 1000 || !lastLogMs.compare_exchange_strong(last, nowMs)) {
                 return;
             }
-            REX::INFO("[OSFDefeat] lethal player hit passed through: {}", Validation::VerdictName(a_verdict));
+            REX::INFO("[OSFDefeat] lethal player hit passed through: {}", a_reason);
         }
 
         void ModActorValueDetour(
@@ -262,19 +321,26 @@ namespace OSFDefeat::PlayerDefeat
             RE::TESObjectREFR* a_ref)
         {
             if (g_original && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
+                const auto cause = &a_info == Engine::EMHealthAV() ? DefeatCause::kEM : DefeatCause::kHealth;
                 if (IsPlayerAVOwner(a_owner)) {
                     RecordAttacker(a_ref);  // participant snapshot source (POD-only on this thread)
                     auto* const player = PlayerActor();
                     const float current = a_owner->GetActorValue(a_info);
                     const bool  lethal = current + a_delta <= 0.0f;
                     auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-                    if (lethal && !Defeat::IsDefeated(player)) {
-                        const auto verdict = Validation::ExplainPair(player, aggressor);
-                        if (verdict == Validation::Verdict::kOk) {
-                            a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
-                            QueueBegin(a_ref);
+                    if (!Defeat::IsDefeated(player)) {
+                        if (!lethal) {
+                            MaybeSignalImminent(a_owner, a_info, current, a_delta);
                         } else {
-                            LogPlayerPassthrough(verdict);
+                            const auto verdict = Validation::ExplainPair(player, aggressor);
+                            if (verdict != Validation::Verdict::kOk) {
+                                LogPlayerPassthrough(Validation::VerdictName(verdict));
+                            } else if (ResistWindowActive(player->GetFormID())) {
+                                LogPlayerPassthrough("resist window active (ResistDefeat) - vanilla lethality");
+                            } else {
+                                a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
+                                QueueBegin(a_ref, cause);
+                            }
                         }
                     }
                 } else if (Config::IsNpcAutoDefeatEnabled()) {
@@ -295,9 +361,13 @@ namespace OSFDefeat::PlayerDefeat
                                     REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: not a hostile flesh target (or robots excluded)",
                                         victim->GetFormID());
                                 }
+                            } else if (ResistWindowActive(victim->GetFormID())) {
+                                if (Config::IsExplainEnabled()) {
+                                    REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: resist window active", victim->GetFormID());
+                                }
                             } else {
                                 a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
-                                QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0);
+                                QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0, cause);
                             }
                         }
                     }
@@ -448,6 +518,35 @@ namespace OSFDefeat::PlayerDefeat
         return data ? data->CopyLeaseOwner() : std::string{};
     }
 
+    bool SetResistWindow(RE::Actor* a_actor, float a_seconds)
+    {
+        if (!a_actor) {
+            return false;
+        }
+        const FormID id = a_actor->GetFormID();
+        if (a_seconds <= 0.0f) {
+            std::unique_lock lock{ g_resistLock };
+            g_resistWindows.erase(id);
+            return true;
+        }
+        if (Defeat::IsDefeated(a_actor)) {
+            return false;  // a resist window is not a rescue
+        }
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds{ static_cast<std::int64_t>(a_seconds * 1000.0f) };
+        {
+            std::unique_lock lock{ g_resistLock };
+            g_resistWindows[id] = deadline;
+        }
+        REX::INFO("[OSFDefeat] resist window on {:08X} for {:.1f}s (vanilla lethality while active)", id, a_seconds);
+        return true;
+    }
+
+    bool IsResistWindowActive(RE::Actor* a_actor)
+    {
+        return a_actor && ResistWindowActive(a_actor->GetFormID());
+    }
+
     float GetRecoverySecondsRemaining(RE::Actor* a_actor)
     {
         if (!a_actor) {
@@ -463,7 +562,7 @@ namespace OSFDefeat::PlayerDefeat
         return std::max(0.0f, (data->recoverAtDay - NowDay()) * 86400.0f / TimeScale());
     }
 
-    void BeginPlayerDefeat(RE::Actor* a_aggressor)
+    void BeginPlayerDefeat(RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         auto* const player = PlayerActor();
         if (!Validation::CanProcess() || !Validation::ValidatePair(player, a_aggressor) || Defeat::IsDefeated(player)) {
@@ -475,10 +574,11 @@ namespace OSFDefeat::PlayerDefeat
         // combatant target lists (and may captive-pacify), which can clear the hostility the
         // participant filter keys on.
         const auto participants = CollectParticipants(player, a_aggressor, Config::ParticipantScanRadius());
-        if (!Defeat::DefeatActor(player, a_aggressor)) {
+        if (!Defeat::DefeatActor(player, a_aggressor, a_cause)) {
             return;
         }
         Consequence::MarkFired(outcome, player);  // stamp cooldown / oncePerLocation arbitration state
+        g_imminentSignaled.store(false);          // re-arm the defeat-imminent signal for the next fight
 
         if (auto data = DefeatRegistry::Get(player->GetFormID())) {
             if (outcome.holdRecovery) {
@@ -506,7 +606,7 @@ namespace OSFDefeat::PlayerDefeat
         // consumers such as OSF Surrender. Context-before-quest so a quest's
         // OnQuestInit can already read the payload. We are on the game thread here,
         // so the VM dispatches are safe.
-        DefeatContext::SetPlayerContext(player, a_aggressor, outcome, participants);
+        DefeatContext::SetPlayerContext(player, a_aggressor, outcome, participants, a_cause);
         if (outcome.quest && outcome.startQuest) {
             QuestHandoff::TryStartQuestToken(*outcome.quest);
         }

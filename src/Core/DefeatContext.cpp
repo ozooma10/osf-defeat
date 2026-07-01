@@ -11,7 +11,7 @@ namespace OSFDefeat::DefeatContext
     }
 
     void SetPlayerContext(RE::Actor* a_player, RE::Actor* a_aggressor, const Consequence::PlayerOutcome& a_outcome,
-        const std::vector<RE::Actor*>& a_participants)
+        const std::vector<RE::Actor*>& a_participants, DefeatCause a_cause)
     {
         PlayerContext next;
         next.player = a_player ? a_player->GetFormID() : 0x14;
@@ -19,6 +19,7 @@ namespace OSFDefeat::DefeatContext
         next.consequenceName = a_outcome.name;
         next.consequenceQuest = a_outcome.quest.value_or("");
         next.recoverySeconds = a_outcome.recoverySeconds;
+        next.cause = a_cause;
         next.participants.reserve(a_participants.size());
         for (auto* const participant : a_participants) {
             if (participant) {
@@ -61,6 +62,11 @@ namespace OSFDefeat::DefeatContext
     float GetLastPlayerRecoverySeconds()
     {
         return GetPlayerContext().recoverySeconds;
+    }
+
+    DefeatCause GetLastPlayerDefeatCause()
+    {
+        return GetPlayerContext().cause;
     }
 
     std::vector<RE::Actor*> GetLastPlayerParticipants()

@@ -11,8 +11,11 @@ namespace OSFDefeat::Defeat
 	void SetOnDefeat(Observer a_observer);
 	void SetOnRescue(Observer a_observer);
 
-	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor);
+	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause = DefeatCause::kScripted);
 	bool RescueActor(RE::Actor* a_victim, bool a_undoPacify);
+
+	// How a defeated actor went down; kNone when not defeated.
+	[[nodiscard]] DefeatCause GetDefeatCause(const RE::Actor* a_victim);
 
 	// Emergency escape / safe uninstall: rescues every defeated actor (overriding any lease),
 	// releases every pacified actor, and strips every captive-faction membership we created, so
@@ -26,7 +29,7 @@ namespace OSFDefeat::Defeat
 	[[nodiscard]] std::vector<RE::Actor*> GetAllDefeated(bool a_loadedOnly);
 
 	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay,
-		float a_leaseDeadlineDay = 0.0f, std::string a_leaseOwner = {});
+		float a_leaseDeadlineDay = 0.0f, std::string a_leaseOwner = {}, DefeatCause a_cause = DefeatCause::kNone);
 
 	void               Pacify(RE::Actor* a_victim);
 	void               UndoPacify(RE::Actor* a_victim);

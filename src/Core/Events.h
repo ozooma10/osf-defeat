@@ -24,6 +24,8 @@ namespace OSFDefeat::Events
     bool  UnregisterPlayerRecovered(Token a_token);
     Token RegisterPlayerConsequenceStarted(const Receiver& a_receiver, std::string_view a_callback);
     bool  UnregisterPlayerConsequenceStarted(Token a_token);
+    Token RegisterPlayerDefeatImminent(const Receiver& a_receiver, std::string_view a_callback);
+    bool  UnregisterPlayerDefeatImminent(Token a_token);
 
     Token RegisterActorDefeated(const Receiver& a_receiver, std::string_view a_callback);
     bool  UnregisterActorDefeated(Token a_token);
@@ -33,6 +35,7 @@ namespace OSFDefeat::Events
     void BroadcastPlayerDefeated();
     void BroadcastPlayerRecovered();
     void BroadcastPlayerConsequenceStarted();
+    void BroadcastPlayerDefeatImminent();
     void BroadcastActorDefeated(FormID a_victim, FormID a_aggressor);
     void BroadcastActorRecovered(FormID a_victim, FormID a_aggressor);
 

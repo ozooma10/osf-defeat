@@ -50,6 +50,23 @@ String Function GetClaimOwner(Actor akActor) global native
 ; co-save empties on the next save. Also works from the console: cgf "OSFDefeat.ForceRecoverAll"
 Bool Function ForceRecoverAll() global native
 
+; How an actor went down - a stunned target is not a beaten target. Route EM-downs to
+; capture/nonlethal outcomes distinctly from Health-downs.
+;   0 = none/not defeated, 1 = lethal Health damage, 2 = lethal EM damage, 3 = scripted (DefeatActor)
+Int Function GetDefeatCause(Actor akActor) global native
+Int Function GetLastPlayerDefeatCause() global native
+
+; Struggle primitive. RegisterForPlayerDefeatImminent fires once when a Health hit takes the
+; player below imminentHealthFraction x max health (validation JSON, default 0.25; re-arms after
+; healing above the threshold or after a defeat). Build your QTE/struggle beat in the callback;
+; on a successful resist call ResistDefeat: while the window is active, would-be-lethal hits pass
+; through untouched - VANILLA LETHALITY - the actor fights on and can genuinely die.
+; afSeconds <= 0 clears the window. Refused (false) for an already-defeated actor.
+Bool Function ResistDefeat(Actor akActor, Float afSeconds) global native
+Bool Function IsResistingDefeat(Actor akActor) global native
+Int Function RegisterForPlayerDefeatImminent(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerDefeatImminent(Int aiToken) global native
+
 ; Captive-faction pacify on demand (surrender-to-base): adds the actor to the configured captiveFaction so ALL hostiles treat them as non-hostile.
 Bool Function ApplyCaptiveFaction(Actor akActor) global native
 Bool Function RemoveCaptiveFaction(Actor akActor) global native

@@ -157,6 +157,29 @@ namespace OSFDefeat::Papyrus
             });
         }
 
+        // How the actor went down: 0 none/unknown, 1 Health, 2 EM, 3 scripted (DefeatActor verb).
+        std::int32_t GetDefeatCause(std::monostate, RE::Actor* a_actor)
+        {
+            return static_cast<std::int32_t>(Defeat::GetDefeatCause(a_actor));
+        }
+
+        std::int32_t GetLastPlayerDefeatCause(std::monostate)
+        {
+            return static_cast<std::int32_t>(DefeatContext::GetLastPlayerDefeatCause());
+        }
+
+        // Struggle primitive: per-actor no-defeat grace window (vanilla lethality while active).
+        // Thread-safe map writes, so these run inline rather than queued.
+        bool ResistDefeat(std::monostate, RE::Actor* a_actor, float a_seconds)
+        {
+            return PlayerDefeat::SetResistWindow(a_actor, a_seconds);
+        }
+
+        bool IsResistingDefeat(std::monostate, RE::Actor* a_actor)
+        {
+            return PlayerDefeat::IsResistWindowActive(a_actor);
+        }
+
         // Captive-faction pacify on demand (surrender-to-base), independent of the automatic
         // `factionPacify` config gate. Removal also happens automatically on rescue.
         bool ApplyCaptiveFaction(std::monostate, RE::Actor* a_actor)
@@ -266,6 +289,16 @@ namespace OSFDefeat::Papyrus
             return Events::UnregisterPlayerConsequenceStarted(a_token);
         }
 
+        std::int32_t RegisterForPlayerDefeatImminent(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
+        {
+            return Events::RegisterPlayerDefeatImminent(a_receiver, a_callback.c_str());
+        }
+
+        bool UnregisterForPlayerDefeatImminent(std::monostate, std::int32_t a_token)
+        {
+            return Events::UnregisterPlayerDefeatImminent(a_token);
+        }
+
         std::int32_t RegisterForActorDefeated(std::monostate, RE::BSTSmartPointer<RE::BSScript::Object> a_receiver, RE::BSFixedString a_callback)
         {
             return Events::RegisterActorDefeated(a_receiver, a_callback.c_str());
@@ -367,6 +400,12 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "ReleaseClaim", &ReleaseClaim, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetClaimOwner", &GetClaimOwner, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ForceRecoverAll", &ForceRecoverAll, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetDefeatCause", &GetDefeatCause, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerDefeatCause", &GetLastPlayerDefeatCause, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ResistDefeat", &ResistDefeat, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsResistingDefeat", &IsResistingDefeat, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RegisterForPlayerDefeatImminent", &RegisterForPlayerDefeatImminent, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "UnregisterForPlayerDefeatImminent", &UnregisterForPlayerDefeatImminent, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ApplyCaptiveFaction", &ApplyCaptiveFaction, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RemoveCaptiveFaction", &RemoveCaptiveFaction, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsCaptiveFactionApplied", &IsCaptiveFactionApplied, std::nullopt, false);

@@ -25,7 +25,7 @@ namespace OSFDefeat::Defeat
     void SetOnDefeat(Observer a_observer) { g_onDefeat = std::move(a_observer); }
     void SetOnRescue(Observer a_observer) { g_onRescue = std::move(a_observer); }
 
-    bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor)
+    bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         if (!a_victim || a_victim->IsDead()) {
             return false;
@@ -38,6 +38,7 @@ namespace OSFDefeat::Defeat
             return false;
         }
 
+        data->cause = a_cause;
         data->state.store(DefeatState::Defeated);
         Engine::ApplyDownState(a_victim);
         REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
@@ -133,6 +134,15 @@ namespace OSFDefeat::Defeat
         return a_victim && DefeatRegistry::Contains(a_victim->GetFormID());
     }
 
+    DefeatCause GetDefeatCause(const RE::Actor* a_victim)
+    {
+        if (!a_victim) {
+            return DefeatCause::kNone;
+        }
+        const auto data = DefeatRegistry::Get(a_victim->GetFormID());
+        return data ? data->cause : DefeatCause::kNone;
+    }
+
     bool IsDamageImmune(const RE::Actor* a_victim)
     {
         return IsDefeated(a_victim);
@@ -150,12 +160,13 @@ namespace OSFDefeat::Defeat
     }
 
     void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay,
-        float a_leaseDeadlineDay, std::string a_leaseOwner)
+        float a_leaseDeadlineDay, std::string a_leaseOwner, DefeatCause a_cause)
     {
         auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor, a_recoverAtDay);
         if (data) {
             data->leaseDeadlineDay = a_leaseDeadlineDay;
             data->SetLeaseOwner(std::move(a_leaseOwner));
+            data->cause = a_cause;
             data->state.store(DefeatState::Defeated);
             // Re-apply down-state on load. The flag writes are safe on an unloaded actor; the Set3D
             // hook re-asserts again once its 3D (re)builds, so this covers both loaded and unloaded.

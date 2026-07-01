@@ -125,6 +125,9 @@ namespace OSFDefeat::Config
                 if (json.contains("watchdogSeconds")) {
                     a_config.watchdogSeconds = json.value("watchdogSeconds", 600.0f);
                 }
+                if (json.contains("imminentHealthFraction")) {
+                    a_config.imminentHealthFraction = std::min(0.9f, json.value("imminentHealthFraction", 0.25f));
+                }
                 ReadFormSet(json, "excludedLocations", a_config.excludedLocations);
                 ReadFormSet(json, "excludedQuests", a_config.excludedQuests);
                 REX::INFO("[OSFDefeat] loaded validation JSON {}", a_path.string());
@@ -230,6 +233,12 @@ namespace OSFDefeat::Config
     {
         std::shared_lock lock{ g_lock };
         return g_config.watchdogSeconds;
+    }
+
+    float ImminentHealthFraction()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.imminentHealthFraction;
     }
 
     std::filesystem::path RootPath()

@@ -19,6 +19,10 @@
   // ClaimDefeat. 0 disables (held means held forever - not recommended).
   "watchdogSeconds": 600.0,
 
+  // Defeat-imminent event: OnPlayerDefeatImminent fires when a Health hit lands the player
+  // below this fraction of max health (struggle/surrender content hook). 0 disables.
+  "imminentHealthFraction": 0.25,
+
   "excludedLocations": [],
   "excludedQuests": []
 }

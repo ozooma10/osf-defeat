@@ -13,6 +13,18 @@ namespace OSFDefeat
 		Rescuing    // recovery in progress
 	};
 
+	// How the actor went down (persisted; Papyrus GetDefeatCause / GetLastPlayerDefeatCause).
+	// A stunned target is not a beaten target: content routes EM-downs to capture/nonlethal
+	// outcomes distinctly from Health-downs. kScripted = the DefeatActor verb (surrender keys,
+	// content-driven defeats). Values are API-stable.
+	enum class DefeatCause : std::uint8_t
+	{
+		kNone = 0,     // not defeated / unknown (pre-v4 co-saves)
+		kHealth = 1,   // lethal Health damage clamped
+		kEM = 2,       // lethal EM Health damage clamped
+		kScripted = 3  // DefeatActor verb
+	};
+
 	// Per-victim record. Held by shared_ptr because it carries an atomic (so it is
 	// neither copyable nor movable) and callers may hold a handle across the lock.
 	struct VictimData
@@ -24,6 +36,7 @@ namespace OSFDefeat
 		float                    registeredDay{ 0.0f };  // Calendar GetDaysPassedExact at defeat (persisted)
 		float                    recoverAtDay{ 0.0f };   // absolute game-day auto-recovery deadline; <=0 = held (persisted)
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
+		DefeatCause              cause{ DefeatCause::kNone };  // how they went down (persisted); write-once at defeat
 		std::atomic<DefeatState> state{ DefeatState::Defeating };
 
 		// Ownership lease (persisted). A held down-state (recoverAtDay <= 0) may be claimed by a

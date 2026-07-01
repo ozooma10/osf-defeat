@@ -16,7 +16,7 @@ namespace OSFDefeat::Persistence
         constexpr std::uint32_t kUniqueID = 'OSFD';
         constexpr std::uint32_t kRecDefeated = 'DFT0';
         constexpr std::uint32_t kRecCaptive = 'CPT0';
-        constexpr std::uint32_t kVersion = 3;  // v3 adds the ownership lease (deadline + owner name)
+        constexpr std::uint32_t kVersion = 4;  // v3 adds the ownership lease (deadline + owner name); v4 the defeat cause
         constexpr std::uint32_t kCaptiveVersion = 1;
         constexpr std::uint32_t kMaxLeaseOwner = 256;  // sanity cap when reading the owner string
 
@@ -38,6 +38,7 @@ namespace OSFDefeat::Persistence
                 const float recoverAtDay = data ? data->recoverAtDay : 0.0f;
                 const float leaseDeadlineDay = data ? data->leaseDeadlineDay : 0.0f;
                 const std::string leaseOwner = data ? data->CopyLeaseOwner() : std::string{};
+                const auto cause = static_cast<std::uint8_t>(data ? data->cause : DefeatCause::kNone);
                 const auto ownerLength = static_cast<std::uint32_t>(std::min<std::size_t>(leaseOwner.size(), kMaxLeaseOwner));
                 a_intfc->WriteRecordData(formId);
                 a_intfc->WriteRecordData(day);
@@ -48,6 +49,7 @@ namespace OSFDefeat::Persistence
                 if (ownerLength > 0) {
                     a_intfc->WriteRecordData(leaseOwner.data(), ownerLength);
                 }
+                a_intfc->WriteRecordData(cause);
             }
             REX::INFO("[OSFDefeat] saved {} defeated actor(s)", count);
 
@@ -96,6 +98,7 @@ namespace OSFDefeat::Persistence
                     FormID formId{}, aggressor{};
                     float day{}, recoverAtDay{}, leaseDeadlineDay{};
                     std::string leaseOwner;
+                    std::uint8_t cause = 0;
                     a_intfc->ReadRecordData(formId);
                     a_intfc->ReadRecordData(day);
                     a_intfc->ReadRecordData(aggressor);
@@ -116,6 +119,12 @@ namespace OSFDefeat::Persistence
                             break;  // stream is misaligned past here; stop reading this record
                         }
                     }
+                    if (version >= 4) {
+                        a_intfc->ReadRecordData(cause);
+                        if (cause > static_cast<std::uint8_t>(DefeatCause::kScripted)) {
+                            cause = 0;  // future/corrupt value: degrade to kNone
+                        }
+                    }
 
                     const auto resolved = a_intfc->ResolveFormID(formId);
                     if (!resolved) {
@@ -129,7 +138,8 @@ namespace OSFDefeat::Persistence
                             resolvedAggressor = *r;
                         }
                     }
-                    Defeat::RestoreFromSave(*resolved, day, resolvedAggressor, recoverAtDay, leaseDeadlineDay, std::move(leaseOwner));
+                    Defeat::RestoreFromSave(*resolved, day, resolvedAggressor, recoverAtDay, leaseDeadlineDay,
+                        std::move(leaseOwner), static_cast<DefeatCause>(cause));
                 }
                 REX::INFO("[OSFDefeat] loaded {} defeated actor(s) from co-save", count);
             }

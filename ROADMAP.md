@@ -134,8 +134,9 @@ prove the M1 lease/handoff API as its own first consumer.
 
 Give NPC defeat a vanilla-plausible fantasy: stun-and-capture bounty hunting.
 
-- `defeatCause` in the handoff context: EM-down vs Health-down routed distinctly, so content can
-  treat a stunned target differently from a beaten one.
+- ~~`defeatCause` in the handoff context.~~ Done (2026-07-01): the clamp records Health vs EM per
+  gauge, the `DefeatActor` verb records scripted; persisted (co-save v4); exposed as
+  `GetDefeatCause(actor)` and `GetLastPlayerDefeatCause()` (0 none / 1 health / 2 EM / 3 scripted).
 - **NPC consequence policy**: what happens to a defeated NPC beyond down/recover — default policies
   (recover when combat ends; plunderable while down; executable by aggressor) with content override.
 - Capture/ransom **hooks** for content (claim-a-captive verb, transfer-to-marker helper) — the
@@ -156,9 +157,10 @@ The most Starfield-native leapfrog: the player's disabled ship gets boarded inst
 
 ## Second Tier / Platform Plays
 
-- **Struggle primitives**: a pre-threshold "defeat imminent" event (configurable health fraction)
-  plus a `ResistDefeat` verb — content builds the QTE/struggle minigame, the framework just
-  exposes the moment. Also covers voluntary pre-lethal surrender policies.
+- ~~**Struggle primitives**~~ Done (2026-07-01): `OnPlayerDefeatImminent` callback fires below
+  `imminentHealthFraction` × max health (default 0.25, hysteresis re-arm); `ResistDefeat(actor,
+  seconds)` opens a per-actor no-defeat grace window (vanilla lethality while active — a
+  successful struggle means you fight on and can genuinely die), player and NPC both.
 - **Interaction registry on defeated NPCs** (Hunter Pride analog): content mods register options
   with conditions; framework renders via dialogue/scene (no SkyUI equivalent). This is the
   "defeated NPCs as a platform" play.

@@ -119,6 +119,7 @@ namespace OSFDefeat::Events
         CallbackList g_playerDefeated;
         CallbackList g_playerRecovered;
         CallbackList g_playerConsequenceStarted;
+        CallbackList g_playerDefeatImminent;
         CallbackList g_actorDefeated;
         CallbackList g_actorRecovered;
 
@@ -146,6 +147,8 @@ namespace OSFDefeat::Events
     bool  UnregisterPlayerRecovered(Token a_token) { return g_playerRecovered.Remove(a_token); }
     Token RegisterPlayerConsequenceStarted(const Receiver& a_receiver, std::string_view a_callback) { return g_playerConsequenceStarted.Add(a_receiver, a_callback); }
     bool  UnregisterPlayerConsequenceStarted(Token a_token) { return g_playerConsequenceStarted.Remove(a_token); }
+    Token RegisterPlayerDefeatImminent(const Receiver& a_receiver, std::string_view a_callback) { return g_playerDefeatImminent.Add(a_receiver, a_callback); }
+    bool  UnregisterPlayerDefeatImminent(Token a_token) { return g_playerDefeatImminent.Remove(a_token); }
 
     Token RegisterActorDefeated(const Receiver& a_receiver, std::string_view a_callback) { return g_actorDefeated.Add(a_receiver, a_callback); }
     bool  UnregisterActorDefeated(Token a_token) { return g_actorDefeated.Remove(a_token); }
@@ -155,6 +158,7 @@ namespace OSFDefeat::Events
     void BroadcastPlayerDefeated() { g_playerDefeated.Dispatch(&NoArgs); }
     void BroadcastPlayerRecovered() { g_playerRecovered.Dispatch(&NoArgs); }
     void BroadcastPlayerConsequenceStarted() { g_playerConsequenceStarted.Dispatch(&NoArgs); }
+    void BroadcastPlayerDefeatImminent() { g_playerDefeatImminent.Dispatch(&NoArgs); }
     void BroadcastActorDefeated(FormID a_victim, FormID a_aggressor) { g_actorDefeated.Dispatch(ActorArgs(a_victim, a_aggressor)); }
     void BroadcastActorRecovered(FormID a_victim, FormID a_aggressor) { g_actorRecovered.Dispatch(ActorArgs(a_victim, a_aggressor)); }
 
@@ -171,6 +175,7 @@ namespace OSFDefeat::Events
         g_playerDefeated.Clear();
         g_playerRecovered.Clear();
         g_playerConsequenceStarted.Clear();
+        g_playerDefeatImminent.Clear();
         g_actorDefeated.Clear();
         g_actorRecovered.Clear();
     }

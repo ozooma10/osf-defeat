@@ -82,7 +82,34 @@ Adds the actor to the configured `captiveFaction` (default: vanilla `0x0003E0C8`
 Bool Function IsDefeated(Actor akActor) global native
 Bool Function IsPacified(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native
+Int Function GetDefeatCause(Actor akActor) global native
+Int Function GetLastPlayerDefeatCause() global native
 ```
+
+`GetDefeatCause` says **how** an actor went down — the foundation of stun-and-capture routing,
+because a stunned target is not a beaten target: `0` none/not defeated, `1` lethal Health damage,
+`2` lethal EM damage, `3` scripted (the `DefeatActor` verb). Persisted in the co-save.
+`GetLastPlayerDefeatCause` is the same value in the player consequence handoff context.
+
+## Struggle Primitives (defeat imminent + resist)
+
+```papyrus
+Int  Function RegisterForPlayerDefeatImminent(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerDefeatImminent(Int aiToken) global native
+Bool Function ResistDefeat(Actor akActor, Float afSeconds) global native
+Bool Function IsResistingDefeat(Actor akActor) global native
+```
+
+The framework exposes the *moment*; content builds the minigame. `OnPlayerDefeatImminent` fires
+once when a Health hit takes the player below `imminentHealthFraction` × max health (validation
+JSON, default `0.25`, `0` disables); it re-arms after healing back above the threshold, and after
+a defeat. Use it for struggle QTEs, surrender prompts, or last-stand effects.
+
+`ResistDefeat(actor, seconds)` opens a **no-defeat grace window**: while active, would-be-lethal
+hits pass through the clamp untouched — **vanilla lethality returns**, the actor fights on and
+can genuinely die. That is the intended tension of a successful struggle roll. `afSeconds <= 0`
+clears the window; calling it on an already-defeated actor is refused (a resist window is not a
+rescue — use `RescueActor`). Works on NPCs too (e.g. a boss that shrugs off the first defeat).
 
 ## Processing Gate
 
