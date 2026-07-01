@@ -30,4 +30,14 @@ namespace OSFDefeat::Engine
 	// Dispatch by actor: the player gets the essential + target-drop recipe, NPCs the per-actor one.
 	void ApplyDownState(RE::Actor* a_actor);
 	void RestoreState(RE::Actor* a_actor);
+
+	// Captive-faction pacify, exposed on demand for content ("surrender to base"): adds a_actor to the configured captiveFaction so hostiles treat them as non-hostile.
+	bool ApplyCaptiveFaction(RE::Actor* a_actor);
+	bool RemoveCaptiveFaction(RE::Actor* a_actor);
+	[[nodiscard]] bool HasCaptiveFactionApplied(RE::Actor* a_actor);
+
+	// Co-save support for the captive tracking (so a save/load mid-captivity still removes exactly the membership we introduced).
+	[[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint32_t>> SnapshotCaptiveFactions();  // (actorID, factionID)
+	void RestoreCaptiveFaction(std::uint32_t a_actorId, std::uint32_t a_factionId);
+	void ClearCaptiveFactions();
 }

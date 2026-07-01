@@ -11,6 +11,8 @@ namespace OSFDefeat::Consequence
         int weight{ 1 };
         float recoverySeconds{ 8.0f };
         std::optional<std::string> quest;
+        bool startQuest{ true };     // dispatch Quest.Start on the resolved `quest` token
+        bool holdRecovery{ false };  // no auto-recovery timer; content owns RescueActor
     };
 
     void Load();

@@ -7,6 +7,7 @@
   "npcAutoDefeatIncludeRobots": false,
   "factionPacify": false,
   "captiveFaction": "0x0003E0C8",
+  "participantScanRadius": 4096.0,
   "excludedLocations": [],
   "excludedQuests": []
 }

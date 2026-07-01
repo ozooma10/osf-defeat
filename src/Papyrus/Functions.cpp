@@ -12,7 +12,9 @@
 #include "Core/Defeat.h"
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
+#include "Core/PlayerDefeat.h"
 #include "Core/Validation.h"
+#include "Engine/Engine.h"
 
 #include <variant>
 
@@ -88,6 +90,62 @@ namespace OSFDefeat::Papyrus
                     Defeat::UndoPacify(actor);
                 }
             });
+        }
+
+        // Recovery handshake: content takes ownership of a down-state ("hold, my scene is
+        // running") or reschedules it. afSeconds <= 0 holds until an explicit RescueActor.
+        bool SetRecoveryTimer(std::monostate, RE::Actor* a_actor, float a_seconds)
+        {
+            if (!a_actor) {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, a_seconds]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    PlayerDefeat::SetRecoveryTimer(actor, a_seconds);
+                }
+            });
+        }
+
+        float GetRecoverySecondsRemaining(std::monostate, RE::Actor* a_actor)
+        {
+            return PlayerDefeat::GetRecoverySecondsRemaining(a_actor);
+        }
+
+        // Captive-faction pacify on demand (surrender-to-base), independent of the automatic
+        // `factionPacify` config gate. Removal also happens automatically on rescue.
+        bool ApplyCaptiveFaction(std::monostate, RE::Actor* a_actor)
+        {
+            if (!a_actor) {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    Engine::ApplyCaptiveFaction(actor);
+                }
+            });
+        }
+
+        bool RemoveCaptiveFaction(std::monostate, RE::Actor* a_actor)
+        {
+            if (!a_actor) {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    Engine::RemoveCaptiveFaction(actor);
+                }
+            });
+        }
+
+        bool IsCaptiveFactionApplied(std::monostate, RE::Actor* a_actor)
+        {
+            return Engine::HasCaptiveFactionApplied(a_actor);
         }
 
         bool IsDefeated(std::monostate, RE::Actor* a_actor)
@@ -204,6 +262,11 @@ namespace OSFDefeat::Papyrus
             return DefeatContext::GetLastPlayerRecoverySeconds();
         }
 
+        std::vector<RE::Actor*> GetLastPlayerParticipants(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerParticipants();
+        }
+
         void ReloadJSON(std::monostate)
         {
             Config::Reload();
@@ -253,6 +316,12 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceName", &GetLastPlayerConsequenceName, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceQuest", &GetLastPlayerConsequenceQuest, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerRecoverySeconds", &GetLastPlayerRecoverySeconds, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerParticipants", &GetLastPlayerParticipants, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "SetRecoveryTimer", &SetRecoveryTimer, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetRecoverySecondsRemaining", &GetRecoverySecondsRemaining, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ApplyCaptiveFaction", &ApplyCaptiveFaction, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RemoveCaptiveFaction", &RemoveCaptiveFaction, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsCaptiveFactionApplied", &IsCaptiveFactionApplied, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReloadJSON", &ReloadJSON, std::nullopt, false);
 
         g_bound = true;

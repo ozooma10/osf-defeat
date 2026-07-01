@@ -15,6 +15,7 @@ namespace OSFDefeat::Config
         bool npcAutoDefeatIncludeRobots{ false };  // include robots/turrets in NPC auto-defeat
         bool factionPacify{ false };             // OPT-IN full "surrender" calm: add downed player to captiveFaction so ALL hostiles disengage (default off; base behavior just drops the player as a target)
         FormID captiveFaction{ 0x0003E0C8 };     // vanilla Starfield.esm captive faction (SAF Surrender parity)
+        float participantScanRadius{ 4096.0f };  // radius filter for the defeat-time participant snapshot (recent attackers); <=0 = no radius filter
         std::set<FormID> excludedLocations;
         std::set<FormID> excludedQuests;
     };
@@ -31,5 +32,6 @@ namespace OSFDefeat::Config
     [[nodiscard]] bool NpcAutoDefeatIncludesRobots();
     [[nodiscard]] bool IsFactionPacifyEnabled();
     [[nodiscard]] FormID CaptiveFactionID();
+    [[nodiscard]] float ParticipantScanRadius();
     [[nodiscard]] std::filesystem::path RootPath();
 }

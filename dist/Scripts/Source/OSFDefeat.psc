@@ -2,9 +2,9 @@ Scriptname OSFDefeat Native Hidden
 
 ; OSF Defeat - public Papyrus API foundation.
 ;
-; Events are delivered as CALLBACKS, not Papyrus events (Starfield can't deliver events to
-; non-native scripts). Register your script plus the name of a regular Function to call back; keep
-; the returned token to Unregister. Your callback is an ordinary Function you implement, e.g.:
+; Events are delivered as CALLBACKS, not Papyrus events.
+; Register your script plus the name of a regular Function to call back; keep the returned token to Unregister.
+; Your callback is an ordinary Function you implement, e.g.:
 ;
 ;   Int property DefeatToken auto hidden
 ;   Event OnInit()
@@ -28,6 +28,17 @@ Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global nativ
 
 Bool Function PacifyActor(Actor akActor) global native
 Bool Function ReleaseActor(Actor akActor) global native
+
+; Recovery handshake mods: take ownership of a down-state or reschedule it.
+; afSeconds <= 0 holds the actor down until an explicit RescueActor (content owns the exit).
+; GetRecoverySecondsRemaining: > 0 counting down, -1 held (awaiting rescue), 0 not defeated.
+Bool Function SetRecoveryTimer(Actor akActor, Float afSeconds) global native
+Float Function GetRecoverySecondsRemaining(Actor akActor) global native
+
+; Captive-faction pacify on demand (surrender-to-base): adds the actor to the configured captiveFaction so ALL hostiles treat them as non-hostile.
+Bool Function ApplyCaptiveFaction(Actor akActor) global native
+Bool Function RemoveCaptiveFaction(Actor akActor) global native
+Bool Function IsCaptiveFactionApplied(Actor akActor) global native
 
 Bool Function IsDefeated(Actor akActor) global native
 Bool Function IsPacified(Actor akActor) global native
@@ -59,5 +70,8 @@ Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
 Float Function GetLastPlayerRecoverySeconds() global native
+
+; The fight's actors at defeat time: the aggressor plus recent attackers still live and hostile (recorded from actual damage events; radius-filtered by participantScanRadius).
+Actor[] Function GetLastPlayerParticipants() global native
 
 Function ReloadJSON() global native

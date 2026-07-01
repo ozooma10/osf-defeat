@@ -15,12 +15,12 @@ namespace OSFDefeat::Engine
         std::atomic_bool g_hasEssentialSnapshot{ false };
         bool g_wasEssential{ false };
 
-        // FormID of the "captive" faction we added the downed player to (SAF Surrender-style pacify), or 0
-        // when we didn't add one (pacify disabled, unresolved faction, or the player was ALREADY a member so
-        // we left their real membership untouched). It is set ONLY when we actually create the membership, so
-        // recovery removes precisely what we introduced — never a pre-existing or a retargeted membership.
-        // A nonzero value also doubles as the once-per-down guard against re-entrant SetPlayerDownState adds.
-        std::atomic<std::uint32_t> g_captiveFactionApplied{ 0 };
+        // Per-actor record of the captive-faction membership WE created (actorID -> factionID)
+        // tracked ONLY when we actually add the membership, so removal deletes precisely what we introduced  never a pre-existing or a retargeted membership. 
+        // Presence also doubles as the once-per-down guard against re-entrant adds (SetPlayerDownState re-runs on 3D re-attach / save-load re-assert). 
+        // Persisted to the co-save so a load mid-captivity still removes exactly ours.
+        std::map<std::uint32_t, std::uint32_t> g_captiveApplied;
+        std::mutex g_captiveLock;
 
         [[nodiscard]] bool PlayerIsEssential(RE::Actor* a_actor)
         {
@@ -28,14 +28,9 @@ namespace OSFDefeat::Engine
             return npc ? npc->IsEssential() : false;
         }
 
-        // Resolves the configured captive faction the downed player joins so hostiles disengage. Returns
-        // nullptr when faction-pacify is disabled, the FormID is 0, or it doesn't resolve to a TESFaction —
-        // callers then simply skip the pacify (leaving Ghost as the only protection).
+        // Resolves the configured captive faction an actor joins so hostiles disengage. Returns nullptr when the FormID is 0 or it doesn't resolve to a TESFaction 
         [[nodiscard]] RE::TESFaction* CaptiveFaction()
         {
-            if (!Config::IsFactionPacifyEnabled()) {
-                return nullptr;
-            }
             const auto id = Config::CaptiveFactionID();
             return id ? RE::TESForm::LookupByID<RE::TESFaction>(id) : nullptr;
         }
@@ -156,19 +151,9 @@ namespace OSFDefeat::Engine
         // OPTIONAL full "surrender" calm (SAF Surrender style, `factionPacify`, default OFF): also add the
         // player to a captive faction so attackers treat them as non-hostile. It disengages enemies from
         // EVERYONE — they stop fighting your allies too — which is why it's opt-in rather than the default.
-        // Guarded to add at most ONCE per down (g_captiveFactionApplied still 0) and ONLY if the player isn't
-        // already a member (GetFactionRank < 0 = non-member). AddToFaction is create-or-update and
-        // RemoveFromFaction deletes outright, so a blind add+remove would clobber then destroy a legitimate
-        // pre-existing membership; and SetPlayerDownState is re-entrant (3D re-attach via Reattach, save-load
-        // re-assert via Defeat::RestoreFromSave), so a blind re-add could stack a second faction after a
-        // mid-down captiveFaction change and leak the first. Skipping when already a member leaves
-        // g_captiveFactionApplied at 0, so recovery correctly won't remove a membership we didn't create.
-        if (g_captiveFactionApplied.load() == 0) {
-            if (auto* const faction = CaptiveFaction(); faction && a_actor->GetFactionRank(faction, true) < 0) {
-                a_actor->AddToFaction(faction, 0);
-                g_captiveFactionApplied.store(faction->GetFormID());
-                REX::INFO("[OSFDefeat] captive-faction pacify: player added to faction {:08X}", faction->GetFormID());
-            }
+        // ApplyCaptiveFaction carries the guards (once per down, never over a pre-existing membership).
+        if (Config::IsFactionPacifyEnabled()) {
+            ApplyCaptiveFaction(a_actor);
         }
     }
 
@@ -191,16 +176,11 @@ namespace OSFDefeat::Engine
         if (g_hasEssentialSnapshot.exchange(false)) {
             SetPlayerEssential(g_wasEssential);
         }
-        // Undo the captive-faction pacify from SetPlayerDownState: remove exactly the faction we added
-        // (tracked by FormID so a config change mid-down can't retarget the removal, and a pre-existing
-        // membership we didn't add is left untouched). Normal AI re-hostiles the enemies on the next think;
-        // unghosting above lets their fire land again.
-        if (const std::uint32_t applied = g_captiveFactionApplied.exchange(0); applied != 0) {
-            if (auto* const faction = RE::TESForm::LookupByID<RE::TESFaction>(applied)) {
-                a_actor->RemoveFromFaction(faction);
-                REX::INFO("[OSFDefeat] captive-faction pacify: player removed from faction {:08X}", applied);
-            }
-        }
+        // Undo any captive-faction pacify (from SetPlayerDownState or the ApplyCaptiveFaction verb):
+        // remove exactly the faction we added (tracked by FormID so a config change mid-down can't
+        // retarget the removal, and a pre-existing membership we didn't add is left untouched). Normal
+        // AI re-hostiles the enemies on the next think; unghosting above lets their fire land again.
+        RemoveCaptiveFaction(a_actor);
     }
 
     void SetNpcDownState(RE::Actor* a_actor)
@@ -236,6 +216,7 @@ namespace OSFDefeat::Engine
         // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
         // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
         // re-eval isn't required for recovery. Re-add only once 150640 is RE-proven for the live build.
+        RemoveCaptiveFaction(a_actor);  // in case content applied the captive verb to this NPC
     }
 
     void ApplyDownState(RE::Actor* a_actor)
@@ -260,5 +241,94 @@ namespace OSFDefeat::Engine
         } else {
             RestoreNpcState(a_actor);
         }
+    }
+
+    bool ApplyCaptiveFaction(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return false;
+        }
+        auto* const faction = CaptiveFaction();
+        if (!faction) {
+            REX::WARN("[OSFDefeat] captive-faction pacify skipped: captiveFaction unresolved");
+            return false;
+        }
+
+        const std::uint32_t actorId = a_actor->GetFormID();
+        {
+            std::unique_lock lock{ g_captiveLock };
+            if (g_captiveApplied.contains(actorId)) {
+                return false;  // already ours; re-entrant apply (3D re-attach, verb retry) is a no-op
+            }
+        }
+        // AddToFaction is create-or-update and RemoveFromFaction deletes outright, so never add over a
+        // legitimate pre-existing membership — a later removal would destroy it. Not tracking it means
+        // removal correctly leaves it alone.
+        if (a_actor->GetFactionRank(faction, a_actor->IsPlayerRef()) >= 0) {
+            return false;
+        }
+
+        a_actor->AddToFaction(faction, 0);
+        {
+            std::unique_lock lock{ g_captiveLock };
+            g_captiveApplied[actorId] = faction->GetFormID();
+        }
+        REX::INFO("[OSFDefeat] captive-faction pacify: {:08X} added to faction {:08X}", actorId, faction->GetFormID());
+        return true;
+    }
+
+    bool RemoveCaptiveFaction(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return false;
+        }
+
+        std::uint32_t applied = 0;
+        {
+            std::unique_lock lock{ g_captiveLock };
+            if (const auto it = g_captiveApplied.find(a_actor->GetFormID()); it != g_captiveApplied.end()) {
+                applied = it->second;
+                g_captiveApplied.erase(it);
+            }
+        }
+        if (applied == 0) {
+            return false;
+        }
+        if (auto* const faction = RE::TESForm::LookupByID<RE::TESFaction>(applied)) {
+            a_actor->RemoveFromFaction(faction);
+            REX::INFO("[OSFDefeat] captive-faction pacify: {:08X} removed from faction {:08X}", a_actor->GetFormID(), applied);
+        }
+        return true;
+    }
+
+    bool HasCaptiveFactionApplied(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return false;
+        }
+        std::unique_lock lock{ g_captiveLock };
+        return g_captiveApplied.contains(a_actor->GetFormID());
+    }
+
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> SnapshotCaptiveFactions()
+    {
+        std::unique_lock lock{ g_captiveLock };
+        return { g_captiveApplied.begin(), g_captiveApplied.end() };
+    }
+
+    void RestoreCaptiveFaction(std::uint32_t a_actorId, std::uint32_t a_factionId)
+    {
+        // Re-track only: the membership itself is already in the save. Restoring the record is what
+        // lets the eventual recovery remove exactly the membership we created before the save.
+        if (a_actorId && a_factionId) {
+            std::unique_lock lock{ g_captiveLock };
+            g_captiveApplied[a_actorId] = a_factionId;
+        }
+    }
+
+    void ClearCaptiveFactions()
+    {
+        std::unique_lock lock{ g_captiveLock };
+        g_captiveApplied.clear();
     }
 }

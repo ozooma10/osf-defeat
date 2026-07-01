@@ -26,6 +26,16 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
   (clamp + inline hostility/flesh classification, symmetric with the player path).
 - `ReloadJSON` Papyrus helper to hot-reload validation/consequence JSON without a restart.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
+- **SAF-parity handoff API** (the four gaps from `docs/saf-surrender-evaluation.md`):
+  - Consequence `quest` tokens that resolve (editorID, then hex FormID) get `Quest.Start`
+    dispatched through the VM before `OnPlayerConsequenceStarted` fires (`startQuest` opt-out).
+  - Recovery handshake: `SetRecoveryTimer` / `GetRecoverySecondsRemaining` verbs plus a
+    per-consequence `holdRecovery` flag so content owns the down-state end-to-end.
+  - Captive-faction pacify as verbs (`ApplyCaptiveFaction` / `RemoveCaptiveFaction` /
+    `IsCaptiveFactionApplied`), per-actor guarded, co-save persisted, auto-removed on rescue.
+  - Defeat-time participant snapshot (`GetLastPlayerParticipants`, `participantScanRadius`),
+    recorded from the damage hook (recent attackers) — ProcessLists enumeration is a proven
+    crash from SFSE tasks and is deliberately not used.
 
 ## JSON Schemas
 
@@ -39,6 +49,9 @@ Validation v1:
   "defaultRecoverySeconds": 8.0,
   "npcAutoDefeat": false,
   "npcAutoDefeatIncludeRobots": false,
+  "factionPacify": false,
+  "captiveFaction": "0x0003E0C8",
+  "participantScanRadius": 4096.0,
   "excludedLocations": [],
   "excludedQuests": []
 }
@@ -53,11 +66,15 @@ Player consequence v1:
   "priority": 0,
   "weight": 1,
   "recoverySeconds": 8.0,
-  "quest": "OptionalQuestEditorID"
+  "quest": "OptionalQuestEditorID",
+  "startQuest": true,
+  "holdRecovery": false
 }
 ```
 
-`quest` is parsed and logged only in alpha; quest start/handoff is post-alpha.
+A `quest` token that resolves (editorID first, then hex FormID) gets `Quest.Start` dispatched
+before the consequence event fires; `startQuest: false` opts out. `holdRecovery: true` skips the
+auto-recovery timer — the consequence owns the down-state and ends it via `RescueActor`.
 
 ## Alpha Test Plan
 
@@ -72,7 +89,8 @@ Player consequence v1:
 ## Post-Alpha Milestones
 
 1. Runtime-test and harden the player hook across Starfield updates.
-2. Add direct quest start/fill behavior for configured player consequences. The current alpha exposes a registered handoff event plus queryable context.
+2. ~~Add direct quest start/fill behavior for configured player consequences.~~ Done: `Quest.Start`
+   is VM-dispatched for resolving quest tokens. Alias/reference **fill** behavior remains open.
 3. Expand validation from simple exclusions to a real condition grammar.
 4. Add interaction/menu registration for content mods.
 5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, and `npcAutoDefeat`

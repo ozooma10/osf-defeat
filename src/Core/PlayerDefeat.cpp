@@ -9,6 +9,7 @@
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/DefeatRegistry.h"
+#include "Core/QuestHandoff.h"
 #include "Core/Validation.h"
 #include "Engine/Engine.h"
 
@@ -30,6 +31,82 @@ namespace OSFDefeat::PlayerDefeat
         std::atomic_bool g_hooked{ false };
         std::atomic_bool g_pendingDefeat{ false };
         std::atomic_bool g_workerStarted{ false };
+
+        // --- Participant recording -----------------------------------------------------------------
+        // Who damaged the player recently, fed passively by the hook below. This is the participant
+        // source for the defeat-time snapshot: live ProcessLists actor arrays must NOT be iterated from
+        // an SFSE task (proven crash: races the sim thread's realloc → AV in GetSmartPointer), so we
+        // only store PODs here (FormID + timestamp, worker thread) and resolve via LookupByID on the
+        // game thread later. "Damaged the player in the last window" is also the better cast list —
+        // actual combatants, not bystanders.
+        constexpr auto kParticipantWindow = std::chrono::seconds{ 30 };
+        constexpr std::size_t kParticipantCap = 64;
+        std::map<FormID, std::chrono::steady_clock::time_point> g_recentAttackers;
+        std::mutex g_recentAttackersLock;
+
+        void RecordAttacker(RE::TESObjectREFR* a_ref)
+        {
+            if (!a_ref) {
+                return;
+            }
+            const FormID id = a_ref->GetFormID();
+            const auto now = std::chrono::steady_clock::now();
+            std::unique_lock lock{ g_recentAttackersLock };
+            std::erase_if(g_recentAttackers, [&](const auto& entry) { return now - entry.second > kParticipantWindow; });
+            if (g_recentAttackers.size() < kParticipantCap || g_recentAttackers.contains(id)) {
+                g_recentAttackers[id] = now;
+            }
+        }
+
+        [[nodiscard]] std::vector<FormID> RecentAttackerIDs()
+        {
+            const auto now = std::chrono::steady_clock::now();
+            std::vector<FormID> out;
+            std::unique_lock lock{ g_recentAttackersLock };
+            for (const auto& [id, when] : g_recentAttackers) {
+                if (now - when <= kParticipantWindow) {
+                    out.push_back(id);
+                }
+            }
+            return out;
+        }
+
+        // Defeat-time participant snapshot: the aggressor plus every recent attacker that is still a
+        // live hostile within a_radius (<= 0 = no radius filter). Game thread (LookupByID + engine
+        // reads). Recorded attackers that resolve to non-actors (traps, hazards) drop out here.
+        [[nodiscard]] std::vector<RE::Actor*> CollectParticipants(RE::Actor* a_player, RE::Actor* a_aggressor, float a_radius)
+        {
+            std::vector<RE::Actor*> out;
+            if (!a_player) {
+                return out;
+            }
+
+            const auto origin = a_player->GetPosition();
+            const float radiusSq = a_radius > 0.0f ? a_radius * a_radius : 0.0f;
+            const auto consider = [&](RE::Actor* a_actor, bool a_requireHostile) {
+                if (!a_actor || a_actor == a_player || a_actor->IsDead()) {
+                    return;
+                }
+                if (std::find(out.begin(), out.end(), a_actor) != out.end()) {
+                    return;
+                }
+                if (a_requireHostile && !a_actor->IsHostileToActor(a_player)) {
+                    return;
+                }
+                if (radiusSq > 0.0f && (a_actor->GetPosition() - origin).SqrLength() > radiusSq) {
+                    return;
+                }
+                out.push_back(a_actor);
+            };
+
+            // The aggressor is always cast (no hostility re-check: the captive-faction pacify or the
+            // target-list drop may already have cleared formal hostility by the time content asks).
+            consider(a_aggressor, false);
+            for (const auto id : RecentAttackerIDs()) {
+                consider(RE::TESForm::LookupByID<RE::Actor>(id), true);
+            }
+            return out;
+        }
 
         [[nodiscard]] float NowDay()
         {
@@ -170,6 +247,7 @@ namespace OSFDefeat::PlayerDefeat
         {
             if (g_original && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
                 if (IsPlayerAVOwner(a_owner)) {
+                    RecordAttacker(a_ref);  // participant snapshot source (POD-only on this thread)
                     auto* const player = PlayerActor();
                     const float current = a_owner->GetActorValue(a_info);
                     const bool  lethal = current + a_delta <= 0.0f;
@@ -250,6 +328,40 @@ namespace OSFDefeat::PlayerDefeat
         return NowDay() + ((std::max(1.0f, a_realSeconds) * TimeScale()) / 86400.0f);
     }
 
+    bool SetRecoveryTimer(RE::Actor* a_actor, float a_seconds)
+    {
+        if (!a_actor) {
+            return false;
+        }
+        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
+        if (!data) {
+            return false;
+        }
+        if (a_seconds > 0.0f) {
+            data->recoverAtDay = RecoveryDeadlineForSeconds(a_seconds);
+            REX::INFO("[OSFDefeat] recovery timer for {:08X} set to {:.2f}s", a_actor->GetFormID(), a_seconds);
+        } else {
+            data->recoverAtDay = 0.0f;
+            REX::INFO("[OSFDefeat] recovery for {:08X} held; awaiting explicit rescue", a_actor->GetFormID());
+        }
+        return true;
+    }
+
+    float GetRecoverySecondsRemaining(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return 0.0f;
+        }
+        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
+        if (!data) {
+            return 0.0f;
+        }
+        if (data->recoverAtDay <= 0.0f) {
+            return -1.0f;
+        }
+        return std::max(0.0f, (data->recoverAtDay - NowDay()) * 86400.0f / TimeScale());
+    }
+
     void BeginPlayerDefeat(RE::Actor* a_aggressor)
     {
         auto* const player = PlayerActor();
@@ -258,23 +370,36 @@ namespace OSFDefeat::PlayerDefeat
         }
 
         const auto outcome = Consequence::SelectPlayerOutcome();
+        // Snapshot participants BEFORE the down state applies: DefeatActor drops the player from
+        // combatant target lists (and may captive-pacify), which can clear the hostility the
+        // participant filter keys on.
+        const auto participants = CollectParticipants(player, a_aggressor, Config::ParticipantScanRadius());
         if (!Defeat::DefeatActor(player, a_aggressor)) {
             return;
         }
 
         if (auto data = DefeatRegistry::Get(player->GetFormID())) {
-            data->recoverAtDay = RecoveryDeadlineForSeconds(outcome.recoverySeconds);
+            // holdRecovery leaves recoverAtDay at 0 (held): the consequence owns the
+            // down-state and must end it via RescueActor (or SetRecoveryTimer).
+            data->recoverAtDay = outcome.holdRecovery ? 0.0f : RecoveryDeadlineForSeconds(outcome.recoverySeconds);
         }
 
-        REX::INFO("[OSFDefeat] player outcome '{}' selected; recovery in {:.2f}s", outcome.name, outcome.recoverySeconds);
-        if (outcome.quest) {
-            REX::INFO("[OSFDefeat] outcome '{}' carries quest token '{}'; handing off to consequence consumers", outcome.name, *outcome.quest);
+        if (outcome.holdRecovery) {
+            REX::INFO("[OSFDefeat] player outcome '{}' selected; recovery held for content", outcome.name);
+        } else {
+            REX::INFO("[OSFDefeat] player outcome '{}' selected; recovery in {:.2f}s", outcome.name, outcome.recoverySeconds);
         }
 
         // Stage the handoff payload (read back through the GetLastPlayer* Papyrus
-        // getters), then notify content consumers such as OSF Surrender. We are on
-        // the game thread here, so the VM SendEvent inside Broadcast is safe.
-        DefeatContext::SetPlayerContext(player, a_aggressor, outcome);
+        // getters) — including the participant snapshot (recent attackers, Acheron
+        // member-list parity) — then start the consequence quest, then notify content
+        // consumers such as OSF Surrender. Context-before-quest so a quest's
+        // OnQuestInit can already read the payload. We are on the game thread here,
+        // so the VM dispatches are safe.
+        DefeatContext::SetPlayerContext(player, a_aggressor, outcome, participants);
+        if (outcome.quest && outcome.startQuest) {
+            QuestHandoff::TryStartQuestToken(*outcome.quest);
+        }
         Events::BroadcastPlayerConsequenceStarted();
     }
 

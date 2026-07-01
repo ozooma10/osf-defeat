@@ -13,6 +13,27 @@ Bool Function ReleaseActor(Actor akActor) global native
 
 `DefeatActor` records the actor as defeated and persists that state. For the player, it also applies the native down state. `RescueActor` removes defeat state and restores the player if needed. `PacifyActor` / `ReleaseActor` are foundation-level state hooks for future combat behavior.
 
+## Recovery Handshake
+
+```papyrus
+Bool Function SetRecoveryTimer(Actor akActor, Float afSeconds) global native
+Float Function GetRecoverySecondsRemaining(Actor akActor) global native
+```
+
+This is how a content mod takes ownership of a down-state. `SetRecoveryTimer(actor, 0.0)` (or any `afSeconds <= 0`) **holds** the actor down — the framework's auto-recovery skips them until you call `RescueActor` (or set a positive timer again). A positive value reschedules auto-recovery that many real seconds out. `GetRecoverySecondsRemaining` returns the remaining real seconds (`-1` = held awaiting explicit rescue, `0` = not defeated).
+
+A consequence JSON can also ship `"holdRecovery": true` so the player enters the down-state already held — no race against the recovery timer.
+
+## Captive-Faction Pacify (surrender-to-base)
+
+```papyrus
+Bool Function ApplyCaptiveFaction(Actor akActor) global native
+Bool Function RemoveCaptiveFaction(Actor akActor) global native
+Bool Function IsCaptiveFactionApplied(Actor akActor) global native
+```
+
+Adds the actor to the configured `captiveFaction` (default: vanilla `0x0003E0C8`) so **all** hostiles treat them as non-hostile — the full SAF Surrender-style calm, on demand, independent of the automatic `factionPacify` config gate. Guarded per actor: the membership is added at most once, never over a pre-existing membership, and removal deletes exactly (and only) the membership the framework created. It is removed automatically on `RescueActor`; the tracking survives save/load via the co-save.
+
 ## Queries
 
 ```papyrus
@@ -88,6 +109,7 @@ Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
 Float Function GetLastPlayerRecoverySeconds() global native
+Actor[] Function GetLastPlayerParticipants() global native
 ```
 
 The callback takes no arguments:
@@ -98,6 +120,12 @@ EndFunction
 ```
 
 Use this for content mods such as OSF Surrender. The callback has no direct parameters; content reads the payload through the `GetLastPlayer*` functions so the broadcaster stays simple and stable.
+
+`GetLastPlayerParticipants` returns the fight's cast at defeat time: the aggressor plus everyone who damaged the player in the last ~30 seconds and is still a live hostile — scene casting for group content. `participantScanRadius` (validation JSON, default 4096 units, `0` = no radius filter) additionally drops distant entries. The list is recorded from actual damage events, so it is combatants, not bystanders.
+
+### Consequence quest start
+
+If a selected consequence carries a `quest` token that resolves to a real quest — by **editorID** first, then as a hex FormID (`"0x00012345"`) — the framework dispatches `Quest.Start` on it before broadcasting `OnPlayerConsequenceStarted`, so the quest is already running when the callback fires. A token that resolves to nothing stays a plain content string (previous behavior). Per-consequence `"startQuest": false` opts out of the auto-start.
 
 ## Actor Events (player + NPC)
 

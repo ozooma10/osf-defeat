@@ -32,6 +32,8 @@ namespace OSFDefeat::Consequence
                 if (const auto it = json.find("quest"); it != json.end() && it->is_string() && !it->get<std::string>().empty()) {
                     outcome.quest = it->get<std::string>();
                 }
+                outcome.startQuest = json.value("startQuest", true);
+                outcome.holdRecovery = json.value("holdRecovery", false);
                 return outcome;
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] consequence JSON {} failed: {}", a_path.string(), e.what());

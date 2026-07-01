@@ -115,6 +115,9 @@ namespace OSFDefeat::Config
                         REX::WARN("[OSFDefeat] captiveFaction is not a numeric formID; keeping default");
                     }
                 }
+                if (json.contains("participantScanRadius")) {
+                    a_config.participantScanRadius = json.value("participantScanRadius", 4096.0f);
+                }
                 ReadFormSet(json, "excludedLocations", a_config.excludedLocations);
                 ReadFormSet(json, "excludedQuests", a_config.excludedQuests);
                 REX::INFO("[OSFDefeat] loaded validation JSON {}", a_path.string());
@@ -202,6 +205,12 @@ namespace OSFDefeat::Config
     {
         std::shared_lock lock{ g_lock };
         return g_config.captiveFaction;
+    }
+
+    float ParticipantScanRadius()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.participantScanRadius;
     }
 
     std::filesystem::path RootPath()
