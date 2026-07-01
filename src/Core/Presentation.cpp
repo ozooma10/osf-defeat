@@ -90,8 +90,7 @@ namespace OSFDefeat::Presentation
 			return;
 		}
 
-		// Idempotency: StartScene returns 0 if the player is already in a scene, so end any prior one
-		// first (a stale cower from a previous defeat, an unrelated OSF scene, etc.).
+		// Idempotency: StartScene returns 0 if the player is already in a scene, so end any prior one first (a stale cower from a previous defeat, an unrelated OSF scene, etc.).
 		api->StopSceneForActor(player);
 
 		// Force the down-state presentation from code (the def is a bare cower clip). Tri-states:
@@ -100,7 +99,6 @@ namespace OSFDefeat::Presentation
 		opts.lockPlayerMode    = 1;  // force movement/combat lock
 		opts.stripMode         = 0;  // never strip armor on defeat
 		opts.playerControlMode = 0;  // revoke advance/navigate/end — player can't escape the scene
-		std::strncpy(opts.camera, "scene_orbit", sizeof(opts.camera) - 1);  // mouse-orbit camera
 
 		RE::Actor* actors[1]{ player };
 		const std::int32_t handle = api->StartScene(actors, 1, kDownSceneId, opts);

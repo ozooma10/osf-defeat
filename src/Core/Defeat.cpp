@@ -43,8 +43,6 @@ namespace OSFDefeat::Defeat
         REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
 
         if (a_victim->IsPlayerRef()) {
-            // The framework state holds the player safe; the cower pose + control lock are what make the
-            // down VISIBLE (lifeState can't pose the player). Cleared on rescue below.
             Presentation::ShowPlayerDown();
             Events::BroadcastPlayerDefeated();
         }
