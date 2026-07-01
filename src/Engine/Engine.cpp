@@ -5,7 +5,6 @@
 #include "Core/Config.h"
 
 #include "RE/B/BSPointerHandle.h"
-#include "RE/C/Console.h"
 #include "RE/P/ProcessLists.h"
 #include "RE/T/TESFaction.h"
 
@@ -110,18 +109,6 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void SetCombatAIDisabled(bool a_disabled)
-    {
-        RE::Console::SetCombatAIProcessing(!a_disabled);
-        // Read the gate back so the SFSE log shows whether the write actually landed. If the tcai
-        // handler (ID 66826) failed to resolve, SetCombatAIProcessing no-ops and the gate reads as
-        // nullptr -> IsCombatAIProcessingEnabled() returns true regardless. So a down-call that logs
-        // "disabled (processingEnabled=true)" means the gate never resolved (bug: combat AI never
-        // actually suppressed); a recover-call should log "enabled (processingEnabled=true)".
-        REX::INFO("[OSFDefeat] combat AI gate -> {} (processingEnabled={})",
-            a_disabled ? "disabled" : "enabled", RE::Console::IsCombatAIProcessingEnabled());
-    }
-
     void SetPlayerEssential(bool a_essential)
     {
         auto* const player = RE::PlayerCharacter::GetSingleton();
@@ -151,22 +138,26 @@ namespace OSFDefeat::Engine
         a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kCanSpeakToEssentialDown);
         a_actor->SetGhost(true);
         // NOTE: no SetAIEnabled(false) for the player — kProcessMe-off can suppress the player's camera/
-        // look (and it's the NPC lever per OSF RE; the player uses the global tcai gate below). The OSF
-        // Animation scene's input lock (movement/combat off, looking free) handles "can't act".
+        // look (it's the NPC lever per OSF RE). The OSF Animation scene's input lock (movement/combat off,
+        // looking free) handles "can't act".
         a_actor->SetLifeState(kBleedOut);
         a_actor->StopCombat();
-        // Pacify via FACTION membership, not the global tcai gate. The tcai gate froze the enemies' combat
-        // controllers, and ONLY the console command's own execution context can cleanly un-freeze them (its
-        // setting-change broadcast is gated on thread state a plugin can't reproduce) — so combat stayed
-        // dead on recovery until the player typed `tcai`. Instead we mirror SAF Surrender: add the player to
-        // a "captive" faction (default vanilla 0x3E0C8) whose reactions make hostiles disengage;
-        // RestorePlayerState removes it and normal AI re-hostiles them on the next think — no freeze, no
-        // manual tcai. Ghost (set above) is belt-and-suspenders invulnerability for the pose beat.
-        // (ProcessLists::StopCombatAndAlarmOnActor is still avoided: it permanently drops the player from
-        // every target list, which would block re-engagement.)
-        //
-        // Add the membership at most ONCE per down (g_captiveFactionApplied still 0) and ONLY if the player
-        // isn't already a member (GetFactionRank < 0 = non-member). AddToFaction is create-or-update and
+        // Drop the downed player from every combatant's target list — the same manager-level lever
+        // SetNpcDownState uses. Attackers disengage FROM THE PLAYER but stay in combat and keep fighting other
+        // hostiles (your allies / nearby NPCs). Unlike the calm faction below, this does NOT make them
+        // non-hostile, so they still re-aggro whoever is actually attacking them, and the downed player is
+        // simply no longer a valid target. Ghost (set above) keeps the player invulnerable + de-prioritized
+        // meanwhile; on recovery the player is re-detected through normal combat scanning (no tcai gate in
+        // play, so combat controllers keep ticking — that gate was the freeze cause in the drop-pacify history).
+        if (auto* const lists = RE::ProcessLists::GetSingleton()) {
+            lists->StopCombatAndAlarmOnActor(a_actor);
+            REX::INFO("[OSFDefeat] player-down: dropped from combatant target lists (attackers keep fighting other hostiles)");
+        }
+        // OPTIONAL full "surrender" calm (SAF Surrender style, `factionPacify`, default OFF): also add the
+        // player to a captive faction so attackers treat them as non-hostile. It disengages enemies from
+        // EVERYONE — they stop fighting your allies too — which is why it's opt-in rather than the default.
+        // Guarded to add at most ONCE per down (g_captiveFactionApplied still 0) and ONLY if the player isn't
+        // already a member (GetFactionRank < 0 = non-member). AddToFaction is create-or-update and
         // RemoveFromFaction deletes outright, so a blind add+remove would clobber then destroy a legitimate
         // pre-existing membership; and SetPlayerDownState is re-entrant (3D re-attach via Reattach, save-load
         // re-assert via Defeat::RestoreFromSave), so a blind re-add could stack a second faction after a

@@ -7,7 +7,6 @@
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
-#include "Engine/Engine.h"
 
 namespace OSFDefeat::Persistence
 {
@@ -85,7 +84,6 @@ namespace OSFDefeat::Persistence
         {
             DefeatRegistry::Clear();
             Events::Clear();
-            Engine::SetCombatAIDisabled(false);
             REX::INFO("[OSFDefeat] reverted defeat state");
         }
     }

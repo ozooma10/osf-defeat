@@ -106,7 +106,7 @@ namespace OSFDefeat::Config
                     a_config.npcAutoDefeatIncludeRobots = json.value("npcAutoDefeatIncludeRobots", false);
                 }
                 if (json.contains("factionPacify")) {
-                    a_config.factionPacify = json.value("factionPacify", true);
+                    a_config.factionPacify = json.value("factionPacify", false);
                 }
                 if (const auto it = json.find("captiveFaction"); it != json.end()) {
                     if (const auto id = ParseFormID(*it)) {

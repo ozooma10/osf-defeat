@@ -18,17 +18,16 @@ namespace OSFDefeat::Engine
 	[[nodiscard]] RE::Actor* ResolveCombatTarget(RE::Actor* a_victim);
 
 	void RestoreHealthToMax(RE::Actor* a_actor);
-	void SetCombatAIDisabled(bool a_disabled);
 	void SetPlayerEssential(bool a_essential);
 	void SetPlayerDownState(RE::Actor* a_actor);
 	void RestorePlayerState(RE::Actor* a_actor);
 
-	// Per-actor NPC down/recover (no essential flip, no global combat-AI gate — those are the
-	// player path's levers). Live-validated recipe from OSF RE npc-defeat-recover-pacify, 2026-06-25.
+	// Per-actor NPC down/recover (no essential flip, no faction pacify — those are the player path's
+	// levers). Live-validated recipe from OSF RE npc-defeat-recover-pacify, 2026-06-25.
 	void SetNpcDownState(RE::Actor* a_actor);
 	void RestoreNpcState(RE::Actor* a_actor);
 
-	// Dispatch by actor: the player gets the essential/global-suppression recipe, NPCs the per-actor one.
+	// Dispatch by actor: the player gets the essential + target-drop recipe, NPCs the per-actor one.
 	void ApplyDownState(RE::Actor* a_actor);
 	void RestoreState(RE::Actor* a_actor);
 }
