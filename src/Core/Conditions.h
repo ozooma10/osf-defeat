@@ -42,4 +42,13 @@ namespace OSFDefeat::Conditions
     // A non-empty aggressor block demands an aggressor: null aggressor fails it.
     // Unresolvable form tokens count as non-matches (and warn once per token).
     [[nodiscard]] bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor);
+
+    // Evaluate, but say which block failed — the selection explain log names it.
+    enum class EvalResult
+    {
+        kPass,
+        kAggressorFailed,
+        kVictimFailed
+    };
+    [[nodiscard]] EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor);
 }

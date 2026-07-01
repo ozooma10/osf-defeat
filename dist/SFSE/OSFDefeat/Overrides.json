@@ -1,0 +1,14 @@
+{
+  "version": 1,
+
+  // Central user tuning: override any installed consequence by its "name", without editing
+  // the pack's own files (which mod managers overwrite on update). Supported per-consequence
+  // keys: "enabled" (bool), "weight" (int >= 1), "priority" (int).
+  //
+  // Example:
+  //   "consequences": {
+  //     "OSF Surrender Human Scene": { "enabled": true, "weight": 3 },
+  //     "Alpha Down Then Recover":   { "weight": 1 }
+  //   }
+  "consequences": {}
+}

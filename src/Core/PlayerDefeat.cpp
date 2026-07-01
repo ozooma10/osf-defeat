@@ -9,6 +9,7 @@
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/DefeatRegistry.h"
+#include "Core/Presentation.h"
 #include "Core/QuestHandoff.h"
 #include "Core/Validation.h"
 #include "Engine/Engine.h"
@@ -238,6 +239,21 @@ namespace OSFDefeat::PlayerDefeat
             return !Decision::IsNonFlesh(a_victim) || Config::NpcAutoDefeatIncludesRobots();
         }
 
+        // Legible death boundary: every deliberate player passthrough is logged with its reason, so
+        // "why didn't it save me" is answerable from the log. Debounced (repeat hits while dying all
+        // share one reason) and INFO-level — a player death is rare and always worth a line.
+        void LogPlayerPassthrough(Validation::Verdict a_verdict)
+        {
+            static std::atomic<std::int64_t> lastLogMs{ 0 };
+            const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            auto last = lastLogMs.load();
+            if (nowMs - last < 1000 || !lastLogMs.compare_exchange_strong(last, nowMs)) {
+                return;
+            }
+            REX::INFO("[OSFDefeat] lethal player hit passed through: {}", Validation::VerdictName(a_verdict));
+        }
+
         void ModActorValueDetour(
             RE::ActorValueOwner* a_owner,
             RE::ACTOR_VALUE_MODIFIER a_modifier,
@@ -252,9 +268,14 @@ namespace OSFDefeat::PlayerDefeat
                     const float current = a_owner->GetActorValue(a_info);
                     const bool  lethal = current + a_delta <= 0.0f;
                     auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-                    if (lethal && Validation::CanProcess() && Validation::ValidatePair(player, aggressor) && !Defeat::IsDefeated(player)) {
-                        a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
-                        QueueBegin(a_ref);
+                    if (lethal && !Defeat::IsDefeated(player)) {
+                        const auto verdict = Validation::ExplainPair(player, aggressor);
+                        if (verdict == Validation::Verdict::kOk) {
+                            a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
+                            QueueBegin(a_ref);
+                        } else {
+                            LogPlayerPassthrough(verdict);
+                        }
                     }
                 } else if (Config::IsNpcAutoDefeatEnabled()) {
                     auto* const victim = ActorFromAVOwner(a_owner);
@@ -262,10 +283,22 @@ namespace OSFDefeat::PlayerDefeat
                         const float current = a_owner->GetActorValue(a_info);
                         const bool  lethal = current + a_delta <= 0.0f;
                         auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-                        if (lethal && Validation::CanProcess() && Validation::ValidatePair(victim, aggressor) &&
-                            ShouldAutoDefeatNpc(victim) && !Defeat::IsDefeated(victim)) {
-                            a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
-                            QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0);
+                        if (lethal && !Defeat::IsDefeated(victim)) {
+                            const auto verdict = Validation::ExplainPair(victim, aggressor);
+                            if (verdict != Validation::Verdict::kOk) {
+                                if (Config::IsExplainEnabled()) {
+                                    REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: {}",
+                                        victim->GetFormID(), Validation::VerdictName(verdict));
+                                }
+                            } else if (!ShouldAutoDefeatNpc(victim)) {
+                                if (Config::IsExplainEnabled()) {
+                                    REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: not a hostile flesh target (or robots excluded)",
+                                        victim->GetFormID());
+                                }
+                            } else {
+                                a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
+                                QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0);
+                            }
                         }
                     }
                 }
@@ -338,13 +371,81 @@ namespace OSFDefeat::PlayerDefeat
             return false;
         }
         if (a_seconds > 0.0f) {
+            // A positive timer puts the entry back on framework auto-recovery; any lease is over.
             data->recoverAtDay = RecoveryDeadlineForSeconds(a_seconds);
+            data->leaseDeadlineDay = 0.0f;
+            data->SetLeaseOwner({});
             REX::INFO("[OSFDefeat] recovery timer for {:08X} set to {:.2f}s", a_actor->GetFormID(), a_seconds);
         } else {
+            // Hold. An existing lease keeps its own deadline; an unleased player hold gets the
+            // watchdog deadline armed by the recovery tick.
             data->recoverAtDay = 0.0f;
             REX::INFO("[OSFDefeat] recovery for {:08X} held; awaiting explicit rescue", a_actor->GetFormID());
         }
         return true;
+    }
+
+    bool ClaimDefeat(RE::Actor* a_actor, std::string_view a_owner, float a_maxHoldSeconds)
+    {
+        if (!a_actor || a_owner.empty()) {
+            return false;
+        }
+        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
+        if (!data) {
+            return false;
+        }
+        const auto currentOwner = data->CopyLeaseOwner();
+        if (!currentOwner.empty() && currentOwner != a_owner) {
+            REX::WARN("[OSFDefeat] claim on {:08X} refused: already leased by '{}' (requested by '{}')",
+                a_actor->GetFormID(), currentOwner, a_owner);
+            return false;
+        }
+
+        const float holdSeconds = a_maxHoldSeconds > 0.0f ? a_maxHoldSeconds : Config::WatchdogSeconds();
+        data->recoverAtDay = 0.0f;  // held: the owner ends it via RescueActor / ReleaseClaim / SetRecoveryTimer
+        data->SetLeaseOwner(std::string{ a_owner });
+        data->leaseDeadlineDay = holdSeconds > 0.0f ? RecoveryDeadlineForSeconds(holdSeconds) : 0.0f;
+        if (holdSeconds > 0.0f) {
+            REX::INFO("[OSFDefeat] '{}' claimed down-state of {:08X} for up to {:.0f}s", a_owner, a_actor->GetFormID(), holdSeconds);
+        } else {
+            REX::INFO("[OSFDefeat] '{}' claimed down-state of {:08X} with no deadline (watchdog disabled)", a_owner, a_actor->GetFormID());
+        }
+        return true;
+    }
+
+    bool ReleaseClaim(RE::Actor* a_actor, std::string_view a_owner)
+    {
+        if (!a_actor) {
+            return false;
+        }
+        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
+        if (!data) {
+            return false;
+        }
+        const auto currentOwner = data->CopyLeaseOwner();
+        if (currentOwner.empty()) {
+            return false;
+        }
+        if (currentOwner != a_owner) {
+            REX::WARN("[OSFDefeat] release of {:08X} refused: leased by '{}', not '{}'",
+                a_actor->GetFormID(), currentOwner, a_owner);
+            return false;
+        }
+
+        data->SetLeaseOwner({});
+        data->leaseDeadlineDay = 0.0f;
+        data->recoverAtDay = RecoveryDeadlineForSeconds(Config::Get().defaultRecoverySeconds);
+        REX::INFO("[OSFDefeat] '{}' released its claim on {:08X}; default recovery resumes", a_owner, a_actor->GetFormID());
+        return true;
+    }
+
+    std::string GetClaimOwner(RE::Actor* a_actor)
+    {
+        if (!a_actor) {
+            return {};
+        }
+        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
+        return data ? data->CopyLeaseOwner() : std::string{};
     }
 
     float GetRecoverySecondsRemaining(RE::Actor* a_actor)
@@ -377,11 +478,20 @@ namespace OSFDefeat::PlayerDefeat
         if (!Defeat::DefeatActor(player, a_aggressor)) {
             return;
         }
+        Consequence::MarkFired(outcome, player);  // stamp cooldown / oncePerLocation arbitration state
 
         if (auto data = DefeatRegistry::Get(player->GetFormID())) {
-            // holdRecovery leaves recoverAtDay at 0 (held): the consequence owns the
-            // down-state and must end it via RescueActor (or SetRecoveryTimer).
-            data->recoverAtDay = outcome.holdRecovery ? 0.0f : RecoveryDeadlineForSeconds(outcome.recoverySeconds);
+            if (outcome.holdRecovery) {
+                // Held for content: the consequence owns the down-state and must end it via
+                // RescueActor (or SetRecoveryTimer / ReleaseClaim). The lease is armed on its
+                // behalf so a consequence that errors out gets watchdog-rescued, not stranded.
+                const float hold = outcome.maxHoldSeconds > 0.0f ? outcome.maxHoldSeconds : Config::WatchdogSeconds();
+                data->recoverAtDay = 0.0f;
+                data->SetLeaseOwner(outcome.name);
+                data->leaseDeadlineDay = hold > 0.0f ? RecoveryDeadlineForSeconds(hold) : 0.0f;
+            } else {
+                data->recoverAtDay = RecoveryDeadlineForSeconds(outcome.recoverySeconds);
+            }
         }
 
         if (outcome.holdRecovery) {
@@ -405,18 +515,58 @@ namespace OSFDefeat::PlayerDefeat
 
     void TickRecovery()
     {
-        // Auto-recover every defeated actor whose deadline has passed. Held entries (recoverAtDay <= 0,
-        // e.g. an NPC awaiting an explicit RescueActor from content) are skipped. Snapshot is a copy of
-        // IDs, so RescueActor mutating the registry mid-loop is safe.
+        // Auto-recover every defeated actor whose deadline has passed. Held entries (recoverAtDay <= 0)
+        // are governed by the watchdog instead: the player's held entries always carry a lease deadline
+        // (auto-armed here if a consumer held without claiming), NPC held entries only when content
+        // claimed them — a held NPC captive is a legitimate long-term state. A lapsed deadline means the
+        // owning consumer stopped, errored out, or forgot to extend: force-rescue so the player is never
+        // stranded, and log who defaulted. Snapshot is a copy of IDs, so RescueActor mutating the
+        // registry mid-loop is safe.
         const float now = NowDay();
+        const float watchdog = Config::WatchdogSeconds();
         for (const auto id : DefeatRegistry::Snapshot()) {
             const auto data = DefeatRegistry::Get(id);
-            if (!data || data->recoverAtDay <= 0.0f || now < data->recoverAtDay) {
+            if (!data) {
                 continue;
             }
-            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
-                Defeat::RescueActor(actor, true);
+
+            if (data->recoverAtDay > 0.0f) {
+                if (now >= data->recoverAtDay) {
+                    if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                        Defeat::RescueActor(actor, true);
+                    }
+                }
+                continue;
             }
+
+            // Held entry.
+            if (data->leaseDeadlineDay <= 0.0f) {
+                if (id == 0x14 && watchdog > 0.0f) {
+                    data->leaseDeadlineDay = RecoveryDeadlineForSeconds(watchdog);
+                    if (data->CopyLeaseOwner().empty()) {
+                        data->SetLeaseOwner("(unclaimed hold)");
+                    }
+                }
+                continue;
+            }
+            if (now >= data->leaseDeadlineDay) {
+                const auto owner = data->CopyLeaseOwner();
+                REX::WARN("[OSFDefeat] watchdog: held down-state of {:08X} expired (owner '{}' never extended or rescued) - force-rescuing",
+                    id, owner.empty() ? "(unclaimed hold)" : owner);
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                    Defeat::RescueActor(actor, true);
+                } else {
+                    DefeatRegistry::Remove(id);  // unresolvable: purge so the entry cannot strand the co-save
+                }
+            }
+        }
+
+        // Presentation self-heal: the engine down-state survives a save-load / cell change (co-save +
+        // Set3D re-assert) but the OSF scene that poses and locks the player does not — without this
+        // the player sits in raw kBleedOut, frozen and unposed, until recovery. Debounced inside.
+        auto* const player = PlayerActor();
+        if (player && Defeat::IsDefeated(player)) {
+            Presentation::ReassertPlayerDown();
         }
     }
 

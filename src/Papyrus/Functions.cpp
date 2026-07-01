@@ -113,6 +113,50 @@ namespace OSFDefeat::Papyrus
             return PlayerDefeat::GetRecoverySecondsRemaining(a_actor);
         }
 
+        // Ownership lease: content claims a held down-state under a named owner with a watchdog
+        // deadline. Queued to the game thread — check GetClaimOwner afterwards to confirm the
+        // claim landed (a competing owner's live lease refuses it).
+        bool ClaimDefeat(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_owner, float a_maxHoldSeconds)
+        {
+            if (!a_actor || !a_owner.c_str() || *a_owner.c_str() == '\0') {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, owner = std::string{ a_owner.c_str() }, a_maxHoldSeconds]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    PlayerDefeat::ClaimDefeat(actor, owner, a_maxHoldSeconds);
+                }
+            });
+        }
+
+        bool ReleaseClaim(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_owner)
+        {
+            if (!a_actor || !a_owner.c_str()) {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, owner = std::string{ a_owner.c_str() }]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    PlayerDefeat::ReleaseClaim(actor, owner);
+                }
+            });
+        }
+
+        std::string GetClaimOwner(std::monostate, RE::Actor* a_actor)
+        {
+            return PlayerDefeat::GetClaimOwner(a_actor);
+        }
+
+        // Emergency escape / safe uninstall. Console: cgf "OSFDefeat.ForceRecoverAll"
+        bool ForceRecoverAll(std::monostate)
+        {
+            return QueueGameTask([]() {
+                Defeat::ForceRecoverAll();
+            });
+        }
+
         // Captive-faction pacify on demand (surrender-to-base), independent of the automatic
         // `factionPacify` config gate. Removal also happens automatically on rescue.
         bool ApplyCaptiveFaction(std::monostate, RE::Actor* a_actor)
@@ -319,6 +363,10 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "GetLastPlayerParticipants", &GetLastPlayerParticipants, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SetRecoveryTimer", &SetRecoveryTimer, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetRecoverySecondsRemaining", &GetRecoverySecondsRemaining, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ClaimDefeat", &ClaimDefeat, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ReleaseClaim", &ReleaseClaim, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetClaimOwner", &GetClaimOwner, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ForceRecoverAll", &ForceRecoverAll, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ApplyCaptiveFaction", &ApplyCaptiveFaction, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RemoveCaptiveFaction", &RemoveCaptiveFaction, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsCaptiveFactionApplied", &IsCaptiveFactionApplied, std::nullopt, false);

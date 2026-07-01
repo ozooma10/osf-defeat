@@ -1,8 +1,38 @@
-# OSF Defeat Alpha Roadmap
+# OSF Defeat Roadmap
 
-## Alpha Goal
+## Vision
 
-Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: native lethal-damage interception for the player, a real defeated/down state, JSON-authored config/consequences, co-save recovery, and a small Papyrus surface for content authors.
+OSF Defeat started as "Acheron for Starfield." The reframe: it is a **defeat framework judged by
+whether content authors choose it and users trust it**, not by an Acheron feature checklist.
+
+What we keep from Acheron, because it is proven:
+
+- **Native hook interception, no polling** — the `ModActorValue` clamp (Health + EM) instead of
+  `OnHit` cloaks or Papyrus polling.
+- **Framework owns physics, content owns meaning** — defeat state, pacify, validation, selection,
+  handoff live here; scenes, robbery, capture, outcomes live in content mods.
+- **Declarative drop-in registration** — JSON consequence files; priority → conditions → weighted
+  random selection.
+- **Design humility about death** — scripted kills and excluded contexts pass through; the
+  framework chooses when to save you, and never soft-locks a quest to do it.
+
+What we deliberately do better than Acheron (its known adoption problems):
+
+- **Broken consumers must not strand the player** → ownership lease + watchdog (M1).
+- **Opaque decisions** ("why didn't defeat fire?") → decision transparency / explain mode (M1).
+- **Coarse cross-mod arbitration** (weights only) → cooldowns, once-per-location, central
+  user overrides (M2).
+- **Empty out of the box** → a shipped, vanilla-integrated default consequence pack (M3).
+
+What we exploit that Skyrim never had:
+
+- **EM damage as a first-class non-lethal channel** → stun-and-capture NPC defeat identity (M4).
+- **Ship combat as a second defeat domain** → "ship disabled → boarded" instead of exploding (M5).
+- **Vanilla consequence primitives** — afflictions, jail (`SendPlayerToJail`), bounty/faction rep —
+  as default content that feels native (M3).
+
+Stated position: OSF Defeat is SFSE-native and therefore **PC-only**. The native hook is the whole
+reason the core is solid; we accept the no-Creations/Xbox trade explicitly (README docs task, M0).
 
 ## Implemented Slice
 
@@ -11,42 +41,149 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
 - Aggressor attribution on the script/null path via the victim's `currentCombatTarget`.
 - `Actor::Set3D` re-assert hook so defeat state survives cell change / save load / `coc`.
 - Defeat registry, persistence, and Defeat / Rescue / Pacify verbs as the foundation spine.
-- Player down/recovery engine state with combat AI suppression during defeat.
+- Player down/recovery engine state; combat is deliberately **not** paused during the down beat
+  (player is ghosted; enemies resume naturally on recovery — no tcai-gate freeze).
 - **Verb-driven NPC defeat/recover** using the live-validated per-actor recipe (bleedout + ghost +
-  per-actor combat removal). Auto-defeat on NPC lethal hits is intentionally deferred (see below).
+  per-actor combat removal).
 - Recovery generalized to any defeated actor by `recoverAtDay`; held entries await explicit rescue.
 - `recoverAtDay` stored in co-save so save/load during defeat can resume recovery.
-- JSON validation under `Data/SFSE/OSFDefeat/Validation/*.json`.
-- JSON player consequences under `Data/SFSE/OSFDefeat/Consequences/Player/*.json`.
+- JSON validation under `Data/SFSE/OSFDefeat/Validation/*.json`; player consequences under
+  `Data/SFSE/OSFDefeat/Consequences/Player/*.json`.
 - Highest-priority, weighted-random player outcome selection with built-in fallback.
-- Player defeated/recovered Papyrus event registration.
-- Player consequence handoff context and `OnPlayerConsequenceStarted` registration for content mods.
-- Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
-- Opt-in **NPC auto-defeat** (`npcAutoDefeat`): hostile NPCs are auto-downed on a would-be-lethal hit
-  (clamp + inline hostility/flesh classification, symmetric with the player path).
-- `ReloadJSON` Papyrus helper to hot-reload validation/consequence JSON without a restart.
+- Player defeated/recovered/consequence-started Papyrus events with handoff context getters.
+- Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`).
+- Opt-in **NPC auto-defeat** (`npcAutoDefeat`) on would-be-lethal hits, symmetric with the player path.
+- `ReloadJSON` hot-reload of validation/consequence JSON without a restart.
+- **SAF-parity handoff API**: consequence `quest` tokens VM-dispatch `Quest.Start`
+  (`startQuest` opt-out); `SetRecoveryTimer` / `GetRecoverySecondsRemaining` + per-consequence
+  `holdRecovery`; captive-faction pacify verbs (`ApplyCaptiveFaction` / `RemoveCaptiveFaction` /
+  `IsCaptiveFactionApplied`), co-save persisted, auto-removed on rescue; defeat-time participant
+  snapshot (`GetLastPlayerParticipants`, `participantScanRadius`).
+- **Condition grammar (actor tier)**: per-consequence aggressor/victim keyword+faction matching
+  (any/all semantics, Acheron-style) as a selection gate before the priority/weight roll.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
-- **SAF-parity handoff API** (the four gaps from `docs/saf-surrender-evaluation.md`):
-  - Consequence `quest` tokens that resolve (editorID, then hex FormID) get `Quest.Start`
-    dispatched through the VM before `OnPlayerConsequenceStarted` fires (`startQuest` opt-out).
-  - Recovery handshake: `SetRecoveryTimer` / `GetRecoverySecondsRemaining` verbs plus a
-    per-consequence `holdRecovery` flag so content owns the down-state end-to-end.
-  - Captive-faction pacify as verbs (`ApplyCaptiveFaction` / `RemoveCaptiveFaction` /
-    `IsCaptiveFactionApplied`), per-actor guarded, co-save persisted, auto-removed on rescue.
-  - Defeat-time participant snapshot (`GetLastPlayerParticipants`, `participantScanRadius`),
-    recorded from the damage hook (recent attackers) — ProcessLists enumeration is a proven
-    crash from SFSE tasks and is deliberately not used.
-- **Condition grammar (actor tier)**: per-consequence `conditions` with aggressor/victim
-  keyword+faction matching (any/all semantics, Acheron-style), evaluated as a selection gate
-  before the priority/weight roll, with built-in fallback when nothing is eligible.
+
+## Milestone 0 — Alpha Hardening (now)
+
+Ship a build a user can trust for a whole playthrough.
+
+- [ ] In-game verify the current no-pacify build: down → recover with no `tcai`, no enemy freeze,
+      no crash (deployed but not yet re-confirmed).
+- [ ] Runtime-verify the robot/turret keyword **positive** case (negative proven across 3800+ reads).
+- [ ] Alpha test plan (below) green end-to-end.
+- [ ] Hook resilience across Starfield updates (Address Library discipline; version-gated IDs).
+- [ ] README: state the PC-only/SFSE position and the death-boundary philosophy explicitly.
+
+## Milestone 1 — Trust Core ✅ (implemented 2026-07-01, runtime verification pending)
+
+The features that make OSF Defeat *more* trustworthy than Acheron. All native, no RE blockers.
+
+1. ~~**Ownership lease + watchdog.**~~ Done: `ClaimDefeat(actor, owner, maxHoldSeconds)` /
+   `ReleaseClaim` / `GetClaimOwner` verbs; re-claim by the same owner extends, a competing owner is
+   refused; `holdRecovery` auto-claims under the consequence name (`maxHoldSeconds` JSON field);
+   lapsed deadline → force-rescue + WARN naming the defaulter. Player held entries are always
+   watchdog-armed (`watchdogSeconds`, default 600, 0 disables); NPC held entries only when leased
+   (a held captive is a legitimate long-term state). Lease persists in co-save (record v3).
+   Quest-stop detection is deferred — TESQuest state reads are RE-blocked; the deadline covers it.
+2. ~~**Emergency escape.**~~ Done: `ForceRecoverAll()` verb, console-callable via
+   `cgf "OSFDefeat.ForceRecoverAll"`. Overrides any lease. (Held-key binding deferred — needs an
+   input hook; the console path covers the unstick case.)
+3. ~~**Decision transparency ("explain mode").**~~ Done: `explainDecisions` validation flag adds
+   NPC passthrough reasons and full selection detail (per-outcome filter reason: disabled /
+   off-domain / cooldown / once-per-location / aggressor-or-victim conditions; then the
+   priority/weight pool and the roll). Filter reasons for outcomes log at INFO always.
+4. ~~**Safe uninstall / recover-all.**~~ Done: `ForceRecoverAll` also releases pacified actors and
+   strips framework-created captive factions; the co-save empties on the next save.
+5. ~~**Legible death boundary.**~~ Done: every deliberate player passthrough logs at INFO with its
+   reason (API-disabled, config-disabled, in-scene, excluded location, already dead), debounced.
+
+## Milestone 2 — Schema v2: Arbitration + Domains ✅ (implemented 2026-07-01)
+
+Cheap now, painful to retrofit once content packs exist in the wild.
+
+- ~~Per-consequence `cooldownSeconds`, `oncePerLocation`, and `enabled`.~~ Done. Cooldown and
+  once-per-location state is session-scoped by design (steady clock + fired-cell set).
+  `oncePerLocation` keys on the **parent cell** (GetCurrentLocation is RE-blocked); revisit when
+  the location seam is proven.
+- ~~Central user overrides file.~~ Done: `SFSE/OSFDefeat/Overrides.json` overrides
+  `enabled`/`weight`/`priority` per consequence name; unknown names log a hint; applied on load
+  and `ReloadJSON`.
+- ~~`domain` field.~~ Done: `"onfoot"` default, `"ship"` parses but never competes (parked with a
+  log line); *unknown* domains also park rather than misfire on foot. v1 files stay valid.
+- ~~Schema `version: 2` with v1 accepted.~~ Done for consequence + validation JSON; unknown
+  top-level consequence fields warn with file + field (`//`-prefixed keys stay silent for
+  comment conventions).
+
+## Milestone 3 — Default Consequence Pack (in the box)
+
+Don't repeat Acheron's empty-by-default mistake; make the framework worth installing alone, and
+prove the M1 lease/handoff API as its own first consumer.
+
+- **"Robbed, hurt, rescued"**: lose a cut of credits (configurable), gain a vanilla **affliction**
+  (sprain/laceration — pure vanilla feel, zero new UI), relocate to the nearest civilized point,
+  gear recoverable.
+- **Arrest path** for security/guard-faction aggressors via `SendPlayerToJail` (SAF-proven).
+- Placement validation for any relocation, and persistence promotion for transient aggressors
+  (the Shadow of Skyrim lessons: no gear lost to despawned random-encounter actors, no janky
+  respawn spots).
+- **Open decision:** built-in native handlers vs. a small first-party companion ESM
+  (`OSF Defeat - Basic Consequences`). Leaning companion ESM so the framework DLL stays pure and
+  the pack demonstrates the real content-mod workflow.
+
+## Milestone 4 — NPC Defeat Identity: EM + Capture
+
+Give NPC defeat a vanilla-plausible fantasy: stun-and-capture bounty hunting.
+
+- `defeatCause` in the handoff context: EM-down vs Health-down routed distinctly, so content can
+  treat a stunned target differently from a beaten one.
+- **NPC consequence policy**: what happens to a defeated NPC beyond down/recover — default policies
+  (recover when combat ends; plunderable while down; executable by aggressor) with content override.
+- Capture/ransom **hooks** for content (claim-a-captive verb, transfer-to-marker helper) — the
+  framework provides verbs, content provides the bounty board.
+- Follower/companion policy: companions get follower-specific down behavior, never auto-executed,
+  excluded from `npcAutoDefeat` by default.
+- Harden `npcAutoDefeat` for default-on candidacy.
+
+## Milestone 5 — Ship Domain
+
+The most Starfield-native leapfrog: the player's disabled ship gets boarded instead of exploding.
+
+- RE the ship-death/disabled seam (hull-zero and engine-disabled paths) in the OSF RE workspace.
+- Ship defeat state machine (disabled → boarded → consequence) reusing the existing selection +
+  handoff machinery under `"domain": "ship"`.
+- Default ship consequence in the M3 pack: boarded + robbed (cargo/credits) + ship left adrift or
+  towed, crew/companions handled by policy.
+
+## Second Tier / Platform Plays
+
+- **Struggle primitives**: a pre-threshold "defeat imminent" event (configurable health fraction)
+  plus a `ResistDefeat` verb — content builds the QTE/struggle minigame, the framework just
+  exposes the moment. Also covers voluntary pre-lethal surrender policies.
+- **Interaction registry on defeated NPCs** (Hunter Pride analog): content mods register options
+  with conditions; framework renders via dialogue/scene (no SkyUI equivalent). This is the
+  "defeated NPCs as a platform" play.
+- **Condition grammar completion**: `locations` / `questsRunning` / `questsCompleted` — blocked on
+  RE (GetCurrentLocation ID unmapped; TESQuest state natives unbound).
+- Alias/reference **fill** on consequence quest start (carried over; open).
+
+## Alpha Test Plan
+
+- Lethal player hit causes defeat instead of death.
+- Player recovers after configured `recoverySeconds`.
+- Combat resumes cleanly after recovery (no pacify, no freeze, no `tcai` needed).
+- Save/load while defeated preserves and resumes defeat state.
+- Invalid JSON logs an error and falls back safely.
+- `DisableProcessing(true)` lets vanilla death/behavior proceed without OSF handling.
+- A consequence that never calls back gets force-rescued by the watchdog (M1).
+- `xmake build` passes and deploys DLL/PDB, Papyrus files, and JSON defaults.
 
 ## JSON Schemas
 
-Validation v1:
+Validation v2 (current; v1 files stay valid):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "processingEnabled": true,
   "disableInScenes": false,
   "defaultRecoverySeconds": 8.0,
@@ -55,23 +192,30 @@ Validation v1:
   "factionPacify": false,
   "captiveFaction": "0x0003E0C8",
   "participantScanRadius": 4096.0,
+  "explainDecisions": false,
+  "watchdogSeconds": 600.0,
   "excludedLocations": [],
   "excludedQuests": []
 }
 ```
 
-Player consequence v1:
+Player consequence v2 (current; v1 files stay valid):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "name": "Alpha Down Then Recover",
   "priority": 0,
   "weight": 1,
   "recoverySeconds": 8.0,
   "quest": "OptionalQuestEditorID",
   "startQuest": true,
-  "holdRecovery": false,
+  "holdRecovery": true,
+  "maxHoldSeconds": 0.0,
+  "enabled": true,
+  "cooldownSeconds": 0.0,
+  "oncePerLocation": false,
+  "domain": "onfoot",
   "conditions": {
     "aggressor": { "keywords": ["ActorTypeHuman"], "factions": [], "match": "any" },
     "victim":    { "keywords": [], "factions": [], "match": "all" }
@@ -81,43 +225,32 @@ Player consequence v1:
 
 A `quest` token that resolves (editorID first, then hex FormID) gets `Quest.Start` dispatched
 before the consequence event fires; `startQuest: false` opts out. `holdRecovery: true` skips the
-auto-recovery timer — the consequence owns the down-state and ends it via `RescueActor`.
+auto-recovery timer and auto-claims the down-state under the consequence's name (`maxHoldSeconds`
+sets the watchdog deadline; 0 = config `watchdogSeconds`) — the consequence owns the down-state
+and ends it via `RescueActor`, `ReleaseClaim`, or `SetRecoveryTimer`.
+
+User overrides (`SFSE/OSFDefeat/Overrides.json`):
+
+```json
+{
+  "version": 1,
+  "consequences": {
+    "Some Pack's Outcome": { "enabled": false },
+    "Another Outcome":     { "weight": 5, "priority": 10 }
+  }
+}
+```
 
 `conditions` gates whether an outcome competes at all: outcomes whose conditions fail for the
 current victim/aggressor pair are filtered before the priority/weight roll (no eligible outcome →
 built-in fallback). Keyword/faction entries are form tokens (editorID or hex FormID); `aggressor`
-defaults to `"match": "any"` (one listed item suffices), `victim` to `"all"` — Acheron's
-semantics. A non-empty aggressor block fails when there is no aggressor. `locations` /
-`questsRunning` / `questsCompleted` are schema-reserved but ignored until their engine seams are
-RE-proven (GetCurrentLocation ID unmapped; TESQuest state natives unbound).
+defaults to `"match": "any"`, `victim` to `"all"` — Acheron's semantics. A non-empty aggressor
+block fails when there is no aggressor. `locations` / `questsRunning` / `questsCompleted` are
+schema-reserved but ignored until their engine seams are RE-proven.
 
-## Alpha Test Plan
+## Non-Goals (content-mod territory)
 
-- Lethal player hit causes defeat instead of death.
-- Player recovers after configured `recoverySeconds`.
-- Combat suppression/recovery does not permanently break AI.
-- Save/load while defeated preserves and resumes defeat state.
-- Invalid JSON logs an error and falls back safely.
-- `DisableProcessing(true)` lets vanilla death/behavior proceed without OSF handling.
-- `xmake build` passes and deploys DLL/PDB, Papyrus files, and JSON defaults.
-
-## Post-Alpha Milestones
-
-1. Runtime-test and harden the player hook across Starfield updates.
-2. ~~Add direct quest start/fill behavior for configured player consequences.~~ Done: `Quest.Start`
-   is VM-dispatched for resolving quest tokens (runtime-verified via the OSF Surrender PoC).
-   Alias/reference **fill** behavior remains open.
-3. ~~Expand validation from simple exclusions to a real condition grammar.~~ Actor conditions done:
-   per-consequence aggressor/victim keyword+faction matching with any/all semantics. Location and
-   quest-state conditions remain blocked on RE (GetCurrentLocation ID; TESQuest state reads).
-4. Add interaction/menu registration for content mods.
-5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, and `npcAutoDefeat`
-   flag are in place; worker-thread classification reads confirmed safe in the sandbox 2026-06-27) and
-   add an NPC consequence policy — what happens to a defeated NPC. Remaining runtime item: the
-   true-on-robot/turret keyword positive (low risk; the negative case is proven across 3800+ reads).
-
-## Explicitly Unsupported (yet)
-
-NPC consequence content (what happens to a defeated NPC beyond down/recover), follower-specific
-bleedout behavior, Hunter Pride-style UI, teleport capture scenes, full content event packs, complex
-Acheron condition grammar, and automatic quest/capture scene startup.
+Scenes and animation, stripping/robbery item policy, ransom/bad-end/device systems, capture
+dialogue and captivity gameplay, per-content configuration UIs. The framework provides the
+down-state, the handoff, the pacify verbs, and the context — content provides the meaning.
+Reference consumers: the M3 default pack (SFW) and OSF Surrender (adult) prove the same API.

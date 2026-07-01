@@ -16,8 +16,9 @@ namespace OSFDefeat::Persistence
         constexpr std::uint32_t kUniqueID = 'OSFD';
         constexpr std::uint32_t kRecDefeated = 'DFT0';
         constexpr std::uint32_t kRecCaptive = 'CPT0';
-        constexpr std::uint32_t kVersion = 2;
+        constexpr std::uint32_t kVersion = 3;  // v3 adds the ownership lease (deadline + owner name)
         constexpr std::uint32_t kCaptiveVersion = 1;
+        constexpr std::uint32_t kMaxLeaseOwner = 256;  // sanity cap when reading the owner string
 
         void Save(const SFSE::SerializationInterface* a_intfc)
         {
@@ -35,10 +36,18 @@ namespace OSFDefeat::Persistence
                 const float day = data ? data->registeredDay : 0.0f;
                 const FormID aggressor = data ? data->aggressor : 0;
                 const float recoverAtDay = data ? data->recoverAtDay : 0.0f;
+                const float leaseDeadlineDay = data ? data->leaseDeadlineDay : 0.0f;
+                const std::string leaseOwner = data ? data->CopyLeaseOwner() : std::string{};
+                const auto ownerLength = static_cast<std::uint32_t>(std::min<std::size_t>(leaseOwner.size(), kMaxLeaseOwner));
                 a_intfc->WriteRecordData(formId);
                 a_intfc->WriteRecordData(day);
                 a_intfc->WriteRecordData(aggressor);
                 a_intfc->WriteRecordData(recoverAtDay);
+                a_intfc->WriteRecordData(leaseDeadlineDay);
+                a_intfc->WriteRecordData(ownerLength);
+                if (ownerLength > 0) {
+                    a_intfc->WriteRecordData(leaseOwner.data(), ownerLength);
+                }
             }
             REX::INFO("[OSFDefeat] saved {} defeated actor(s)", count);
 
@@ -85,7 +94,8 @@ namespace OSFDefeat::Persistence
                 a_intfc->ReadRecordData(count);
                 for (std::uint32_t i = 0; i < count; ++i) {
                     FormID formId{}, aggressor{};
-                    float day{}, recoverAtDay{};
+                    float day{}, recoverAtDay{}, leaseDeadlineDay{};
+                    std::string leaseOwner;
                     a_intfc->ReadRecordData(formId);
                     a_intfc->ReadRecordData(day);
                     a_intfc->ReadRecordData(aggressor);
@@ -93,6 +103,18 @@ namespace OSFDefeat::Persistence
                         a_intfc->ReadRecordData(recoverAtDay);
                     } else if (formId == 0x14) {
                         recoverAtDay = PlayerDefeat::RecoveryDeadlineForSeconds(8.0f);
+                    }
+                    if (version >= 3) {
+                        a_intfc->ReadRecordData(leaseDeadlineDay);
+                        std::uint32_t ownerLength = 0;
+                        a_intfc->ReadRecordData(ownerLength);
+                        if (ownerLength > 0 && ownerLength <= kMaxLeaseOwner) {
+                            leaseOwner.resize(ownerLength);
+                            a_intfc->ReadRecordData(leaseOwner.data(), ownerLength);
+                        } else if (ownerLength > kMaxLeaseOwner) {
+                            REX::WARN("[OSFDefeat] co-save lease owner length {} exceeds cap; skipping record tail", ownerLength);
+                            break;  // stream is misaligned past here; stop reading this record
+                        }
                     }
 
                     const auto resolved = a_intfc->ResolveFormID(formId);
@@ -107,7 +129,7 @@ namespace OSFDefeat::Persistence
                             resolvedAggressor = *r;
                         }
                     }
-                    Defeat::RestoreFromSave(*resolved, day, resolvedAggressor, recoverAtDay);
+                    Defeat::RestoreFromSave(*resolved, day, resolvedAggressor, recoverAtDay, leaseDeadlineDay, std::move(leaseOwner));
                 }
                 REX::INFO("[OSFDefeat] loaded {} defeated actor(s) from co-save", count);
             }

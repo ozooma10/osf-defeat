@@ -85,8 +85,9 @@ namespace OSFDefeat::Config
             try {
                 std::ifstream input{ a_path };
                 const auto json = nlohmann::json::parse(input, nullptr, true, true);
-                if (json.value("version", 0) != 1) {
-                    REX::WARN("[OSFDefeat] validation JSON {} has unsupported version", a_path.string());
+                const int version = json.value("version", 0);
+                if (version != 1 && version != 2) {
+                    REX::WARN("[OSFDefeat] validation JSON {} has unsupported version {}", a_path.string(), version);
                     return;
                 }
 
@@ -117,6 +118,12 @@ namespace OSFDefeat::Config
                 }
                 if (json.contains("participantScanRadius")) {
                     a_config.participantScanRadius = json.value("participantScanRadius", 4096.0f);
+                }
+                if (json.contains("explainDecisions")) {
+                    a_config.explainDecisions = json.value("explainDecisions", false);
+                }
+                if (json.contains("watchdogSeconds")) {
+                    a_config.watchdogSeconds = json.value("watchdogSeconds", 600.0f);
                 }
                 ReadFormSet(json, "excludedLocations", a_config.excludedLocations);
                 ReadFormSet(json, "excludedQuests", a_config.excludedQuests);
@@ -211,6 +218,18 @@ namespace OSFDefeat::Config
     {
         std::shared_lock lock{ g_lock };
         return g_config.participantScanRadius;
+    }
+
+    bool IsExplainEnabled()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.explainDecisions;
+    }
+
+    float WatchdogSeconds()
+    {
+        std::shared_lock lock{ g_lock };
+        return g_config.watchdogSeconds;
     }
 
     std::filesystem::path RootPath()

@@ -14,11 +14,19 @@ namespace OSFDefeat::Defeat
 	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor);
 	bool RescueActor(RE::Actor* a_victim, bool a_undoPacify);
 
+	// Emergency escape / safe uninstall: rescues every defeated actor (overriding any lease),
+	// releases every pacified actor, and strips every captive-faction membership we created, so
+	// the co-save empties on the next save and the DLL can be removed mid-playthrough. Also the
+	// user-facing unstick verb (console: cgf "OSFDefeat.ForceRecoverAll"). Returns the number of
+	// actors rescued. Game thread.
+	std::size_t ForceRecoverAll();
+
 	[[nodiscard]] bool IsDefeated(const RE::Actor* a_victim);
 	[[nodiscard]] bool IsDamageImmune(const RE::Actor* a_victim);
 	[[nodiscard]] std::vector<RE::Actor*> GetAllDefeated(bool a_loadedOnly);
 
-	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay);
+	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay,
+		float a_leaseDeadlineDay = 0.0f, std::string a_leaseOwner = {});
 
 	void               Pacify(RE::Actor* a_victim);
 	void               UndoPacify(RE::Actor* a_victim);

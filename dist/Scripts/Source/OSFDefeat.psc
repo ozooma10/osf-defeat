@@ -35,6 +35,21 @@ Bool Function ReleaseActor(Actor akActor) global native
 Bool Function SetRecoveryTimer(Actor akActor, Float afSeconds) global native
 Float Function GetRecoverySecondsRemaining(Actor akActor) global native
 
+; Ownership lease. ClaimDefeat holds the down-state under your name with a watchdog deadline
+; (afMaxHoldSeconds <= 0 uses the configured watchdogSeconds). Re-claim with the same name to
+; EXTEND the deadline before it lapses; if it lapses, the framework force-rescues and logs your
+; name as the defaulter. ReleaseClaim (name must match) ends the lease and resumes the default
+; recovery timer. RescueActor always works regardless of any lease. The claim is queued to the
+; game thread - confirm with GetClaimOwner if another mod might be competing.
+Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds = 0.0) global native
+Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
+String Function GetClaimOwner(Actor akActor) global native
+
+; Emergency escape / safe uninstall: rescues every defeated actor (overriding any lease), releases
+; every pacified actor, and strips the captive-faction memberships this framework created, so the
+; co-save empties on the next save. Also works from the console: cgf "OSFDefeat.ForceRecoverAll"
+Bool Function ForceRecoverAll() global native
+
 ; Captive-faction pacify on demand (surrender-to-base): adds the actor to the configured captiveFaction so ALL hostiles treat them as non-hostile.
 Bool Function ApplyCaptiveFaction(Actor akActor) global native
 Bool Function RemoveCaptiveFaction(Actor akActor) global native

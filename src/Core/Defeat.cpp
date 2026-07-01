@@ -89,6 +89,45 @@ namespace OSFDefeat::Defeat
         return true;
     }
 
+    std::size_t ForceRecoverAll()
+    {
+        std::size_t rescued = 0;
+        for (const auto id : DefeatRegistry::Snapshot()) {
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                if (RescueActor(actor, true)) {
+                    ++rescued;
+                }
+            } else {
+                DefeatRegistry::Remove(id);  // unresolvable: purge so the co-save empties anyway
+            }
+        }
+
+        // Release pacified actors that were never registry entries (content PacifyActor without defeat).
+        std::vector<FormID> pacified;
+        {
+            std::shared_lock lock{ g_pacifiedLock };
+            pacified.assign(g_pacified.begin(), g_pacified.end());
+        }
+        for (const auto id : pacified) {
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+                UndoPacify(actor);
+            }
+        }
+
+        // Strip captive-faction memberships we created but rescue didn't cover (content may have
+        // applied them to actors that were never defeated). Unresolvable actors keep their tracking
+        // entry so a later load can still clean the membership.
+        for (const auto& [actorId, factionId] : Engine::SnapshotCaptiveFactions()) {
+            if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                Engine::RemoveCaptiveFaction(actor);
+            }
+        }
+
+        REX::INFO("[OSFDefeat] ForceRecoverAll: rescued {} actor(s), released {} pacified, captive factions stripped",
+            rescued, pacified.size());
+        return rescued;
+    }
+
     bool IsDefeated(const RE::Actor* a_victim)
     {
         return a_victim && DefeatRegistry::Contains(a_victim->GetFormID());
@@ -110,10 +149,13 @@ namespace OSFDefeat::Defeat
         return out;
     }
 
-    void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay)
+    void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay,
+        float a_leaseDeadlineDay, std::string a_leaseOwner)
     {
         auto data = DefeatRegistry::Add(a_id, a_registeredDay, a_aggressor, a_recoverAtDay);
         if (data) {
+            data->leaseDeadlineDay = a_leaseDeadlineDay;
+            data->SetLeaseOwner(std::move(a_leaseOwner));
             data->state.store(DefeatState::Defeated);
             // Re-apply down-state on load. The flag writes are safe on an unloaded actor; the Set3D
             // hook re-asserts again once its 3D (re)builds, so this covers both loaded and unloaded.

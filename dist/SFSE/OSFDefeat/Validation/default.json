@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "processingEnabled": true,
   "disableInScenes": false,
   "defaultRecoverySeconds": 8.0,
@@ -8,6 +8,17 @@
   "factionPacify": false,
   "captiveFaction": "0x0003E0C8",
   "participantScanRadius": 4096.0,
+
+  // Decision transparency: log NPC passthrough reasons and per-outcome selection detail
+  // (filter reasons, priority/weight pool, the roll). Player passthroughs always log.
+  "explainDecisions": false,
+
+  // Watchdog: max real seconds a held (holdRecovery / ClaimDefeat / SetRecoveryTimer <= 0)
+  // down-state may last before the framework force-rescues and logs the defaulting owner.
+  // Applies to the player's held entries always, to NPC entries only when leased via
+  // ClaimDefeat. 0 disables (held means held forever - not recommended).
+  "watchdogSeconds": 600.0,
+
   "excludedLocations": [],
   "excludedQuests": []
 }

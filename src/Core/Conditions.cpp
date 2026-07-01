@@ -126,7 +126,17 @@ namespace OSFDefeat::Conditions
 
     bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor)
     {
-        return EvaluateActorBlock(a_conditions.aggressor, a_aggressor) &&
-               EvaluateActorBlock(a_conditions.victim, a_victim);
+        return Explain(a_conditions, a_victim, a_aggressor) == EvalResult::kPass;
+    }
+
+    EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor)
+    {
+        if (!EvaluateActorBlock(a_conditions.aggressor, a_aggressor)) {
+            return EvalResult::kAggressorFailed;
+        }
+        if (!EvaluateActorBlock(a_conditions.victim, a_victim)) {
+            return EvalResult::kVictimFailed;
+        }
+        return EvalResult::kPass;
     }
 }

@@ -24,6 +24,48 @@ This is how a content mod takes ownership of a down-state. `SetRecoveryTimer(act
 
 A consequence JSON can also ship `"holdRecovery": true` so the player enters the down-state already held — no race against the recovery timer.
 
+## Ownership Lease + Watchdog
+
+```papyrus
+Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds = 0.0) global native
+Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
+String Function GetClaimOwner(Actor akActor) global native
+```
+
+The formal version of the recovery handshake. `ClaimDefeat` holds the down-state under your
+mod's name with a **watchdog deadline** (`afMaxHoldSeconds <= 0` uses the configured
+`watchdogSeconds`, default 600). If the deadline lapses — your quest stopped, errored out, or
+forgot to finish — the framework force-rescues the actor and logs your name as the defaulter,
+so a broken consumer can never strand the player. Rules:
+
+- Re-claim with the **same** name to extend the deadline before it lapses (long scenes should
+  re-claim periodically, or pass a generous `afMaxHoldSeconds` up front).
+- A claim against a **different** live lease is refused (two content packs cannot fight over
+  one down-state). Claims are queued to the game thread; confirm with `GetClaimOwner`.
+- `ReleaseClaim` (name must match) ends the lease and resumes the default recovery timer.
+- `RescueActor` always works, lease or not.
+- A consequence with `"holdRecovery": true` is auto-claimed under the consequence's name, with
+  its `"maxHoldSeconds"` (or the config default) as deadline — JSON packs get watchdog
+  protection without writing a line of script.
+- The player's held down-states are **always** watchdog-protected, even without a claim. NPC
+  held entries are only deadline-checked when leased — a held NPC captive is a legitimate
+  long-term state.
+
+## Emergency Escape / Safe Uninstall
+
+```papyrus
+Bool Function ForceRecoverAll() global native
+```
+
+Rescues every defeated actor (overriding any lease), releases every pacified actor, and strips
+the captive-faction memberships the framework created. The co-save empties on the next save, so
+this is also the safe-uninstall path: run it, save, remove the DLL. Users can run it from the
+console any time they feel stuck:
+
+```
+cgf "OSFDefeat.ForceRecoverAll"
+```
+
 ## Captive-Faction Pacify (surrender-to-base)
 
 ```papyrus
@@ -99,7 +141,11 @@ Bool Function IsHostile(Actor akActor, Actor akTarget) global native
 Function ReloadJSON() global native
 ```
 
-`ReloadJSON()` reloads validation and consequence files without restarting the game.
+`ReloadJSON()` reloads validation, consequence, and override files without restarting the game.
+Pair it with `"explainDecisions": true` (validation JSON) for a live authoring loop: edit JSON,
+reload, defeat, and read the selection log — every filtered outcome logs its reason (disabled,
+off-domain, cooling down, spent for this location, aggressor/victim conditions failed) plus the
+final priority/weight roll.
 ## Player Consequence Handoff
 
 ```papyrus

@@ -13,9 +13,20 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
 - 3D-reload re-assert (`Actor::Set3D`) so defeat state survives cell change / save load / `coc`.
 - Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
 - Defeat / Rescue / Pacify verbs backed by `DefeatRegistry` and SFSE co-save persistence.
+- **Ownership lease + watchdog**: content claims a held down-state under its name with a deadline
+  (`ClaimDefeat` / `ReleaseClaim`, or `holdRecovery` JSON auto-claims); a lapsed deadline
+  force-rescues and logs the defaulting consumer — a broken content mod can never strand the player.
+- **Emergency escape / safe uninstall**: `cgf "OSFDefeat.ForceRecoverAll"` rescues everyone,
+  releases pacifies, strips captive factions, and empties the co-save.
+- **Legible death boundary**: every deliberate player passthrough (processing disabled, in-scene,
+  excluded location…) logs its reason; `explainDecisions` adds NPC passthroughs and full
+  consequence-selection detail (per-outcome filter reasons + the priority/weight roll).
 - Player defeated/recovered/consequence-started Papyrus events.
-- JSON validation/config and player consequences under `Data/SFSE/OSFDefeat/`.
-- `ReloadJSON` Papyrus helper to hot-reload validation/consequence JSON without a restart.
+- JSON validation/config and player consequences under `Data/SFSE/OSFDefeat/` (schema v2:
+  `enabled`, `cooldownSeconds`, `oncePerLocation`, `domain`, `maxHoldSeconds`; v1 files stay valid).
+- Central `Overrides.json`: users tune any installed consequence (enabled/weight/priority) by name
+  in one file, without editing pack files.
+- `ReloadJSON` Papyrus helper to hot-reload validation/consequence/override JSON without a restart.
 
 ## Current Architecture
 
@@ -37,34 +48,44 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
 
 Default files ship in `dist/SFSE/OSFDefeat` and deploy to `SFSE/OSFDefeat`.
 
-Validation example:
+Validation example (v2):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "processingEnabled": true,
   "disableInScenes": false,
   "defaultRecoverySeconds": 8.0,
   "npcAutoDefeat": false,
   "npcAutoDefeatIncludeRobots": false,
+  "explainDecisions": false,
+  "watchdogSeconds": 600.0,
   "excludedLocations": [],
   "excludedQuests": []
 }
 ```
 
-Player consequence example:
+Player consequence example (v2):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "name": "Alpha Down Then Recover",
   "priority": 0,
   "weight": 1,
-  "recoverySeconds": 8.0
+  "recoverySeconds": 8.0,
+  "enabled": true,
+  "cooldownSeconds": 0.0,
+  "oncePerLocation": false,
+  "domain": "onfoot"
 }
 ```
 
-Selection uses the highest `priority`, then weighted random among entries at that priority. `quest` is parsed and logged but not started in alpha.
+Selection filters first (disabled, off-domain, cooldown, once-per-location, conditions), then the
+highest `priority` tier wins with weighted random among ties. A resolving `quest` token gets
+`Quest.Start` dispatched before the consequence event fires. `"domain": "ship"` is schema-reserved
+for the ship-defeat milestone. `Overrides.json` (root of `SFSE/OSFDefeat/`) lets users override
+`enabled`/`weight`/`priority` per consequence name in one place.
 
 ## Papyrus API
 
@@ -75,6 +96,10 @@ Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global nativ
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
 Bool Function PacifyActor(Actor akActor) global native
 Bool Function ReleaseActor(Actor akActor) global native
+Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds = 0.0) global native
+Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
+String Function GetClaimOwner(Actor akActor) global native
+Bool Function ForceRecoverAll() global native
 Bool Function IsDefeated(Actor akActor) global native
 Bool Function IsPacified(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native

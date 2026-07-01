@@ -17,6 +17,12 @@ OSF Defeat owns the neutral defeat state. OSF Surrender should consume it as a c
    (which also removes the captive faction), or hands control back with
    `OSFDefeat.SetRecoveryTimer(Game.GetPlayer(), seconds)`.
 
+With `holdRecovery` the down-state is auto-claimed under the consequence's name and watchdog-
+protected: if the scene runs longer than `maxHoldSeconds` (or the config `watchdogSeconds`,
+default 600s), extend the lease with `OSFDefeat.ClaimDefeat(Game.GetPlayer(), "<consequence name>")`
+before it lapses — a lapsed deadline force-rescues the player and logs the consequence as the
+defaulter. That is the framework's guarantee that a broken scene can never strand the player.
+
 ## Consequence JSON Example
 
 ```json

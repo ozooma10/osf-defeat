@@ -25,8 +25,32 @@ namespace OSFDefeat
 		float                    recoverAtDay{ 0.0f };   // absolute game-day auto-recovery deadline; <=0 = held (persisted)
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
 		std::atomic<DefeatState> state{ DefeatState::Defeating };
-		// registeredDay/aggressor are write-once at construction; recoverAtDay is mutated only on
-		// the game thread (Pipeline outcome + recovery tick + co-save Save) — no atomic needed.
+
+		// Ownership lease (persisted). A held down-state (recoverAtDay <= 0) may be claimed by a
+		// content consumer: leaseOwner names it (consequence name or ClaimDefeat token) and
+		// leaseDeadlineDay is the absolute game-day watchdog deadline — if it lapses without an
+		// extension, the recovery tick force-rescues and logs the defaulting owner. <= 0 = no
+		// deadline armed (yet). The player's held entries are always auto-armed by the tick when
+		// the watchdog is enabled; NPC entries only when explicitly leased (a held NPC captive is
+		// a legitimate long-term state).
+		float              leaseDeadlineDay{ 0.0f };
+		std::string        leaseOwner;   // guarded by leaseLock: written on the game thread, but read
+		mutable std::mutex leaseLock;    // from the VM (GetClaimOwner) and save threads — a torn string read is a crash, unlike the benign float races
+
+		[[nodiscard]] std::string CopyLeaseOwner() const
+		{
+			std::scoped_lock lock{ leaseLock };
+			return leaseOwner;
+		}
+		void SetLeaseOwner(std::string a_owner)
+		{
+			std::scoped_lock lock{ leaseLock };
+			leaseOwner = std::move(a_owner);
+		}
+
+		// registeredDay/aggressor are write-once at construction; recoverAtDay and leaseDeadlineDay
+		// are mutated only on the game thread (Pipeline outcome + verbs + recovery tick + co-save
+		// Save) — no atomic needed.
 	};
 
 	// Thread-safe, actor-agnostic store of every actor currently in a defeat state.
