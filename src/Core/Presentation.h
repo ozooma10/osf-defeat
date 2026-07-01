@@ -27,6 +27,16 @@ namespace OSFDefeat::Presentation
 	// Animation's undo ledger. Game thread.
 	void ClearPlayerDown();
 
+	// Self-heal for the down presentation. The framework down-state survives a save-load (co-save)
+	// and a cell change, but the OSF scene that poses + locks the player dies with both (OSF
+	// Animation drops every scene on save-load, plus a late TESLoadGameEvent StopAll backstop) —
+	// leaving the player held in raw kBleedOut: frozen, unposed, no orbit camera. Called from the
+	// recovery tick while the player is registered defeated: once no scene has held the player for
+	// ~1.5s, re-runs ShowPlayerDown. The debounce keeps the re-start clear of OSF's own post-load
+	// teardown and of the content hand-back window (scene ended, RescueActor imminent); if a race
+	// is still lost, the next tick re-asserts again. Game thread.
+	void ReassertPlayerDown();
+
 	// Low-level player-AI-driven toggle (Game.SetPlayerAIDriven via the VM). Used defensively by
 	// ClearPlayerDown to clear any stale AI-driven flag on recovery. Unrelated to the scene API.
 	void SetPlayerAIDriven(bool a_driven);

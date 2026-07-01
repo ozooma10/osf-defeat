@@ -19,6 +19,14 @@ namespace OSFDefeat::Presentation
 		OSF::API::IOSFSceneAPI* g_sceneApi = nullptr;
 		bool                    g_lazyRetried = false;
 
+		// ReassertPlayerDown debounce: when the down scene was first observed missing ({} = not
+		// missing). The scene must stay missing for a few recovery ticks before we restart it, so a
+		// post-load re-start lands AFTER OSF Animation's TESLoadGameEvent backstop (late StopAll +
+		// camera recovery) instead of racing it, and so a content hand-back window (scene already
+		// stopped, RescueActor imminent) never triggers a spurious cower.
+		constexpr std::chrono::milliseconds        kReassertDelay{ 1500 };
+		std::chrono::steady_clock::time_point      g_downSceneMissingSince{};
+
 		// Return the cached API, performing exactly one lazy RequestSceneAPI retry if AcquireSceneApi
 		// came up empty (OSF not yet ready at kPostPostDataLoad). After that single retry we stop
 		// poking the module/symbol lookup and just no-op.
@@ -114,6 +122,7 @@ namespace OSFDefeat::Presentation
 
 	void ClearPlayerDown()
 	{
+		g_downSceneMissingSince = {};
 		auto* const player = Player();
 		if (!player) {
 			return;
@@ -122,5 +131,36 @@ namespace OSFDefeat::Presentation
 			g_sceneApi->StopSceneForActor(player);
 		}
 		SetPlayerAIDriven(false);  // defensive: clear any stale AI-driven flag left on the player
+	}
+
+	void ReassertPlayerDown()
+	{
+		auto* const player = Player();
+		if (!player) {
+			return;
+		}
+		auto* const api = EnsureSceneApi();
+		if (!api) {
+			return;  // OSF absent: ShowPlayerDown already warned at down time; nothing to heal
+		}
+		if (api->GetSceneForActor(player) != 0) {
+			g_downSceneMissingSince = {};  // a scene holds the player (ours or content's) — healthy
+			return;
+		}
+
+		const auto now = std::chrono::steady_clock::now();
+		if (g_downSceneMissingSince == std::chrono::steady_clock::time_point{}) {
+			g_downSceneMissingSince = now;
+			return;
+		}
+		if (now - g_downSceneMissingSince < kReassertDelay) {
+			return;
+		}
+
+		// Re-arm rather than clear-on-success: a failed StartScene (missing def, mid-teardown
+		// actor) retries after another full delay instead of every tick.
+		g_downSceneMissingSince = {};
+		REX::INFO("[OSFDefeat] player-down scene missing (save-load / cell change / external stop) - re-asserting presentation");
+		ShowPlayerDown();
 	}
 }
