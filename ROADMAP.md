@@ -114,21 +114,26 @@ Cheap now, painful to retrofit once content packs exist in the wild.
   top-level consequence fields warn with file + field (`//`-prefixed keys stay silent for
   comment conventions).
 
-## Milestone 3 — Default Consequence Pack (in the box)
+## Milestone 3 — Default Consequence Pack (in the box) — v0.1 shipped
 
 Don't repeat Acheron's empty-by-default mistake; make the framework worth installing alone, and
 prove the M1 lease/handoff API as its own first consumer.
 
-- **"Robbed, hurt, rescued"**: lose a cut of credits (configurable), gain a vanilla **affliction**
-  (sprain/laceration — pure vanilla feel, zero new UI), relocate to the nearest civilized point,
-  gear recoverable.
-- **Arrest path** for security/guard-faction aggressors via `SendPlayerToJail` (SAF-proven).
-- Placement validation for any relocation, and persistence promotion for transient aggressors
-  (the Shadow of Skyrim lessons: no gear lost to despawned random-encounter actors, no janky
-  respawn spots).
-- **Open decision:** built-in native handlers vs. a small first-party companion ESM
-  (`OSF Defeat - Basic Consequences`). Leaning companion ESM so the framework DLL stays pure and
-  the pack demonstrates the real content-mod workflow.
+**Decision made: companion ESM** (`pack/` → `OSFDefeatBasic.esm`, built from Spriggit YAML by
+`pack/Build.ps1`, deployed as its own MO2 mod `OSF Defeat - Basic Consequences`). The framework
+DLL stays pure; the pack demonstrates the real content-mod workflow.
+
+- ~~**"Robbed and Left"** (v0.1, 2026-07-01)~~: human aggressors take a credits cut (default 10%,
+  min 25 / cap 2500) **into their own inventory** — hunt them down to recover it. `holdRecovery`
+  + auto-claim + `maxHoldSeconds: 120` watchdog, `cooldownSeconds: 300` arbitration, explicit
+  rescue handshake. Optional `HurtAffliction` spell property (ships unfilled).
+- Remaining for M3:
+  - Fill the affliction on the shipped record (needs verified vanilla affliction spell FormIDs).
+  - **Arrest path** for security/guard-faction aggressors via `Faction.SendPlayerToJail`
+    (SAF-proven; needs the faction forms + a bounty-semantics test).
+  - Relocation ("wake at the nearest civilized point") once placement validation is designed,
+    plus persistence promotion for transient aggressors (the Shadow of Skyrim lessons).
+  - Condition grammar: gate outcomes on `defeatCause` (EM-downed → different default beat).
 
 ## Milestone 4 — NPC Defeat Identity: EM + Capture
 

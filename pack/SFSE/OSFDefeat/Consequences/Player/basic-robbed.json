@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "name": "Basic: Robbed and Left",
+  "priority": 10,
+  "weight": 1,
+  "recoverySeconds": 30.0,
+  "quest": "OSFDefeatBasicRobbedQuest",
+  "holdRecovery": true,
+  "maxHoldSeconds": 120.0,
+  "cooldownSeconds": 300.0,
+  "domain": "onfoot",
+  "conditions": {
+    "aggressor": { "keywords": ["ActorTypeHuman"], "match": "any" }
+  }
+}

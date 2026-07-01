@@ -31,6 +31,9 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
 - Central `Overrides.json`: users tune any installed consequence (enabled/weight/priority) by name
   in one file, without editing pack files.
 - `ReloadJSON` Papyrus helper to hot-reload validation/consequence/override JSON without a restart.
+- **Basic Consequences pack** ([pack/](pack/README.md)): the in-box SFW default — "Robbed and
+  Left" (credits to the aggressor, recoverable by hunting them down), shipped as a companion
+  `OSFDefeatBasic.esm` and the reference consumer of the handoff API.
 
 ## Current Architecture
 
