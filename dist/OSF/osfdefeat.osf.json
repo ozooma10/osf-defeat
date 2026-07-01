@@ -8,7 +8,9 @@
       "stages": [
         {
           "loops": 0,
-          "clips": "meshes/actors/human/animations/common/cower_idle.af"
+          "clips": [
+            "meshes/actors/human/animations/common/cower_idle.af"
+          ]
         }
       ]
     }

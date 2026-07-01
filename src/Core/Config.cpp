@@ -158,6 +158,12 @@ namespace OSFDefeat::Config
         return g_config.excludedLocations.contains(a_location->GetFormID());
     }
 
+    bool HasExcludedLocations()
+    {
+        std::shared_lock lock{ g_lock };
+        return !g_config.excludedLocations.empty();
+    }
+
     bool ShouldDisableInScenes()
     {
         std::shared_lock lock{ g_lock };

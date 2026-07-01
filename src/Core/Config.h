@@ -23,6 +23,7 @@ namespace OSFDefeat::Config
     [[nodiscard]] RuntimeConfig Get();
     [[nodiscard]] bool IsProcessingEnabled();
     [[nodiscard]] bool IsLocationExcluded(RE::BGSLocation* a_location);
+    [[nodiscard]] bool HasExcludedLocations();
     [[nodiscard]] bool ShouldDisableInScenes();
     [[nodiscard]] bool IsNpcAutoDefeatEnabled();
     [[nodiscard]] bool NpcAutoDefeatIncludesRobots();
