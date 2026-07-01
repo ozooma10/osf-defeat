@@ -17,8 +17,10 @@ namespace OSFDefeat::Engine
         bool g_wasEssential{ false };
 
         // FormID of the "captive" faction we added the downed player to (SAF Surrender-style pacify), or 0
-        // when we didn't add one. Remembering the exact FormID (not re-reading config on recover) means a
-        // config change mid-down can't retarget the removal, and we only ever remove a membership WE added.
+        // when we didn't add one (pacify disabled, unresolved faction, or the player was ALREADY a member so
+        // we left their real membership untouched). It is set ONLY when we actually create the membership, so
+        // recovery removes precisely what we introduced — never a pre-existing or a retargeted membership.
+        // A nonzero value also doubles as the once-per-down guard against re-entrant SetPlayerDownState adds.
         std::atomic<std::uint32_t> g_captiveFactionApplied{ 0 };
 
         [[nodiscard]] bool PlayerIsEssential(RE::Actor* a_actor)
@@ -161,12 +163,21 @@ namespace OSFDefeat::Engine
         // RestorePlayerState removes it and normal AI re-hostiles them on the next think — no freeze, no
         // manual tcai. Ghost (set above) is belt-and-suspenders invulnerability for the pose beat.
         // (ProcessLists::StopCombatAndAlarmOnActor is still avoided: it permanently drops the player from
-        // every target list, which would block re-engagement.) Add is create-or-update at rank 0; we record
-        // the FormID so recovery removes exactly the membership we introduced.
-        if (auto* const faction = CaptiveFaction()) {
-            a_actor->AddToFaction(faction, 0);
-            g_captiveFactionApplied.store(faction->GetFormID());
-            REX::INFO("[OSFDefeat] captive-faction pacify: player added to faction {:08X}", faction->GetFormID());
+        // every target list, which would block re-engagement.)
+        //
+        // Add the membership at most ONCE per down (g_captiveFactionApplied still 0) and ONLY if the player
+        // isn't already a member (GetFactionRank < 0 = non-member). AddToFaction is create-or-update and
+        // RemoveFromFaction deletes outright, so a blind add+remove would clobber then destroy a legitimate
+        // pre-existing membership; and SetPlayerDownState is re-entrant (3D re-attach via Reattach, save-load
+        // re-assert via Defeat::RestoreFromSave), so a blind re-add could stack a second faction after a
+        // mid-down captiveFaction change and leak the first. Skipping when already a member leaves
+        // g_captiveFactionApplied at 0, so recovery correctly won't remove a membership we didn't create.
+        if (g_captiveFactionApplied.load() == 0) {
+            if (auto* const faction = CaptiveFaction(); faction && a_actor->GetFactionRank(faction, true) < 0) {
+                a_actor->AddToFaction(faction, 0);
+                g_captiveFactionApplied.store(faction->GetFormID());
+                REX::INFO("[OSFDefeat] captive-faction pacify: player added to faction {:08X}", faction->GetFormID());
+            }
         }
     }
 
