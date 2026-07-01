@@ -4,7 +4,6 @@
 
 #include "RE/B/BSPointerHandle.h"
 #include "RE/C/Console.h"
-#include "RE/P/PlayerCamera.h"
 #include "RE/P/ProcessLists.h"
 
 namespace OSFDefeat::Engine
