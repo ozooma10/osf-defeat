@@ -2,6 +2,8 @@
 
 #include "Core/QuestHandoff.h"
 
+#include "Core/FormToken.h"
+
 #include "RE/B/BSScriptUtil.h"
 #include "RE/G/GameVM.h"
 #include "RE/I/IVirtualMachine.h"
@@ -11,19 +13,6 @@ namespace OSFDefeat::QuestHandoff
 {
     namespace
     {
-        [[nodiscard]] std::optional<std::uint32_t> ParseHexFormID(std::string_view a_token)
-        {
-            if (a_token.starts_with("0x") || a_token.starts_with("0X")) {
-                a_token.remove_prefix(2);
-            }
-            if (a_token.empty() || a_token.size() > 8) {
-                return std::nullopt;
-            }
-            std::uint32_t parsed = 0;
-            const auto [ptr, ec] = std::from_chars(a_token.data(), a_token.data() + a_token.size(), parsed, 16);
-            return ec == std::errc{} && ptr == a_token.data() + a_token.size() ? std::optional{ parsed } : std::nullopt;
-        }
-
         bool NoArgs(RE::BSScrapArray<RE::BSScript::Variable>&)
         {
             return true;
@@ -32,16 +21,7 @@ namespace OSFDefeat::QuestHandoff
 
     RE::TESQuest* ResolveQuest(std::string_view a_token)
     {
-        if (a_token.empty()) {
-            return nullptr;
-        }
-        if (auto* const quest = RE::TESForm::LookupByEditorID<RE::TESQuest>(RE::BSFixedString{ a_token })) {
-            return quest;
-        }
-        if (const auto id = ParseHexFormID(a_token)) {
-            return RE::TESForm::LookupByID<RE::TESQuest>(*id);
-        }
-        return nullptr;
+        return ResolveFormToken<RE::TESQuest>(a_token);
     }
 
     bool StartQuest(RE::TESQuest* a_quest)

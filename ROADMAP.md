@@ -36,6 +36,9 @@ Build OSF Defeat as a playable, player-first “Acheron for Starfield” slice: 
   - Defeat-time participant snapshot (`GetLastPlayerParticipants`, `participantScanRadius`),
     recorded from the damage hook (recent attackers) — ProcessLists enumeration is a proven
     crash from SFSE tasks and is deliberately not used.
+- **Condition grammar (actor tier)**: per-consequence `conditions` with aggressor/victim
+  keyword+faction matching (any/all semantics, Acheron-style), evaluated as a selection gate
+  before the priority/weight roll, with built-in fallback when nothing is eligible.
 
 ## JSON Schemas
 
@@ -68,13 +71,25 @@ Player consequence v1:
   "recoverySeconds": 8.0,
   "quest": "OptionalQuestEditorID",
   "startQuest": true,
-  "holdRecovery": false
+  "holdRecovery": false,
+  "conditions": {
+    "aggressor": { "keywords": ["ActorTypeHuman"], "factions": [], "match": "any" },
+    "victim":    { "keywords": [], "factions": [], "match": "all" }
+  }
 }
 ```
 
 A `quest` token that resolves (editorID first, then hex FormID) gets `Quest.Start` dispatched
 before the consequence event fires; `startQuest: false` opts out. `holdRecovery: true` skips the
 auto-recovery timer — the consequence owns the down-state and ends it via `RescueActor`.
+
+`conditions` gates whether an outcome competes at all: outcomes whose conditions fail for the
+current victim/aggressor pair are filtered before the priority/weight roll (no eligible outcome →
+built-in fallback). Keyword/faction entries are form tokens (editorID or hex FormID); `aggressor`
+defaults to `"match": "any"` (one listed item suffices), `victim` to `"all"` — Acheron's
+semantics. A non-empty aggressor block fails when there is no aggressor. `locations` /
+`questsRunning` / `questsCompleted` are schema-reserved but ignored until their engine seams are
+RE-proven (GetCurrentLocation ID unmapped; TESQuest state natives unbound).
 
 ## Alpha Test Plan
 
@@ -90,8 +105,11 @@ auto-recovery timer — the consequence owns the down-state and ends it via `Res
 
 1. Runtime-test and harden the player hook across Starfield updates.
 2. ~~Add direct quest start/fill behavior for configured player consequences.~~ Done: `Quest.Start`
-   is VM-dispatched for resolving quest tokens. Alias/reference **fill** behavior remains open.
-3. Expand validation from simple exclusions to a real condition grammar.
+   is VM-dispatched for resolving quest tokens (runtime-verified via the OSF Surrender PoC).
+   Alias/reference **fill** behavior remains open.
+3. ~~Expand validation from simple exclusions to a real condition grammar.~~ Actor conditions done:
+   per-consequence aggressor/victim keyword+faction matching with any/all semantics. Location and
+   quest-state conditions remain blocked on RE (GetCurrentLocation ID; TESQuest state reads).
 4. Add interaction/menu registration for content mods.
 5. NPC defeat: harden the opt-in auto-defeat (the discriminator, per-actor recipe, and `npcAutoDefeat`
    flag are in place; worker-thread classification reads confirmed safe in the sandbox 2026-06-27) and

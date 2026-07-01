@@ -34,6 +34,9 @@ namespace OSFDefeat::Consequence
                 }
                 outcome.startQuest = json.value("startQuest", true);
                 outcome.holdRecovery = json.value("holdRecovery", false);
+                if (const auto it = json.find("conditions"); it != json.end()) {
+                    outcome.conditions = Conditions::Parse(*it, outcome.name);
+                }
                 return outcome;
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] consequence JSON {} failed: {}", a_path.string(), e.what());
@@ -66,23 +69,35 @@ namespace OSFDefeat::Consequence
 
     void Reload() { Load(); }
 
-    PlayerOutcome SelectPlayerOutcome()
+    PlayerOutcome SelectPlayerOutcome(RE::Actor* a_victim, RE::Actor* a_aggressor)
     {
         std::shared_lock lock{ g_lock };
-        if (g_playerOutcomes.empty()) {
+
+        // Condition gate first: only outcomes whose conditions pass for this pair
+        // compete on priority/weight at all.
+        std::vector<std::reference_wrapper<const PlayerOutcome>> eligible;
+        for (const auto& outcome : g_playerOutcomes) {
+            if (Conditions::Evaluate(outcome.conditions, a_victim, a_aggressor)) {
+                eligible.emplace_back(outcome);
+            } else {
+                REX::INFO("[OSFDefeat] outcome '{}' filtered out by conditions", outcome.name);
+            }
+        }
+        if (eligible.empty()) {
             PlayerOutcome fallback;
             fallback.recoverySeconds = Config::Get().defaultRecoverySeconds;
             return fallback;
         }
 
-        const auto best = std::max_element(g_playerOutcomes.begin(), g_playerOutcomes.end(), [](const auto& a_lhs, const auto& a_rhs) {
-            return a_lhs.priority < a_rhs.priority;
+        const auto best = std::max_element(eligible.begin(), eligible.end(), [](const auto& a_lhs, const auto& a_rhs) {
+            return a_lhs.get().priority < a_rhs.get().priority;
         });
-        const int bestPriority = best->priority;
+        const int bestPriority = best->get().priority;
 
         std::vector<std::reference_wrapper<const PlayerOutcome>> pool;
         int totalWeight = 0;
-        for (const auto& outcome : g_playerOutcomes) {
+        for (const auto& entry : eligible) {
+            const auto& outcome = entry.get();
             if (outcome.priority == bestPriority) {
                 pool.emplace_back(outcome);
                 totalWeight += std::max(1, outcome.weight);
