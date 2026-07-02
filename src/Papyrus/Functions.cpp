@@ -6,6 +6,7 @@
 #include "RE/G/GameVM.h"
 #include "RE/I/IVirtualMachine.h"
 
+#include "Core/Capture.h"
 #include "Core/Config.h"
 #include "Core/Consequence.h"
 #include "Core/Decision.h"
@@ -215,6 +216,71 @@ namespace OSFDefeat::Papyrus
             return Engine::HasCaptiveFactionApplied(a_actor);
         }
 
+        // Capture hooks (M4): claim a defeated NPC as a captor's prisoner. CaptureActor defeats +
+        // holds + pacifies the captive and records the captor; content builds the bounty board on top.
+        bool CaptureActor(std::monostate, RE::Actor* a_captive, RE::Actor* a_captor)
+        {
+            if (!a_captive) {
+                return false;
+            }
+            const FormID captiveId = a_captive->GetFormID();
+            const FormID captorId = a_captor ? a_captor->GetFormID() : 0;
+            return QueueGameTask([captiveId, captorId]() {
+                auto* const captive = RE::TESForm::LookupByID<RE::Actor>(captiveId);
+                auto* const captor = captorId ? RE::TESForm::LookupByID<RE::Actor>(captorId) : nullptr;
+                if (captive) {
+                    Capture::CaptureActor(captive, captor);
+                }
+            });
+        }
+
+        bool ReleaseCaptive(std::monostate, RE::Actor* a_actor, bool a_recover)
+        {
+            if (!a_actor) {
+                return false;
+            }
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, a_recover]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    Capture::ReleaseCaptive(actor, a_recover);
+                }
+            });
+        }
+
+        // Move a captive to a marker/ref (brig, ship, cell). Queued so the MoveTo VM-dispatch runs
+        // outside the current native frame.
+        bool TransferCaptive(std::monostate, RE::Actor* a_actor, RE::TESObjectREFR* a_target)
+        {
+            if (!a_actor || !a_target) {
+                return false;
+            }
+            const FormID actorId = a_actor->GetFormID();
+            const FormID targetId = a_target->GetFormID();
+            return QueueGameTask([actorId, targetId]() {
+                auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
+                auto* const target = RE::TESForm::LookupByID<RE::TESObjectREFR>(targetId);
+                if (actor && target) {
+                    Capture::TransferCaptive(actor, target);
+                }
+            });
+        }
+
+        bool IsCaptive(std::monostate, RE::Actor* a_actor)
+        {
+            return Capture::IsCaptive(a_actor);
+        }
+
+        RE::Actor* GetCaptor(std::monostate, RE::Actor* a_actor)
+        {
+            const FormID captorId = Capture::GetCaptorID(a_actor);
+            return captorId ? RE::TESForm::LookupByID<RE::Actor>(captorId) : nullptr;
+        }
+
+        std::vector<RE::Actor*> GetCaptives(std::monostate, RE::Actor* a_captor)
+        {
+            return Capture::GetCaptives(a_captor);
+        }
+
         bool IsDefeated(std::monostate, RE::Actor* a_actor)
         {
             return Defeat::IsDefeated(a_actor);
@@ -409,6 +475,12 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "ApplyCaptiveFaction", &ApplyCaptiveFaction, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RemoveCaptiveFaction", &RemoveCaptiveFaction, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsCaptiveFactionApplied", &IsCaptiveFactionApplied, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "CaptureActor", &CaptureActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ReleaseCaptive", &ReleaseCaptive, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "TransferCaptive", &TransferCaptive, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsCaptive", &IsCaptive, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetCaptor", &GetCaptor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetCaptives", &GetCaptives, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReloadJSON", &ReloadJSON, std::nullopt, false);
 
         g_bound = true;

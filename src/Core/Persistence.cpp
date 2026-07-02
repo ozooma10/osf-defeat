@@ -2,6 +2,7 @@
 
 #include "Core/Persistence.h"
 
+#include "Core/Capture.h"
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
 #include "Core/DefeatContext.h"
@@ -16,8 +17,10 @@ namespace OSFDefeat::Persistence
         constexpr std::uint32_t kUniqueID = 'OSFD';
         constexpr std::uint32_t kRecDefeated = 'DFT0';
         constexpr std::uint32_t kRecCaptive = 'CPT0';
+        constexpr std::uint32_t kRecCapture = 'CAP0';  // captor -> captive relationship (M4 capture hooks)
         constexpr std::uint32_t kVersion = 4;  // v3 adds the ownership lease (deadline + owner name); v4 the defeat cause
         constexpr std::uint32_t kCaptiveVersion = 1;
+        constexpr std::uint32_t kCaptureVersion = 1;
         constexpr std::uint32_t kMaxLeaseOwner = 256;  // sanity cap when reading the owner string
 
         void Save(const SFSE::SerializationInterface* a_intfc)
@@ -67,6 +70,22 @@ namespace OSFDefeat::Persistence
                     REX::INFO("[OSFDefeat] saved {} captive-faction record(s)", captiveCount);
                 }
             }
+
+            // Capture relationships (captiveID -> captorID + capturedDay), so a bounty board's
+            // prisoner list survives save/load.
+            if (a_intfc->OpenRecord(kRecCapture, kCaptureVersion)) {
+                const auto captures = Capture::Snapshot();
+                const auto captureCount = static_cast<std::uint32_t>(captures.size());
+                a_intfc->WriteRecordData(captureCount);
+                for (const auto& [captiveId, captorId, capturedDay] : captures) {
+                    a_intfc->WriteRecordData(captiveId);
+                    a_intfc->WriteRecordData(captorId);
+                    a_intfc->WriteRecordData(capturedDay);
+                }
+                if (captureCount > 0) {
+                    REX::INFO("[OSFDefeat] saved {} capture record(s)", captureCount);
+                }
+            }
         }
 
         void Load(const SFSE::SerializationInterface* a_intfc)
@@ -85,6 +104,29 @@ namespace OSFDefeat::Persistence
                         if (resolvedActor && resolvedFaction) {
                             Engine::RestoreCaptiveFaction(*resolvedActor, *resolvedFaction);
                         }
+                    }
+                    continue;
+                }
+                if (type == kRecCapture) {
+                    std::uint32_t captureCount = 0;
+                    a_intfc->ReadRecordData(captureCount);
+                    for (std::uint32_t i = 0; i < captureCount; ++i) {
+                        FormID captiveId{}, captorId{};
+                        float capturedDay{};
+                        a_intfc->ReadRecordData(captiveId);
+                        a_intfc->ReadRecordData(captorId);
+                        a_intfc->ReadRecordData(capturedDay);
+                        const auto resolvedCaptive = a_intfc->ResolveFormID(captiveId);
+                        if (!resolvedCaptive) {
+                            continue;  // captive from an unloaded mod: drop the relationship
+                        }
+                        FormID resolvedCaptor = 0;
+                        if (captorId != 0) {
+                            if (const auto r = a_intfc->ResolveFormID(captorId)) {
+                                resolvedCaptor = *r;
+                            }
+                        }
+                        Capture::RestoreCapture(*resolvedCaptive, resolvedCaptor, capturedDay);
                     }
                     continue;
                 }
@@ -150,6 +192,7 @@ namespace OSFDefeat::Persistence
             DefeatRegistry::Clear();
             Events::Clear();
             Engine::ClearCaptiveFactions();
+            Capture::Clear();
             REX::INFO("[OSFDefeat] reverted defeat state");
         }
     }

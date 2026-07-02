@@ -72,6 +72,22 @@ Bool Function ApplyCaptiveFaction(Actor akActor) global native
 Bool Function RemoveCaptiveFaction(Actor akActor) global native
 Bool Function IsCaptiveFactionApplied(Actor akActor) global native
 
+; Capture hooks: claim a defeated NPC as a captor's prisoner - the foundation for a bounty/ransom
+; board. CaptureActor puts the captive down if needed (scripted cause, akCaptor as aggressor), holds
+; recovery indefinitely, applies the captive faction (hostiles ignore the prisoner), and records the
+; captor (akCaptor may be None for an un-attributed hold). The capture is co-save persisted and is
+; auto-cleared when the captive recovers by any path (rescue / watchdog / ForceRecoverAll).
+; ReleaseCaptive ends it: abRecover also rescues (ends the down-state); otherwise the captive stays
+; down but is no longer claimed. TransferCaptive moves a captive to a marker/ref (brig, ship, cell)
+; via ObjectReference.MoveTo - the framework re-asserts the down-state at the destination.
+; GetCaptives(None) returns every captive; pass a captor to list only theirs.
+Bool Function CaptureActor(Actor akCaptive, Actor akCaptor = None) global native
+Bool Function ReleaseCaptive(Actor akActor, Bool abRecover = True) global native
+Bool Function TransferCaptive(Actor akActor, ObjectReference akTarget) global native
+Bool Function IsCaptive(Actor akActor) global native
+Actor Function GetCaptor(Actor akActor) global native
+Actor[] Function GetCaptives(Actor akCaptor = None) global native
+
 Bool Function IsDefeated(Actor akActor) global native
 Bool Function IsPacified(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native

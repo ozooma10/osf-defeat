@@ -2,6 +2,7 @@
 
 #include "Core/Defeat.h"
 
+#include "Core/Capture.h"
 #include "Core/Events.h"
 #include "Core/Presentation.h"
 #include "Engine/Engine.h"
@@ -80,6 +81,8 @@ namespace OSFDefeat::Defeat
             UndoPacify(a_victim);
         }
 
+        Capture::NotifyRecovered(id);  // a recovered actor is no longer a captive
+
         REX::INFO("[OSFDefeat] rescued actor {:08X}", id);
         if (a_victim->IsPlayerRef()) {
             Events::BroadcastPlayerRecovered();
@@ -123,6 +126,10 @@ namespace OSFDefeat::Defeat
                 Engine::RemoveCaptiveFaction(actor);
             }
         }
+
+        // Rescuing every defeated actor above already cleared their capture records via
+        // NotifyRecovered; drop anything left so the co-save's capture block empties too.
+        Capture::Clear();
 
         REX::INFO("[OSFDefeat] ForceRecoverAll: rescued {} actor(s), released {} pacified, captive factions stripped",
             rescued, pacified.size());

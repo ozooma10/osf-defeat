@@ -156,8 +156,16 @@ Give NPC defeat a vanilla-plausible fantasy: stun-and-capture bounty hunting.
   `GetDefeatCause(actor)` and `GetLastPlayerDefeatCause()` (0 none / 1 health / 2 EM / 3 scripted).
 - **NPC consequence policy**: what happens to a defeated NPC beyond down/recover — default policies
   (recover when combat ends; plunderable while down; executable by aggressor) with content override.
-- Capture/ransom **hooks** for content (claim-a-captive verb, transfer-to-marker helper) — the
-  framework provides verbs, content provides the bounty board.
+- ~~Capture/ransom **hooks** for content (claim-a-captive verb, transfer-to-marker helper)~~
+  Implemented 2026-07-01 (build-verified; deploy + in-game runtime pending). New `Core/Capture`
+  module: a persisted captor→captive relationship (co-save `CAP0`) layered on defeat + hold +
+  captive-faction pacify. Verbs: `CaptureActor(captive, captor)` (defeats-if-needed, holds
+  recovery, pacifies, records captor), `ReleaseCaptive(actor, recover)`, `TransferCaptive(actor,
+  target)` (ObjectReference.MoveTo via VM-dispatch — same unbound-native path as the quest
+  handoff; the Set3D re-assert keeps the down-state coherent at the destination — MoveTo dispatch
+  is the one part still needing in-game verification), `IsCaptive`, `GetCaptor`, `GetCaptives(captor)`
+  (null captor = all). Captures auto-clear on any recovery path (rescue / watchdog /
+  `ForceRecoverAll`) and on Revert, so the co-save empties and safe-uninstall stays intact.
 - Follower/companion policy: companions get follower-specific down behavior, never auto-executed,
   excluded from `npcAutoDefeat` by default.
 - Harden `npcAutoDefeat` for default-on candidacy.
