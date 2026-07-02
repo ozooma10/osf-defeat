@@ -26,8 +26,14 @@ Int Property RobbedMax = 2500 Auto Const
 { Cap: never lose more than this in one defeat. }
 
 Spell Property HurtAffliction Auto Const
-{ Optional: an affliction spell cast on the player as they go down (e.g. a
-  vanilla sprain). Ships unfilled; set it in xEdit/CK to enable the wound. }
+{ An affliction ABILITY added to the player as they go down. Ships filled with
+  the vanilla minor sprain (ENV_AFFL_Injury_Sprain_1) - treatable at any doctor
+  or with the right aid item, exactly like an environmental injury. Vanilla
+  applies afflictions via AddSpell, not Cast (they are ability spells). Clear
+  it in xEdit/CK to disable the wound. }
+
+Float Property HurtChance = 0.35 Auto Const
+{ Chance (0..1) the beating leaves the affliction. }
 
 Event OnQuestInit()
     RunConsequence()
@@ -62,9 +68,9 @@ Function RunConsequence()
         EndIf
     EndIf
 
-    ; --- Optional wound: only if a spell was authored onto the property. ---
-    If HurtAffliction != None
-        HurtAffliction.Cast(akPlayer, akPlayer)
+    ; --- The wound: an affliction ability, the vanilla way (AddSpell). ------
+    If HurtAffliction != None && Utility.RandomFloat() < HurtChance
+        akPlayer.AddSpell(HurtAffliction, true)
     EndIf
 
     ; --- The down beat, then hand the down-state back. -----------------------

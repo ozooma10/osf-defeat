@@ -8,4 +8,5 @@ ModHeader:
   - Master
   FormVersion: 582
   Author: ozooma10
-  MasterReferences: []
+  MasterReferences:
+  - Master: Starfield.esm

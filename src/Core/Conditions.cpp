@@ -114,6 +114,31 @@ namespace OSFDefeat::Conditions
         if (const auto it = a_json.find("victim"); it != a_json.end() && it->is_object()) {
             conditions.victim = ParseActorBlock(*it, a_owner, /*defaultMatchAll=*/true);
         }
+        if (const auto it = a_json.find("cause"); it != a_json.end()) {
+            const auto addCause = [&](const nlohmann::json& a_entry) {
+                if (!a_entry.is_string()) {
+                    REX::WARN("[OSFDefeat] consequence '{}': conditions cause entries must be strings", a_owner);
+                    return;
+                }
+                const auto token = a_entry.get<std::string>();
+                if (token == "health") {
+                    conditions.causes.push_back(DefeatCause::kHealth);
+                } else if (token == "em") {
+                    conditions.causes.push_back(DefeatCause::kEM);
+                } else if (token == "scripted") {
+                    conditions.causes.push_back(DefeatCause::kScripted);
+                } else {
+                    REX::WARN("[OSFDefeat] consequence '{}': unknown cause '{}' (use health/em/scripted); ignored", a_owner, token);
+                }
+            };
+            if (it->is_array()) {
+                for (const auto& entry : *it) {
+                    addCause(entry);
+                }
+            } else {
+                addCause(*it);
+            }
+        }
 
         // Schema-reserved, engine seams not yet RE-proven for this CommonLibSF.
         for (const auto key : { "locations", "questsRunning", "questsCompleted" }) {
@@ -124,13 +149,17 @@ namespace OSFDefeat::Conditions
         return conditions;
     }
 
-    bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor)
+    bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
-        return Explain(a_conditions, a_victim, a_aggressor) == EvalResult::kPass;
+        return Explain(a_conditions, a_victim, a_aggressor, a_cause) == EvalResult::kPass;
     }
 
-    EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor)
+    EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
+        if (!a_conditions.causes.empty() &&
+            std::find(a_conditions.causes.begin(), a_conditions.causes.end(), a_cause) == a_conditions.causes.end()) {
+            return EvalResult::kCauseFailed;
+        }
         if (!EvaluateActorBlock(a_conditions.aggressor, a_aggressor)) {
             return EvalResult::kAggressorFailed;
         }

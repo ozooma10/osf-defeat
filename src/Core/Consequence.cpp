@@ -175,7 +175,7 @@ namespace OSFDefeat::Consequence
 
     void Reload() { Load(); }
 
-    PlayerOutcome SelectPlayerOutcome(RE::Actor* a_victim, RE::Actor* a_aggressor)
+    PlayerOutcome SelectPlayerOutcome(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         const bool explain = Config::IsExplainEnabled();
         const FormID cell = CellOf(a_victim);
@@ -207,12 +207,15 @@ namespace OSFDefeat::Consequence
                     }
                 }
                 if (reason.empty()) {
-                    switch (Conditions::Explain(outcome.conditions, a_victim, a_aggressor)) {
+                    switch (Conditions::Explain(outcome.conditions, a_victim, a_aggressor, a_cause)) {
                     case Conditions::EvalResult::kAggressorFailed:
                         reason = "aggressor conditions failed";
                         break;
                     case Conditions::EvalResult::kVictimFailed:
                         reason = "victim conditions failed";
+                        break;
+                    case Conditions::EvalResult::kCauseFailed:
+                        reason = "cause conditions failed (defeat cause not in list)";
                         break;
                     default:
                         break;

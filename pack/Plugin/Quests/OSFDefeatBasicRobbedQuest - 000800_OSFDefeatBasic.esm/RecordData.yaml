@@ -4,7 +4,10 @@ FormVersion: 582
 VirtualMachineAdapter:
   Scripts:
   - Name: OSFDefeatBasicRobbed
-    Properties: []
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: HurtAffliction
+      Object: 2BDD28:Starfield.esm
   Versioning:
   - Break0
   ExtraBindDataVersion: 0

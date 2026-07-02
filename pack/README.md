@@ -9,23 +9,29 @@ Acheron's empty-by-default mistake, not repeated.
 Ships as its **own MO2 mod** (`OSF Defeat - Basic Consequences`) so users can toggle or replace
 the default content without touching the framework.
 
-## v0.1 — "Robbed and Left"
+## v0.2 — "Robbed and Left" + "Taken Into Custody"
 
-Defeated by human aggressors: they take a cut of your credits (default 10%, min 25, cap 2500)
-and leave you for dead. The credits go **into the aggressor's inventory** — hunt them down to
-get them back. After ~15s you come to. `cooldownSeconds: 300` keeps it from firing on every
-skirmish; when nothing is eligible the framework's built-in down-then-recover fallback runs.
+**Robbed and Left** (human aggressors, priority 10): they take a cut of your credits (default
+10%, min 25, cap 2500) and leave you for dead. The credits go **into the aggressor's inventory**
+— hunt them down to get them back. 35% chance the beating leaves a **vanilla minor sprain**
+(`ENV_AFFL_Injury_Sprain_1`, applied the vanilla way via `AddSpell` — treatable at any doctor).
+After ~15s you come to. `cooldownSeconds: 300` keeps it from firing on every skirmish.
 
-An optional `HurtAffliction` spell property (unfilled by default) casts a wound on the player as
-they go down — fill it in xEdit/CK with a vanilla affliction spell to enable.
+**Taken Into Custody** (security aggressors, priority 20 — beats robbery): instead of dying to
+UC/Freestar/Neon security, you're arrested. The script asks the aggressor for its own crime
+faction (`Actor.GetCrimeFaction`) and runs the vanilla arrest (`Faction.SendPlayerToJail`,
+inventory kept) — bounty, sentence, and release location are all stock behavior. Gated on the
+security-faction FormIDs mined from Starfield.esm (see `basic-arrested.json`).
+
+When nothing is eligible the framework's built-in down-then-recover fallback runs.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (one quest: `OSFDefeatBasicRobbedQuest`) |
-| `Scripts/Source/OSFDefeatBasicRobbed.psc` | The consequence script |
-| `SFSE/OSFDefeat/Consequences/Player/basic-robbed.json` | The consequence registration (v2 schema) |
+| `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (quests 000800 robbed, 000801 arrested) |
+| `Scripts/Source/*.psc` | The consequence scripts |
+| `SFSE/OSFDefeat/Consequences/Player/*.json` | The consequence registrations (v2 schema) |
 | `Build.ps1` | Compile Papyrus → build ESM via Spriggit → deploy to MO2 |
 
 ## Build
@@ -37,8 +43,8 @@ they go down — fill it in xEdit/CK with a vanilla affliction spell to enable.
 
 ## Planned (M3 remainder)
 
-- Arrest path for security-faction aggressors (`Faction.SendPlayerToJail`).
-- Filled vanilla affliction on the shipped record (needs verified spell FormIDs).
 - Relocation ("wake up at the nearest civilized point") once placement validation is designed —
   the Shadow of Skyrim respawn-jank lesson says don't ship teleports without it.
-- EM-cause variant outcomes once the condition grammar can gate on `defeatCause`.
+- EM-cause variant beats (the condition grammar now supports `"cause": ["em"]`; needs an authored
+  outcome worth the gate, e.g. stunned-and-captured).
+- Escalation for repeat defeats by the same faction (uses the cooldown/arbitration fields).

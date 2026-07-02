@@ -127,13 +127,16 @@ DLL stays pure; the pack demonstrates the real content-mod workflow.
   min 25 / cap 2500) **into their own inventory** — hunt them down to recover it. `holdRecovery`
   + auto-claim + `maxHoldSeconds: 120` watchdog, `cooldownSeconds: 300` arbitration, explicit
   rescue handshake. Optional `HurtAffliction` spell property (ships unfilled).
+- ~~**"Taken Into Custody"** (v0.2, 2026-07-01)~~: security aggressors arrest instead of kill —
+  `Actor.GetCrimeFaction()` → `Faction.SendPlayerToJail` (inventory kept), gated on the
+  security-faction FormIDs mined from Starfield.esm. Priority 20 beats robbery's 10.
+- ~~Fill the affliction~~ (v0.2): `HurtAffliction` ships filled with `ENV_AFFL_Injury_Sprain_1`
+  (0x002BDD28), applied the vanilla way (`AddSpell` — afflictions are abilities), 35% chance.
+- ~~Condition grammar: gate outcomes on `defeatCause`.~~ Done (2026-07-01): `"cause"` in
+  `conditions` (`health`/`em`/`scripted`, string or array).
 - Remaining for M3:
-  - Fill the affliction on the shipped record (needs verified vanilla affliction spell FormIDs).
-  - **Arrest path** for security/guard-faction aggressors via `Faction.SendPlayerToJail`
-    (SAF-proven; needs the faction forms + a bounty-semantics test).
   - Relocation ("wake at the nearest civilized point") once placement validation is designed,
     plus persistence promotion for transient aggressors (the Shadow of Skyrim lessons).
-  - Condition grammar: gate outcomes on `defeatCause` (EM-downed → different default beat).
 
 ## Milestone 4 — NPC Defeat Identity: EM + Capture
 
@@ -224,6 +227,7 @@ Player consequence v2 (current; v1 files stay valid):
   "oncePerLocation": false,
   "domain": "onfoot",
   "conditions": {
+    "cause": ["health", "em"],
     "aggressor": { "keywords": ["ActorTypeHuman"], "factions": [], "match": "any" },
     "victim":    { "keywords": [], "factions": [], "match": "all" }
   }
@@ -252,8 +256,10 @@ User overrides (`SFSE/OSFDefeat/Overrides.json`):
 current victim/aggressor pair are filtered before the priority/weight roll (no eligible outcome →
 built-in fallback). Keyword/faction entries are form tokens (editorID or hex FormID); `aggressor`
 defaults to `"match": "any"`, `victim` to `"all"` — Acheron's semantics. A non-empty aggressor
-block fails when there is no aggressor. `locations` / `questsRunning` / `questsCompleted` are
-schema-reserved but ignored until their engine seams are RE-proven.
+block fails when there is no aggressor. `cause` gates on how the victim went down —
+`"health"` / `"em"` / `"scripted"`, string or array, empty/absent = any. `locations` /
+`questsRunning` / `questsCompleted` are schema-reserved but ignored until their engine seams are
+RE-proven.
 
 ## Non-Goals (content-mod territory)
 

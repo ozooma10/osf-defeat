@@ -37,12 +37,13 @@ namespace OSFDefeat::Consequence
     void Reload();
 
     // Selection: outcomes that are disabled, off-domain, cooling down, spent for this
-    // cell, or whose conditions fail for this victim/aggressor pair are filtered out
+    // cell, or whose conditions fail for this victim/aggressor/cause are filtered out
     // first (each filtered outcome logs its reason); among the survivors the highest
     // priority tier wins and weights break ties randomly. Falls back to the built-in
     // down-then-recover outcome when nothing is eligible. Game thread (condition
     // evaluation and the cell read touch engine state).
-    [[nodiscard]] PlayerOutcome SelectPlayerOutcome(RE::Actor* a_victim, RE::Actor* a_aggressor);
+    [[nodiscard]] PlayerOutcome SelectPlayerOutcome(RE::Actor* a_victim, RE::Actor* a_aggressor,
+        DefeatCause a_cause = DefeatCause::kNone);
 
     // Arbitration bookkeeping: call once when the selected outcome actually fires.
     // Stamps the cooldown clock and the oncePerLocation cell. Game thread.

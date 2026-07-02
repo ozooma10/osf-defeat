@@ -569,7 +569,7 @@ namespace OSFDefeat::PlayerDefeat
             return;
         }
 
-        const auto outcome = Consequence::SelectPlayerOutcome(player, a_aggressor);
+        const auto outcome = Consequence::SelectPlayerOutcome(player, a_aggressor, a_cause);
         // Snapshot participants BEFORE the down state applies: DefeatActor drops the player from
         // combatant target lists (and may captive-pacify), which can clear the hostility the
         // participant filter keys on.

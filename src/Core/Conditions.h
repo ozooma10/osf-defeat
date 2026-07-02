@@ -2,6 +2,8 @@
 
 #include "pch.h"
 
+#include "Core/DefeatRegistry.h"
+
 #include <nlohmann/json_fwd.hpp>
 
 namespace OSFDefeat::Conditions
@@ -30,8 +32,9 @@ namespace OSFDefeat::Conditions
     {
         ActorBlock aggressor;  // defaults to matchAll = false ("any")
         ActorBlock victim;     // defaults to matchAll = true ("all")
+        std::vector<DefeatCause> causes;  // "cause": "em" | ["health","em","scripted"]; empty = any
 
-        [[nodiscard]] bool Empty() const { return aggressor.Empty() && victim.Empty(); }
+        [[nodiscard]] bool Empty() const { return aggressor.Empty() && victim.Empty() && causes.empty(); }
     };
 
     // Parses the "conditions" object of a consequence JSON. a_owner is the
@@ -41,14 +44,19 @@ namespace OSFDefeat::Conditions
     // Evaluates on the game thread (HasKeyword / GetFactionRank engine reads).
     // A non-empty aggressor block demands an aggressor: null aggressor fails it.
     // Unresolvable form tokens count as non-matches (and warn once per token).
-    [[nodiscard]] bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor);
+    // a_cause gates the "cause" list (a defeat property, not an actor test); pass
+    // kNone for contexts with no cause — a non-empty cause list then fails.
+    [[nodiscard]] bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
+        DefeatCause a_cause = DefeatCause::kNone);
 
     // Evaluate, but say which block failed — the selection explain log names it.
     enum class EvalResult
     {
         kPass,
         kAggressorFailed,
-        kVictimFailed
+        kVictimFailed,
+        kCauseFailed
     };
-    [[nodiscard]] EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor);
+    [[nodiscard]] EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
+        DefeatCause a_cause = DefeatCause::kNone);
 }

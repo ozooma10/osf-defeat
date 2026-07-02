@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "name": "Basic: Taken Into Custody",
+  "priority": 20,
+  "weight": 1,
+  "recoverySeconds": 30.0,
+  "quest": "OSFDefeatBasicArrestedQuest",
+  "holdRecovery": true,
+  "maxHoldSeconds": 60.0,
+  "domain": "onfoot",
+
+  // Aggressor must be settlement security. Hex FormIDs (Starfield.esm):
+  //   0x0015983F SecurityFaction (generic)
+  //   0x00052ADC UCSecurityFaction
+  //   0x00096529 FreestarSecurityFaction
+  //   0x0009652A FC_Neon_SecurityFaction
+  "conditions": {
+    "aggressor": {
+      "factions": ["0x0015983F", "0x00052ADC", "0x00096529", "0x0009652A"],
+      "match": "any"
+    }
+  }
+}
