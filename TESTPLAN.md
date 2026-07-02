@@ -1,0 +1,82 @@
+# OSF Defeat — One-Launch Verification Plan
+
+Everything below is **implemented and build-verified but never confirmed in-game**. The goal is a
+single play session that exercises the whole backlog and turns "compiles" into "works." Check items
+off as you go; each has a **confirm** line naming what you should see (usually a `[OSFDefeat]` line in
+the SFSE log at `Documents\My Games\Starfield\SFSE\` plus an on-screen effect).
+
+## 0. Deploy (game closed)
+
+- [ ] Close Starfield (a running game locks `OSF Defeat.dll` — deploys will fail "busy").
+- [ ] Framework: `xmake build -y` — deploys DLL/PDB, `OSFDefeat.pex`, and the JSON defaults.
+- [ ] Pack: `pack\Build.ps1` — compiles + builds `OSFDefeatBasic.esm` + deploys the mod.
+- [ ] Test harness: copy `test\OSFCaptureTest.pex` into `MO2\mods\OSF Defeat\Scripts\` (remove after).
+- [ ] MO2: enable both mods + `OSFDefeatBasic.esm` in the load order.
+- [ ] Boot to a save. **Confirm:** log shows `[OSFDefeat] Papyrus API bound` and `persistence registered`.
+- [ ] Optional: set `explainDecisions: true` in `SFSE\OSFDefeat\Validation\default.json` to log the
+      selection roll; `npcAutoDefeat: true` if you also want NPCs to auto-down (not required below).
+
+## 1. Core down/recover (the no-pacify build)
+
+- [ ] Take a lethal **Health** hit in a fight. **Confirm:** you drop into the cower down-state instead
+      of dying; log `registered defeated actor 00000014 ... cause 1`.
+- [ ] Wait out recovery. **Confirm:** you stand up; enemies resume attacking naturally (no freeze, no
+      `tcai` gate); log `rescued actor 00000014`.
+- [ ] Take a lethal **EM** hit (stun weapon). **Confirm:** down-state fires; cause logs `2`.
+- [ ] Save while down, reload. **Confirm:** you are still down after load and recovery resumes (DFT0).
+
+## 2. Pack v0.3 — one defeat per aggressor context
+
+For each, get defeated by that aggressor type and watch the beat. `cooldownSeconds` means re-test after
+a wait; **Robbed vs Picked Clean** share priority 10 so which fires is a weighted roll (Robbed ~3:1).
+
+- [ ] **Robbed and Left** — human aggressor, Health down. **Confirm:** notification "Robbed while
+      down: N credits taken"; the credits are in the aggressor's inventory; ~35% a minor sprain.
+- [ ] **Taken Alive** — human aggressor, **EM** down. **Confirm:** "Stunned and taken alive"; steeper
+      ransom; you are briefly non-hostile to everyone (captive faction), then released. *This proves
+      `cause: "em"` routing beats the robbery family.*
+- [ ] **Taken Into Custody** — killed by **UC/Freestar/Neon security**. **Confirm:** "Security takes
+      you into custody" then a vanilla jail transition (bounty/sentence/release all stock).
+- [ ] **Left as a Message** — killed by **House Va'ruun** zealots. **Confirm:** no credit loss; a
+      concussion affliction; "as a message" notification.
+- [ ] **Picked Clean** — human aggressor (repeat until it wins the roll). **Confirm:** ~25% credits
+      **and your digipicks** taken; a contusion.
+- [ ] **Left for Scrap** — killed by a **robot/turret**. **Confirm:** "registers you as neutralized";
+      an energy burn; short recovery. ***This is the open M0 test: positive `ActorTypeRobot` keyword.***
+- [ ] **Mauled** — killed by a **creature**. **Confirm:** "loses interest and prowls off"; lacerations;
+      long down; does not re-fire in the same cell. ***Positive `ActorTypeCreature` keyword test.***
+- [ ] With `explainDecisions` on, **confirm** the log shows the filter reasons + priority/weight roll.
+
+## 3. M4 capture hooks (console harness)
+
+Run `cgf "OSFCaptureTest.Help"` first. Get into a fight for a live target.
+
+- [ ] `cgf "OSFCaptureTest.DownTarget"` — **confirm:** your combat target drops (log `registered
+      defeated actor`), scripted cause `3`.
+- [ ] `cgf "OSFCaptureTest.CaptureTarget"` — **confirm:** log `captured XXXXXXXX (captor 00000014)`;
+      the NPC stays down and stops being shot at (captive faction applied).
+- [ ] `cgf "OSFCaptureTest.ListCaptives"` — **confirm:** notification count ≥ 1; log lines show
+      `captor=<player>` and `isCaptive=True`.
+- [ ] `cgf "OSFCaptureTest.TransferToPlayer"` then `cgf "OSFCaptureTest.CheckDistance"` — **confirm:**
+      distance drops to near-zero; log `transfer captive ... dispatch ok`. ***This is the one part with
+      no proven precedent — the `ObjectReference.MoveTo` VM-dispatch. If the captive does not move,
+      the dispatch path needs revisiting (arg packing / handle type).***
+- [ ] Save mid-capture, reload, `ListCaptives` again — **confirm:** the roster survives (CAP0 co-save);
+      log `loaded ... / saved N capture record(s)`.
+- [ ] `cgf "OSFCaptureTest.ReleaseAll"` — **confirm:** captives recover; `ListCaptives` now reports 0.
+
+## 4. Trust / safety invariants
+
+- [ ] Watchdog: hold a consequence past its `maxHoldSeconds` (e.g. a scenario whose script you block).
+      **Confirm:** the tick force-rescues and logs the defaulting owner's name.
+- [ ] `cgf "OSFDefeat.ForceRecoverAll"` while defeated **and** holding captives. **Confirm:** everyone
+      recovers, captive factions are stripped, and `ListCaptives` reports 0 (safe uninstall path).
+- [ ] After ForceRecoverAll, save then inspect — **confirm:** no OSF records linger (co-save empties).
+- [ ] `cgf "OSFDefeat.DisableProcessing" ...`/config `processingEnabled:false` → take a lethal hit.
+      **Confirm:** vanilla death proceeds (framework steps aside); passthrough logged with a reason.
+
+## Notes
+
+- Remove `OSFCaptureTest.pex` when done; it is a test tool, not shipped content.
+- If a keyword-gated scenario (Scrap/Mauled) never fires, the aggressor may not carry the expected
+  `ActorType*` keyword — capture its base form and re-check the token before assuming a bug.
