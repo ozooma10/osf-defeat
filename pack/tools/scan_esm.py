@@ -7,13 +7,15 @@ Compressed records (flag 0x00040000) hold [decompSize u32][zlib stream].
 """
 
 import mmap
+import os
 import re
 import struct
 import sys
 import zlib
 
 ESM = r"C:\Program Files (x86)\Steam\steamapps\common\Starfield\Data\Starfield.esm"
-TARGETS = {b"SPEL", b"FACT"}
+# Default record types to scan; override with OSF_SCAN_TYPES (comma-separated, e.g. "KYWD").
+TARGETS = {t.encode() for t in os.environ.get("OSF_SCAN_TYPES", "SPEL,FACT").split(",") if t}
 COMPRESSED = 0x00040000
 
 

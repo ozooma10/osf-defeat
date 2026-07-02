@@ -9,19 +9,34 @@ Acheron's empty-by-default mistake, not repeated.
 Ships as its **own MO2 mod** (`OSF Defeat - Basic Consequences`) so users can toggle or replace
 the default content without touching the framework.
 
-## v0.2 — "Robbed and Left" + "Taken Into Custody"
+## v0.3 — seven scenarios, one per defeat context
 
-**Robbed and Left** (human aggressors, priority 10): they take a cut of your credits (default
-10%, min 25, cap 2500) and leave you for dead. The credits go **into the aggressor's inventory**
-— hunt them down to get them back. 35% chance the beating leaves a **vanilla minor sprain**
-(`ENV_AFFL_Injury_Sprain_1`, applied the vanilla way via `AddSpell` — treatable at any doctor).
-After ~15s you come to. `cooldownSeconds: 300` keeps it from firing on every skirmish.
+Each aggressor context produces a *plausible* beat instead of the framework's meaningless
+built-in down-then-recover fallback. Selection is highest-priority-tier-wins, weights break ties
+within a tier, and mutually-exclusive conditions (robot vs. human vs. creature) simply never
+compete. The ladder:
 
-**Taken Into Custody** (security aggressors, priority 20 — beats robbery): instead of dying to
-UC/Freestar/Neon security, you're arrested. The script asks the aggressor for its own crime
-faction (`Actor.GetCrimeFaction`) and runs the vanilla arrest (`Faction.SendPlayerToJail`,
-inventory kept) — bounty, sentence, and release location are all stock behavior. Gated on the
-security-faction FormIDs mined from Starfield.esm (see `basic-arrested.json`).
+| Priority | Scenario | Fires when | Beat |
+|---|---|---|---|
+| 20 | **Taken Into Custody** | security faction (UC/Freestar/Neon) | vanilla arrest via `Faction.SendPlayerToJail` — bounty, sentence, release all stock |
+| 15 | **Taken Alive** | human aggressor **+ EM cause** (a stun) | held as a non-hostile captive (`ApplyCaptiveFaction`), steeper ransom (20%) into the captor's inventory, then released |
+| 12 | **Left as a Message** | House Va'ruun zealots | fanatics don't loot: no credit loss, a vanilla concussion, short down |
+| 10 | **Robbed and Left** | human aggressor (weight 3) | 10% credits into the aggressor's inventory; 35% chance of a minor sprain |
+| 10 | **Picked Clean** | human aggressor (weight 1, long cooldown) | the harsher sibling: 25% credits **and your digipicks**, plus a contusion |
+| 10 | **Left for Scrap** | robot / turret | no robbery motive: shortest down, an energy burn, quick recovery |
+| 10 | **Mauled** | creature | longest down, deep lacerations, `oncePerLocation` so a den can't loop you |
+
+**Recoverable loot.** Every credit/digipick theft goes **into the aggressor's inventory** (via
+`RemoveItem`'s destination arg) — hunt the attacker down to get it back, never a flat deletion.
+
+**Vanilla wounds.** Afflictions are added the vanilla way (`AddSpell`, they are ability spells —
+*not* `Cast`), so they read as normal environmental injuries and any doctor or aid item clears
+them. FormIDs mined from `Starfield.esm` with `tools/scan_esm.py` and filled onto the shipped
+records; clear the `Wound`/`HurtAffliction` property in xEdit/CK to disable a wound.
+
+**Cause routing.** `Taken Alive` is what gives EM its own identity: an EM-down (`cause: "em"`) by a
+human routes to capture instead of the lethal-Health robbery family. A stunned target is not a
+beaten one.
 
 When nothing is eligible the framework's built-in down-then-recover fallback runs.
 
@@ -29,9 +44,10 @@ When nothing is eligible the framework's built-in down-then-recover fallback run
 
 | Path | What |
 |---|---|
-| `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (quests 000800 robbed, 000801 arrested) |
-| `Scripts/Source/*.psc` | The consequence scripts |
+| `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (quests 000800–000806) |
+| `Scripts/Source/*.psc` | The consequence scripts (one per scenario) |
 | `SFSE/OSFDefeat/Consequences/Player/*.json` | The consequence registrations (v2 schema) |
+| `tools/scan_esm.py` | Binary SPEL/FACT/KYWD/MISC FormID scanner (`OSF_SCAN_TYPES=KYWD python … <regex>`) |
 | `Build.ps1` | Compile Papyrus → build ESM via Spriggit → deploy to MO2 |
 
 ## Build
@@ -45,6 +61,7 @@ When nothing is eligible the framework's built-in down-then-recover fallback run
 
 - Relocation ("wake up at the nearest civilized point") once placement validation is designed —
   the Shadow of Skyrim respawn-jank lesson says don't ship teleports without it.
-- EM-cause variant beats (the condition grammar now supports `"cause": ["em"]`; needs an authored
-  outcome worth the gate, e.g. stunned-and-captured).
+- Richer item stripping for `Picked Clean` (a curated aid/ammo FormList) beyond credits + digipicks.
 - Escalation for repeat defeats by the same faction (uses the cooldown/arbitration fields).
+- Runtime verification that `ActorTypeCreature` / `ActorTypeRobot` fire on the intended aggressors
+  (the negative case is proven; the positive keyword case is the open M0 test).

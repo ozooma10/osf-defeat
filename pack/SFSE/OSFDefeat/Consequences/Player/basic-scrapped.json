@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "name": "Basic: Left for Scrap",
+  "priority": 10,
+  "weight": 1,
+  "recoverySeconds": 12.0,
+  "quest": "OSFDefeatBasicScrappedQuest",
+  "holdRecovery": true,
+  "maxHoldSeconds": 60.0,
+  "cooldownSeconds": 120.0,
+  "domain": "onfoot",
+
+  // A robot/turret has no robbery motive: it registers the kill and disengages.
+  // Short beat, energy burn, quick recovery. ActorTypeRobot is the same keyword
+  // the framework classifies robots by (Decision.cpp); turrets carry it too.
+  //   ActorTypeRobot 0x002702C9
+  "conditions": {
+    "aggressor": { "keywords": ["ActorTypeRobot"], "match": "any" }
+  }
+}

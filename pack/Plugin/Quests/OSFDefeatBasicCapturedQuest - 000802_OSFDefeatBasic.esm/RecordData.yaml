@@ -1,0 +1,22 @@
+FormKey: 000802:OSFDefeatBasic.esm
+EditorID: OSFDefeatBasicCapturedQuest
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatBasicCaptured
+    Properties: []
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: Taken Alive
+Data:
+  Flags: []
+  Priority: 55
+  Unused: 0x000000
+UnusedConditions: []
+NextAliasID: 0
+Aliases: []

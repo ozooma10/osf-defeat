@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "name": "Basic: Taken Alive",
+  "priority": 15,
+  "weight": 1,
+  "recoverySeconds": 30.0,
+  "quest": "OSFDefeatBasicCapturedQuest",
+  "holdRecovery": true,
+  "maxHoldSeconds": 150.0,
+  "cooldownSeconds": 300.0,
+  "domain": "onfoot",
+
+  // A human aggressor who put you down with EM (a stun, not a kill) took you
+  // alive on purpose. cause "em" is what separates this from the lethal-Health
+  // robbery family; priority 15 beats that family (10) so an EM-down by a human
+  // routes here instead of "Robbed and Left". Security still wins (arrest = 20).
+  "conditions": {
+    "aggressor": { "keywords": ["ActorTypeHuman"], "match": "any" },
+    "cause": "em"
+  }
+}

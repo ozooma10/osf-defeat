@@ -1,0 +1,25 @@
+FormKey: 000803:OSFDefeatBasic.esm
+EditorID: OSFDefeatBasicPickedCleanQuest
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatBasicPickedClean
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: Wound
+      Object: 2BDD1B:Starfield.esm
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: Picked Clean
+Data:
+  Flags: []
+  Priority: 55
+  Unused: 0x000000
+UnusedConditions: []
+NextAliasID: 0
+Aliases: []

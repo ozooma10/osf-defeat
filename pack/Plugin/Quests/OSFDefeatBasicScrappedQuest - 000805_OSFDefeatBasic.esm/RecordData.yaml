@@ -1,0 +1,25 @@
+FormKey: 000805:OSFDefeatBasic.esm
+EditorID: OSFDefeatBasicScrappedQuest
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatBasicScrapped
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: Wound
+      Object: 2BDD19:Starfield.esm
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: Left for Scrap
+Data:
+  Flags: []
+  Priority: 55
+  Unused: 0x000000
+UnusedConditions: []
+NextAliasID: 0
+Aliases: []

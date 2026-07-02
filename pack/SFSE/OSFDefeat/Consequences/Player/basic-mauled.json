@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "name": "Basic: Mauled",
+  "priority": 10,
+  "weight": 1,
+  "recoverySeconds": 40.0,
+  "quest": "OSFDefeatBasicMauledQuest",
+  "holdRecovery": true,
+  "maxHoldSeconds": 120.0,
+  "cooldownSeconds": 300.0,
+  "oncePerLocation": true,
+  "domain": "onfoot",
+
+  // A creature loses interest once you stop moving: the longest down beat, deep
+  // lacerations, and once-per-location so a den doesn't maul you on a loop.
+  //   ActorTypeCreature 0x001469CF  (parallels ActorTypeHuman/ActorTypeRobot)
+  "conditions": {
+    "aggressor": { "keywords": ["ActorTypeCreature"], "match": "any" }
+  }
+}

@@ -114,7 +114,7 @@ Cheap now, painful to retrofit once content packs exist in the wild.
   top-level consequence fields warn with file + field (`//`-prefixed keys stay silent for
   comment conventions).
 
-## Milestone 3 — Default Consequence Pack (in the box) — v0.1 shipped
+## Milestone 3 — Default Consequence Pack (in the box) — v0.3 shipped
 
 Don't repeat Acheron's empty-by-default mistake; make the framework worth installing alone, and
 prove the M1 lease/handoff API as its own first consumer.
@@ -134,9 +134,18 @@ DLL stays pure; the pack demonstrates the real content-mod workflow.
   (0x002BDD28), applied the vanilla way (`AddSpell` — afflictions are abilities), 35% chance.
 - ~~Condition grammar: gate outcomes on `defeatCause`.~~ Done (2026-07-01): `"cause"` in
   `conditions` (`health`/`em`/`scripted`, string or array).
+- ~~**Scenario set** (v0.3, 2026-07-01)~~: five more outcomes so every common aggressor context
+  gets a plausible beat rather than the built-in fallback, and every framework surface has a
+  shipped consumer. Priority ladder: **Taken Into Custody** 20 (security) > **Taken Alive** 15
+  (human + `cause: em`; `ApplyCaptiveFaction` + ransom + `RemoveCaptiveFaction`) > **Left as a
+  Message** 12 (Va'ruun faction; no loot, concussion) > tier 10 { **Robbed and Left** w3,
+  **Picked Clean** w1 (credits + digipicks + contusion), **Left for Scrap** (`ActorTypeRobot`;
+  short + burn), **Mauled** (`ActorTypeCreature`; long + lacerations + `oncePerLocation`) }.
+  All wounds are vanilla afflictions filled from `tools/scan_esm.py` (now also does KYWD/MISC).
 - Remaining for M3:
   - Relocation ("wake at the nearest civilized point") once placement validation is designed,
     plus persistence promotion for transient aggressors (the Shadow of Skyrim lessons).
+  - Runtime-verify the positive `ActorTypeCreature` / `ActorTypeRobot` aggressor case (M0 test).
 
 ## Milestone 4 — NPC Defeat Identity: EM + Capture
 

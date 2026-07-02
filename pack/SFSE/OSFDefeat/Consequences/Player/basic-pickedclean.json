@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "name": "Basic: Picked Clean",
+  "priority": 10,
+  "weight": 1,
+  "recoverySeconds": 30.0,
+  "quest": "OSFDefeatBasicPickedCleanQuest",
+  "holdRecovery": true,
+  "maxHoldSeconds": 120.0,
+  "cooldownSeconds": 900.0,
+  "domain": "onfoot",
+
+  // The harsher, rarer sibling of "Robbed and Left": same priority tier (10), so
+  // it weight-competes with Robbed against a human aggressor (Robbed weight 3,
+  // this weight 1 -> fires ~1 in 4). Longer cooldown keeps the steeper loss rare.
+  "conditions": {
+    "aggressor": { "keywords": ["ActorTypeHuman"], "match": "any" }
+  }
+}
