@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "name": "OSF Defeat (player down-state scenes)",
+  "unlisted": true,
   "scenes": [
     {
       "id": "osf.defeat.cower",
