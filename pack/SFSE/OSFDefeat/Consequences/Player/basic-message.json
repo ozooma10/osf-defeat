@@ -12,11 +12,19 @@
 
   // House Va'ruun zealots are fanatics, not looters: they take nothing and leave
   // you wounded as a warning. Va'ruun NPCs are also ActorTypeHuman, so this must
-  // out-priority the robbery family (10) to win for zealots. Faction tokens are
-  // editorIDs (resolver tries editorID then hex):
-  //   GroupFactionVaruun 0x0004CE29  (umbrella combat faction)
-  //   VaruunFaction      0x0027872A
+  // out-priority the robbery family (10) to win for zealots.
+  //
+  // Faction tokens MUST be hex FormIDs: in this Starfield/CommonLibSF build the
+  // runtime editorID map covers keywords but NOT factions, so faction editorIDs
+  // resolve to nothing (proven in-game 2026-07-02). Same reason Arrest uses hex.
+  //   0x0004CE29 GroupFactionVaruun          (umbrella combat/aggression faction)
+  //   0x0027872A VaruunFaction
+  //   0x002F1009 SFBGS001_VaruunBECrewFaction (Va'ruun ship/crew hostiles)
+  //   0x002D6F51 MQ102VaruunFaction
   "conditions": {
-    "aggressor": { "factions": ["GroupFactionVaruun", "VaruunFaction"], "match": "any" }
+    "aggressor": {
+      "factions": ["0x0004CE29", "0x0027872A", "0x002F1009", "0x002D6F51"],
+      "match": "any"
+    }
   }
 }
