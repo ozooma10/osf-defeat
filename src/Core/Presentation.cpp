@@ -90,6 +90,14 @@ namespace OSFDefeat::Presentation
 		if (!player) {
 			return;
 		}
+		// PlayerCharacter can outlive its actor-base reference briefly while a save/load or world
+		// transition rebuilds the reference. OSF's scene validation inspects that base, so defer the
+		// presentation until ReassertPlayerDown's next debounced retry instead of passing a partially
+		// initialized actor across the native API boundary.
+		if (!player->GetBaseObject()) {
+			REX::DEBUG("[OSFDefeat] player-down: actor base unavailable - deferring scene start");
+			return;
+		}
 
 		auto* const api = EnsureSceneApi();
 		if (!api) {

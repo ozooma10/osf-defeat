@@ -85,7 +85,11 @@ namespace OSFDefeat::Capture
 
     bool TransferCaptive(RE::Actor* a_actor, RE::TESObjectREFR* a_target)
     {
+        REX::INFO("[OSFDefeat] transfer captive: entered (actor {:08X}, target {:08X})",
+            a_actor ? a_actor->GetFormID() : 0u, a_target ? a_target->GetFormID() : 0u);
         if (!a_actor || !a_target || !IsCaptive(a_actor)) {
+            REX::WARN("[OSFDefeat] transfer captive aborted: hasActor={}, hasTarget={}, isCaptive={}",
+                a_actor != nullptr, a_target != nullptr, a_actor && IsCaptive(a_actor));
             return false;
         }
 

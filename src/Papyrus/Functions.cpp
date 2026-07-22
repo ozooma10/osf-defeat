@@ -258,9 +258,18 @@ namespace OSFDefeat::Papyrus
             const FormID targetId = a_target->GetFormID();
             return QueueGameTask([actorId, targetId]() {
                 auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
-                auto* const target = RE::TESForm::LookupByID<RE::TESObjectREFR>(targetId);
+                // The player ref (0x14) is NOT retrievable via LookupByID in this build — it's a
+                // singleton, not in the form table by ID. Resolve it directly; fall back to the
+                // form table for any other target (marker, ship, cell ref).
+                auto* const player = RE::PlayerCharacter::GetSingleton();
+                auto* const target = (player && player->GetFormID() == targetId)
+                    ? static_cast<RE::TESObjectREFR*>(player)
+                    : RE::TESForm::LookupByID<RE::TESObjectREFR>(targetId);
                 if (actor && target) {
                     Capture::TransferCaptive(actor, target);
+                } else {
+                    REX::WARN("[OSFDefeat] transfer captive: deferred lookup failed (actor {:08X}={}, target {:08X}={})",
+                        actorId, actor ? "ok" : "null", targetId, target ? "ok" : "null");
                 }
             });
         }

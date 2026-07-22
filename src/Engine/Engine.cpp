@@ -22,9 +22,18 @@ namespace OSFDefeat::Engine
         std::map<std::uint32_t, std::uint32_t> g_captiveApplied;
         std::mutex g_captiveLock;
 
+		[[nodiscard]] RE::TESNPC* NpcOf(RE::Actor* a_actor)
+		{
+			if (!a_actor) {
+				return nullptr;
+			}
+			const auto base = a_actor->GetBaseObject();
+			return base ? base->As<RE::TESNPC>() : nullptr;
+		}
+
         [[nodiscard]] bool PlayerIsEssential(RE::Actor* a_actor)
         {
-            auto* const npc = a_actor ? a_actor->GetNPC() : nullptr;
+			auto* const npc = NpcOf(a_actor);
             return npc ? npc->IsEssential() : false;
         }
 
@@ -99,7 +108,7 @@ namespace OSFDefeat::Engine
     {
         auto* const player = RE::PlayerCharacter::GetSingleton();
         auto* const actor = static_cast<RE::Actor*>(player);
-        auto* const npc = actor ? actor->GetNPC() : nullptr;
+		auto* const npc = NpcOf(actor);
         if (!actor || !npc) {
             return;
         }
