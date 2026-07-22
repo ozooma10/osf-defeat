@@ -1,9 +1,19 @@
 # OSF Defeat — One-Launch Verification Plan
 
-Everything below is **implemented and build-verified but never confirmed in-game**. The goal is a
-single play session that exercises the whole backlog and turns "compiles" into "works." Check items
-off as you go; each has a **confirm** line naming what you should see (usually a `[OSFDefeat]` line in
-the SFSE log at `Documents\My Games\Starfield\SFSE\` plus an on-screen effect).
+> **RESULTS (2026-07-22): green end-to-end except the watchdog (§4, deferred).** Verified in-game:
+> deploy/bind (7 consequences after EM removal), Health down + recovery + save/load, all 6 pack
+> outcomes incl. the first-ever positive `ActorTypeRobot`/`ActorTypeCreature` matches, cooldown
+> arbitration + fallback, the full capture loop (down/capture/transfer/persist/release), and the
+> `ForceRecoverAll` safe-uninstall + `DisableProcessing` passthrough. **Two bugs found + fixed:**
+> (1) camera not restored after the down-scene — OSF Animation `scene_orbit` teardown; (2)
+> `TransferCaptive` never moved the captive because `LookupByID(0x14)` returns null for the player
+> (now resolved via `PlayerCharacter::GetSingleton()`). **Deferred:** §4 watchdog force-rescue —
+> needs a staged never-releasing hold; the mechanism is unit-simple and the deadline path is covered
+> by the safe-uninstall test.
+
+Everything below was **implemented and build-verified**; this was the single play session that turned
+"compiles" into "works." Each item has a **confirm** line naming what you should see (usually a
+`[OSFDefeat]` line in the SFSE log at `Documents\My Games\Starfield\SFSE\Logs\` plus an on-screen effect).
 
 ## 0. Deploy (game closed)
 

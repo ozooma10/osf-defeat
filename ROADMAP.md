@@ -66,10 +66,14 @@ reason the core is solid; we accept the no-Creations/Xbox trade explicitly (READ
 
 Ship a build a user can trust for a whole playthrough.
 
-- [ ] In-game verify the current no-pacify build: down → recover with no `tcai`, no enemy freeze,
-      no crash (deployed but not yet re-confirmed).
-- [ ] Runtime-verify the robot/turret keyword **positive** case (negative proven across 3800+ reads).
-- [ ] Alpha test plan (below) green end-to-end.
+- [x] In-game verify the current no-pacify build: down → recover with no `tcai`, no enemy freeze,
+      no crash (**verified 2026-07-22**).
+- [x] Runtime-verify the robot/turret keyword **positive** case (**verified 2026-07-22**: "Left for
+      Scrap" fired on `ActorTypeRobot`, "Mauled" on `ActorTypeCreature` — first positive matches).
+- [~] Alpha test plan (below) green end-to-end — **all sections verified 2026-07-22 except the
+      watchdog force-rescue (deferred; needs a staged never-releasing hold).** Two bugs found + fixed:
+      camera restore after the down-scene (OSF Animation side), and the player-singleton lookup in
+      `TransferCaptive` (`LookupByID(0x14)` returns null → resolve the player via the singleton).
 - [ ] Hook resilience across Starfield updates (Address Library discipline; version-gated IDs).
 - [ ] README: state the PC-only/SFSE position and the death-boundary philosophy explicitly.
 
