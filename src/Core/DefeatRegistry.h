@@ -19,7 +19,7 @@ namespace OSFDefeat
 	// content-driven defeats). Values are API-stable.
 	enum class DefeatCause : std::uint8_t
 	{
-		kNone = 0,     // not defeated / unknown (pre-v4 co-saves)
+		kNone = 0,     // not defeated / unknown
 		kHealth = 1,   // lethal Health damage clamped
 		kEM = 2,       // lethal EM Health damage clamped
 		kScripted = 3  // DefeatActor verb
@@ -34,9 +34,9 @@ namespace OSFDefeat
 			registeredDay(a_registeredDay), aggressor(a_aggressor), recoverAtDay(a_recoverAtDay) {}
 
 		float                    registeredDay{ 0.0f };  // Calendar GetDaysPassedExact at defeat (persisted)
-		float                    recoverAtDay{ 0.0f };   // absolute game-day auto-recovery deadline; <=0 = held (persisted)
+		std::atomic<float>       recoverAtDay{ 0.0f };   // absolute game-day auto-recovery deadline; <=0 = held (persisted)
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
-		DefeatCause              cause{ DefeatCause::kNone };  // how they went down (persisted); write-once at defeat
+		std::atomic<DefeatCause> cause{ DefeatCause::kNone };  // how they went down (persisted); write-once at defeat
 		std::atomic<DefeatState> state{ DefeatState::Defeating };
 
 		// Ownership lease (persisted). A held down-state (recoverAtDay <= 0) may be claimed by a
@@ -46,7 +46,7 @@ namespace OSFDefeat
 		// deadline armed (yet). The player's held entries are always auto-armed by the tick when
 		// the watchdog is enabled; NPC entries only when explicitly leased (a held NPC captive is
 		// a legitimate long-term state).
-		float              leaseDeadlineDay{ 0.0f };
+		std::atomic<float> leaseDeadlineDay{ 0.0f };
 		std::string        leaseOwner;   // guarded by leaseLock: written on the game thread, but read
 		mutable std::mutex leaseLock;    // from the VM (GetClaimOwner) and save threads — a torn string read is a crash, unlike the benign float races
 
@@ -61,9 +61,9 @@ namespace OSFDefeat
 			leaseOwner = std::move(a_owner);
 		}
 
-		// registeredDay/aggressor are write-once at construction; recoverAtDay and leaseDeadlineDay
-		// are mutated only on the game thread (Pipeline outcome + verbs + recovery tick + co-save
-		// Save) — no atomic needed.
+		// registeredDay/aggressor are immutable after publication. The timer fields and cause are
+		// atomic because OSF persistence snapshots can run off the game thread while verbs or the
+		// recovery tick update them.
 	};
 
 	// Thread-safe, actor-agnostic store of every actor currently in a defeat state.

@@ -12,7 +12,7 @@ the SFSE log at `Documents\My Games\Starfield\SFSE\` plus an on-screen effect).
 - [ ] Pack: `pack\Build.ps1` — compiles + builds `OSFDefeatBasic.esm` + deploys the mod.
 - [ ] Test harness: copy `test\OSFCaptureTest.pex` into `MO2\mods\OSF Defeat\Scripts\` (remove after).
 - [ ] MO2: enable both mods + `OSFDefeatBasic.esm` in the load order.
-- [ ] Boot to a save. **Confirm:** log shows `[OSFDefeat] Papyrus API bound` and `persistence registered`.
+- [ ] Boot to a save. **Confirm:** log shows `[OSFDefeat] Papyrus API bound` and `OSF persistence registered`.
 - [ ] Optional: set `explainDecisions: true` in `SFSE\OSFDefeat\Validation\default.json` to log the
       selection roll; `npcAutoDefeat: true` if you also want NPCs to auto-down (not required below).
 
@@ -61,7 +61,7 @@ Run `cgf "OSFCaptureTest.Help"` first. Get into a fight for a live target.
       distance drops to near-zero; log `transfer captive ... dispatch ok`. ***This is the one part with
       no proven precedent — the `ObjectReference.MoveTo` VM-dispatch. If the captive does not move,
       the dispatch path needs revisiting (arg packing / handle type).***
-- [ ] Save mid-capture, reload, `ListCaptives` again — **confirm:** the roster survives (CAP0 co-save);
+- [ ] Save mid-capture, reload, `ListCaptives` again — **confirm:** the roster survives (`OSFD`/`CAP0` in the `.osf` sidecar);
       log `loaded ... / saved N capture record(s)`.
 - [ ] `cgf "OSFCaptureTest.ReleaseAll"` — **confirm:** captives recover; `ListCaptives` now reports 0.
 
@@ -71,7 +71,7 @@ Run `cgf "OSFCaptureTest.Help"` first. Get into a fight for a live target.
       **Confirm:** the tick force-rescues and logs the defaulting owner's name.
 - [ ] `cgf "OSFDefeat.ForceRecoverAll"` while defeated **and** holding captives. **Confirm:** everyone
       recovers, captive factions are stripped, and `ListCaptives` reports 0 (safe uninstall path).
-- [ ] After ForceRecoverAll, save then inspect — **confirm:** no OSF records linger (co-save empties).
+- [ ] After ForceRecoverAll, save then inspect — **confirm:** the `OSFD` client block is absent from the `.osf` sidecar.
 - [ ] `cgf "OSFDefeat.DisableProcessing" ...`/config `processingEnabled:false` → take a lethal hit.
       **Confirm:** vanilla death proceeds (framework steps aside); passthrough logged with a reason.
 

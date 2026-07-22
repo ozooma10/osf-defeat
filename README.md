@@ -2,7 +2,7 @@
 
 OSF Defeat is a native **defeat framework** for Starfield, inspired by Skyrim's Acheron model and built on [CommonLibSF](https://github.com/Starfield-Reverse-Engineering/CommonLibSF).
 
-When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the damage before the engine commits death, puts the actor into a framework-owned defeated/down state, applies a recovery timer, persists the state to the SFSE co-save, and recovers the actor when the deadline is reached. The player path is the stable core; NPC defeat is supported through the Papyrus verbs and an opt-in auto-defeat for hostile NPCs.
+When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the damage before the engine commits death, puts the actor into a framework-owned defeated/down state, applies a recovery timer, persists the state through OSF Animation's `.osf` sidecar, and recovers the actor when the deadline is reached. The player path is the stable core; NPC defeat is supported through the Papyrus verbs and an opt-in auto-defeat for hostile NPCs.
 
 ## Features
 
@@ -16,7 +16,7 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
   scripted, persisted — content routes a stunned target differently from a beaten one.
 - **Struggle primitives**: `OnPlayerDefeatImminent` fires below a configurable health fraction;
   `ResistDefeat` opens a no-defeat grace window (vanilla lethality) for QTE/struggle content.
-- Defeat / Rescue / Pacify verbs backed by `DefeatRegistry` and SFSE co-save persistence.
+- Defeat / Rescue / Pacify verbs backed by `DefeatRegistry` and OSF shared persistence.
 - **Ownership lease + watchdog**: content claims a held down-state under its name with a deadline
   (`ClaimDefeat` / `ReleaseClaim`, or `holdRecovery` JSON auto-claims); a lapsed deadline
   force-rescues and logs the defaulting consumer — a broken content mod can never strand the player.
@@ -46,7 +46,7 @@ When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the dama
 | `Core/Config` | Loads validation JSON and global settings. |
 | `Core/DefeatRegistry` | Thread-safe actor defeat state store. |
 | `Core/Defeat` | Acheron-style verbs: defeat, rescue, pacify, query. |
-| `Core/Persistence` | SFSE co-save serialization, including `recoverAtDay`. |
+| `Core/Persistence` | OSF Animation persistence client (`OSFD`), including `recoverAtDay`. |
 | `Core/Events` | Player defeated/recovered/consequence Papyrus event registration. |
 | `Engine/Engine` | Starfield primitives for player and NPC down/recovery state. |
 | `Papyrus/Functions` | Native bindings for `OSFDefeat.psc`. |

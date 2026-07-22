@@ -83,7 +83,7 @@ The features that make OSF Defeat *more* trustworthy than Acheron. All native, n
    refused; `holdRecovery` auto-claims under the consequence name (`maxHoldSeconds` JSON field);
    lapsed deadline → force-rescue + WARN naming the defaulter. Player held entries are always
    watchdog-armed (`watchdogSeconds`, default 600, 0 disables); NPC held entries only when leased
-   (a held captive is a legitimate long-term state). Lease persists in co-save (record v3).
+   (a held captive is a legitimate long-term state). Lease persists in the OSF sidecar (`DFT0` v1).
    Quest-stop detection is deferred — TESQuest state reads are RE-blocked; the deadline covers it.
 2. ~~**Emergency escape.**~~ Done: `ForceRecoverAll()` verb, console-callable via
    `cgf "OSFDefeat.ForceRecoverAll"`. Overrides any lease. (Held-key binding deferred — needs an
@@ -152,7 +152,7 @@ DLL stays pure; the pack demonstrates the real content-mod workflow.
 Give NPC defeat a vanilla-plausible fantasy: stun-and-capture bounty hunting.
 
 - ~~`defeatCause` in the handoff context.~~ Done (2026-07-01): the clamp records Health vs EM per
-  gauge, the `DefeatActor` verb records scripted; persisted (co-save v4); exposed as
+  gauge, the `DefeatActor` verb records scripted; persisted (`DFT0` v1); exposed as
   `GetDefeatCause(actor)` and `GetLastPlayerDefeatCause()` (0 none / 1 health / 2 EM / 3 scripted).
 - **NPC consequence policy**: what happens to a defeated NPC beyond down/recover — default policies
   (recover when combat ends; plunderable while down; executable by aggressor) with content override.

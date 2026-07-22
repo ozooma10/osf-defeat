@@ -87,8 +87,8 @@ idempotent `ApplyDownState` re-assert for the next frame — replacing a lifeSta
 
 A 500 ms worker queues `TickRecovery` on the game thread, which rescues any defeated actor past its
 `recoverAtDay` deadline. Held entries (`recoverAtDay <= 0`, e.g. an NPC awaiting explicit content
-recovery) wait for `RescueActor`. State persists to the SFSE co-save (`DFT0` v2: formID, day, aggressor,
-recoverAtDay) and is re-applied on load.
+recovery) wait for `RescueActor`. State persists through OSF Animation's `.osf` sidecar (`OSFD` client,
+`DFT0` v1) and is re-applied on the game thread after load.
 
 ## Dead ends (proven false — do not retry)
 

@@ -147,7 +147,7 @@ namespace OSFDefeat::Defeat
             return DefeatCause::kNone;
         }
         const auto data = DefeatRegistry::Get(a_victim->GetFormID());
-        return data ? data->cause : DefeatCause::kNone;
+        return data ? data->cause.load(std::memory_order_relaxed) : DefeatCause::kNone;
     }
 
     bool IsDamageImmune(const RE::Actor* a_victim)

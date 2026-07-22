@@ -18,6 +18,7 @@ namespace
         }
 
         if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
+            OSFDefeat::Persistence::Register();
             OSFDefeat::Config::Load();
             OSFDefeat::Consequence::Load();
             OSFDefeat::Events::Install();
@@ -35,8 +36,6 @@ namespace
 SFSE_PLUGIN_LOAD(const SFSE::LoadInterface* a_sfse)
 {
     SFSE::Init(a_sfse, { .trampoline = true, .trampolineSize = 1024 });
-
-    OSFDefeat::Persistence::Register();
 
     if (const auto* const messaging = SFSE::GetMessagingInterface()) {
         messaging->RegisterListener(OnMessage);
