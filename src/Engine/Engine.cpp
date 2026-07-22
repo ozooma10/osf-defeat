@@ -41,15 +41,6 @@ namespace OSFDefeat::Engine
         return avs ? avs->health : nullptr;
     }
 
-    RE::ActorValueInfo* EMHealthAV()
-    {
-        // EM/stun damage depletes a separate "Electromagnetic Health" gauge through the same
-        // ModActorValue primitive as Health (OSF RE em-stun-damage-routing, 2026-06-25). This is
-        // the typed equivalent of the proven BGSDefaultObjectManager getter (ID 43134) + 0xD0.
-        const auto* const avs = RE::ActorValue::GetSingleton();
-        return avs ? avs->electromagneticHealth : nullptr;
-    }
-
     RE::ActorValueOwner* AVOwnerOf(RE::Actor* a_actor)
     {
         return a_actor ? static_cast<RE::ActorValueOwner*>(static_cast<RE::TESObjectREFR*>(a_actor)) : nullptr;

@@ -32,7 +32,7 @@ namespace OSFDefeat::Conditions
     {
         ActorBlock aggressor;  // defaults to matchAll = false ("any")
         ActorBlock victim;     // defaults to matchAll = true ("all")
-        std::vector<DefeatCause> causes;  // "cause": "em" | ["health","em","scripted"]; empty = any
+        std::vector<DefeatCause> causes;  // "cause": "health" | ["health","scripted"]; empty = any
 
         [[nodiscard]] bool Empty() const { return aggressor.Empty() && victim.Empty() && causes.empty(); }
     };

@@ -14,7 +14,7 @@ namespace OSFDefeat::DefeatContext
         std::string consequenceName;
         std::string consequenceQuest;
         float recoverySeconds{ 0.0f };
-        DefeatCause cause{ DefeatCause::kNone };  // how the player went down (EM-down != beaten-down)
+        DefeatCause cause{ DefeatCause::kNone };  // how the player went down (Health vs scripted/capture)
         std::vector<FormID> participants;  // hostiles near the player at defeat time (incl. aggressor if hostile)
     };
 

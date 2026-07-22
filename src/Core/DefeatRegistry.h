@@ -14,15 +14,13 @@ namespace OSFDefeat
 	};
 
 	// How the actor went down (persisted; Papyrus GetDefeatCause / GetLastPlayerDefeatCause).
-	// A stunned target is not a beaten target: content routes EM-downs to capture/nonlethal
-	// outcomes distinctly from Health-downs. kScripted = the DefeatActor verb (surrender keys,
-	// content-driven defeats). Values are API-stable.
+	// kScripted = the DefeatActor verb (surrender keys, capture, content-driven defeats), which
+	// content can route distinctly from a Health-down. Values are API-stable.
 	enum class DefeatCause : std::uint8_t
 	{
 		kNone = 0,     // not defeated / unknown
 		kHealth = 1,   // lethal Health damage clamped
-		kEM = 2,       // lethal EM Health damage clamped
-		kScripted = 3  // DefeatActor verb
+		kScripted = 2  // DefeatActor verb
 	};
 
 	// Per-victim record. Held by shared_ptr because it carries an atomic (so it is

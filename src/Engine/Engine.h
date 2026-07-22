@@ -8,7 +8,6 @@ namespace OSFDefeat::Engine
 	constexpr RE::ACTOR_LIFE_STATE kBleedOut = RE::ACTOR_LIFE_STATE::kBleedOut;
 
 	[[nodiscard]] RE::ActorValueInfo* HealthAV();
-	[[nodiscard]] RE::ActorValueInfo* EMHealthAV();
 	[[nodiscard]] RE::ActorValueOwner* AVOwnerOf(RE::Actor* a_actor);
 	[[nodiscard]] float GetHealth(RE::Actor* a_actor);
 	[[nodiscard]] float GetMaxHealth(RE::Actor* a_actor);

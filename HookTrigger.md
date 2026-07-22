@@ -17,7 +17,6 @@ proven against **1.16.244** (`versionlib-1-16-244-0.bin`); the canonical RE stor
 | 3D-reload re-assert | `Actor::Set3D` (vtable slot 0xA8) | **101138** (`0x141948610`) | entry detour, 5-byte steal `48 89 5C 24 10` |
 | NPC combat removal | `ProcessLists::StopCombatAndAlarmOnActor` | **103285** | per-actor disengage (others drop the victim) |
 | Aggressor resolve | `BSPointerHandle::GetSmartPointer` | **35638** | resolves `currentCombatTarget` (Actor+0x298) |
-| EM gauge | `ActorValue::electromagneticHealth` | getter **43134** +0xD0 | typed accessor for the EM Health AVIF |
 | Down/recover lifeState | `Actor::SetLifeState` (slot 0x16F) | 100787 | `kBleedOut=8` / `kAlive=0` |
 | Global combat gate | `Console::SetCombatAIProcessing` (`tcai`) | gate via handler 66826 | player path only |
 
@@ -27,7 +26,7 @@ only (no process-list walks, no worker-thread object mutation).
 ## Player path — clamp, don't divert
 
 The `ModActorValue` detour ([src/Core/PlayerDefeat.cpp](src/Core/PlayerDefeat.cpp)) is **player-scoped**
-(`IsPlayerAVOwner`). On a would-be-terminal write to a **lethal gauge** (Health **or** EM Health),
+(`IsPlayerAVOwner`). On a would-be-terminal write to the **Health** gauge,
 `kDamage` modifier, `delta < 0`, and `pre + delta <= 0`, it **clamps the delta** so the gauge lands at
 a small floor — the engine's terminal path never reads `<= 0`. Not a negate, not a lifeState reroute;
 the only lever is the clamped delta, and the actor is left genuinely alive at the floor (no death race).
@@ -39,12 +38,6 @@ Down state ([Engine::SetPlayerDownState](src/Engine/Engine.cpp)): base+instance 
 for restore) + heal to max + `kNoBleedoutRecovery` + `kCanSpeakToEssentialDown` + `SetGhost(true)` +
 `SetAIEnabled(false)` + `SetLifeState(kBleedOut)` + `StopCombat` + `StopCombatAndAlarmOnActor` + global
 `tcai` off. `RestorePlayerState` reverses all of it (incl. restoring the essential snapshot).
-
-### EM Health
-EM/stun depletes a **separate** "Electromagnetic Health" AV, but through the **same** `ModActorValue`
-primitive — so it's a wider AV filter, not a new hook. A would-be-incapacitating EM hit is clamped
-identically (CLAMP, not ADOPT), so the vanilla EM shock never fires and the player enters the unified
-defeat state. Floor is flat for Health; for the (often smaller) EM gauge it's capped below the gauge max.
 
 ### Aggressor attribution
 `a_ref` (5th arg) is the real damage dealer on the direct combat path. On the slot-7 / Papyrus
@@ -113,8 +106,7 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\OSFDefeat.log`.
    hook at {X}`. A `prologue mismatch` line means the seam drifted on a game update; that hook
    self-disables cleanly and the rest is unaffected.
 2. **Player Health** — take a lethal hit → defeat (bleedout, ghost, disengage), recover after the timer.
-3. **Player EM** — a lethal EM hit routes into defeat instead of the vanilla shock.
-4. **Attribution** — a console `damageav health 9999` while fighting an NPC attributes that NPC (via
+3. **Attribution** — a console `damageav health 9999` while fighting an NPC attributes that NPC (via
    `currentCombatTarget`); a non-combat `damageav` stays `00000000`.
 5. **NPC defeat** — with `npcAutoDefeat` enabled, a would-be-lethal hit on a hostile NPC drops it into
    bleedout+ghost and others disengage; it recovers on the timer (or via a content `OSFDefeat.RescueActor`).

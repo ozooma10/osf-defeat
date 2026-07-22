@@ -50,9 +50,8 @@ String Function GetClaimOwner(Actor akActor) global native
 ; co-save empties on the next save. Also works from the console: cgf "OSFDefeat.ForceRecoverAll"
 Bool Function ForceRecoverAll() global native
 
-; How an actor went down - a stunned target is not a beaten target. Route EM-downs to
-; capture/nonlethal outcomes distinctly from Health-downs.
-;   0 = none/not defeated, 1 = lethal Health damage, 2 = lethal EM damage, 3 = scripted (DefeatActor)
+; How an actor went down - content can route a scripted/capture defeat distinctly from a Health-down.
+;   0 = none/not defeated, 1 = lethal Health damage, 2 = scripted (DefeatActor / capture)
 Int Function GetDefeatCause(Actor akActor) global native
 Int Function GetLastPlayerDefeatCause() global native
 

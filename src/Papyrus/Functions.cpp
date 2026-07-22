@@ -158,7 +158,7 @@ namespace OSFDefeat::Papyrus
             });
         }
 
-        // How the actor went down: 0 none/unknown, 1 Health, 2 EM, 3 scripted (DefeatActor verb).
+        // How the actor went down: 0 none/unknown, 1 Health, 2 scripted (DefeatActor verb).
         std::int32_t GetDefeatCause(std::monostate, RE::Actor* a_actor)
         {
             return static_cast<std::int32_t>(Defeat::GetDefeatCause(a_actor));

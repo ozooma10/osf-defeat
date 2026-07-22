@@ -19,11 +19,13 @@ the SFSE log at `Documents\My Games\Starfield\SFSE\` plus an on-screen effect).
 ## 1. Core down/recover (the no-pacify build)
 
 - [ ] Take a lethal **Health** hit in a fight. **Confirm:** you drop into the cower down-state instead
-      of dying; log `registered defeated actor 00000014 ... cause 1`.
+      of dying; log `registered defeated actor 00000014 (aggressor …)`. (Cause is Health; with
+      `explainDecisions` on it also shows the per-outcome filter roll.)
 - [ ] Wait out recovery. **Confirm:** you stand up; enemies resume attacking naturally (no freeze, no
       `tcai` gate); log `rescued actor 00000014`.
-- [ ] Take a lethal **EM** hit (stun weapon). **Confirm:** down-state fires; cause logs `2`.
 - [ ] Save while down, reload. **Confirm:** you are still down after load and recovery resumes (DFT0).
+
+> EM is gone (2026-07-21): the player has no EM/stun defeat path. Only Health and scripted downs exist.
 
 ## 2. Pack v0.3 — one defeat per aggressor context
 
@@ -32,9 +34,6 @@ a wait; **Robbed vs Picked Clean** share priority 10 so which fires is a weighte
 
 - [ ] **Robbed and Left** — human aggressor, Health down. **Confirm:** notification "Robbed while
       down: N credits taken"; the credits are in the aggressor's inventory; ~35% a minor sprain.
-- [ ] **Taken Alive** — human aggressor, **EM** down. **Confirm:** "Stunned and taken alive"; steeper
-      ransom; you are briefly non-hostile to everyone (captive faction), then released. *This proves
-      `cause: "em"` routing beats the robbery family.*
 - [ ] **Taken Into Custody** — killed by **UC/Freestar/Neon security**. **Confirm:** "Security takes
       you into custody" then a vanilla jail transition (bounty/sentence/release all stock).
 - [ ] **Left as a Message** — killed by **House Va'ruun** zealots. **Confirm:** no credit loss; a

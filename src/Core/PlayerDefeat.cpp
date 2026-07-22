@@ -217,27 +217,11 @@ namespace OSFDefeat::PlayerDefeat
             }
         }
 
-        // Both AVs reach a terminal state through this same ModActorValue primitive: Health -> death,
-        // Electromagnetic Health -> the vanilla EM shock/incapacitation (OSF RE em-stun-damage-routing,
-        // 2026-06-25). We clamp both identically so neither terminal path fires.
+        // Health reaches a terminal state (death) through the ModActorValue primitive: we clamp the
+        // would-be-lethal Health delta at a floor so that terminal path never fires.
         [[nodiscard]] bool IsLethalGauge(const RE::ActorValueInfo& a_info)
         {
-            return &a_info == Engine::HealthAV() || &a_info == Engine::EMHealthAV();
-        }
-
-        // Health keeps its flat floor (unchanged behavior). The EM Health gauge can be far smaller, so
-        // cap the floor below its max — em-stun-damage-routing flagged a flat 5.0 as too high for a tiny
-        // EM gauge. Falls back to the flat floor if the gauge max is unavailable.
-        [[nodiscard]] float LethalFloorFor(RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info)
-        {
-            if (&a_info == Engine::HealthAV()) {
-                return kLethalHealthFloor;
-            }
-            const float maxValue = a_owner ? a_owner->GetPermanentActorValue(a_info) : 0.0f;
-            if (maxValue <= 0.0f) {
-                return kLethalHealthFloor;
-            }
-            return std::min(kLethalHealthFloor, std::max(1.0f, maxValue * 0.05f));
+            return &a_info == Engine::HealthAV();
         }
 
         // --- NPC auto-defeat (opt-in) ------------------------------------------------------------
@@ -321,7 +305,7 @@ namespace OSFDefeat::PlayerDefeat
             RE::TESObjectREFR* a_ref)
         {
             if (g_original && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
-                const auto cause = &a_info == Engine::EMHealthAV() ? DefeatCause::kEM : DefeatCause::kHealth;
+                const auto cause = DefeatCause::kHealth;
                 if (IsPlayerAVOwner(a_owner)) {
                     RecordAttacker(a_ref);  // participant snapshot source (POD-only on this thread)
                     auto* const player = PlayerActor();
@@ -338,7 +322,7 @@ namespace OSFDefeat::PlayerDefeat
                             } else if (ResistWindowActive(player->GetFormID())) {
                                 LogPlayerPassthrough("resist window active (ResistDefeat) - vanilla lethality");
                             } else {
-                                a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
+                                a_delta = std::max(a_delta, kLethalHealthFloor - current);
                                 QueueBegin(a_ref, cause);
                             }
                         }
@@ -366,7 +350,7 @@ namespace OSFDefeat::PlayerDefeat
                                     REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: resist window active", victim->GetFormID());
                                 }
                             } else {
-                                a_delta = std::max(a_delta, LethalFloorFor(a_owner, a_info) - current);
+                                a_delta = std::max(a_delta, kLethalHealthFloor - current);
                                 QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0, cause);
                             }
                         }

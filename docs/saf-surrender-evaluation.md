@@ -29,7 +29,7 @@ Its actual feature loop:
 
 | SAF Surrender does it via… | In an OSF-Defeat world, owned by… | Status |
 |---|---|---|
-| `OnHit` threshold detection | **OSF Defeat** (`ModActorValue` clamp) | ✅ You already do this, more robustly (native hook, EM+Health) |
+| `OnHit` threshold detection | **OSF Defeat** (`ModActorValue` clamp) | ✅ You already do this, more robustly (native hook on Health) |
 | `tcai`/`tgm` pacify | **OSF Defeat** (faction pacify + target-list drop) | ✅ You already solved this |
 | Down-state / god-mode / bleedout hold | **OSF Defeat** (`SetPlayerDownState`) | ✅ Done |
 | Recovery timer / restore | **OSF Defeat** (recovery worker) | ✅ Done |

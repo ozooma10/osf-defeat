@@ -86,9 +86,9 @@ Int Function GetDefeatCause(Actor akActor) global native
 Int Function GetLastPlayerDefeatCause() global native
 ```
 
-`GetDefeatCause` says **how** an actor went down — the foundation of stun-and-capture routing,
-because a stunned target is not a beaten target: `0` none/not defeated, `1` lethal Health damage,
-`2` lethal EM damage, `3` scripted (the `DefeatActor` verb). Persisted in the co-save.
+`GetDefeatCause` says **how** an actor went down, so content can route a scripted/capture defeat
+differently from a beaten one: `0` none/not defeated, `1` lethal Health damage, `2` scripted (the
+`DefeatActor` verb / capture). Persisted in the co-save.
 `GetLastPlayerDefeatCause` is the same value in the player consequence handoff context.
 
 ## Struggle Primitives (defeat imminent + resist)

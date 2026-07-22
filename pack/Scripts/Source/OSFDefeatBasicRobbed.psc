@@ -42,7 +42,6 @@ EndEvent
 Function RunConsequence()
     Actor akPlayer    = Game.GetPlayer()
     Actor akAggressor = OSFDefeat.GetLastPlayerAggressor()
-    Int   iCause      = OSFDefeat.GetLastPlayerDefeatCause() ; 1 health, 2 EM
 
     ; --- Robbery: credits move to the aggressor (recoverable by killing them). ---
     If akAggressor != None
@@ -60,11 +59,7 @@ Function RunConsequence()
         EndIf
         If iTake > 0
             akPlayer.RemoveItem(kCredits, iTake, true, akAggressor)
-            If iCause == 2
-                Debug.Notification("Stunned and robbed: " + iTake + " credits taken.")
-            Else
-                Debug.Notification("Robbed while down: " + iTake + " credits taken.")
-            EndIf
+            Debug.Notification("Robbed while down: " + iTake + " credits taken.")
         EndIf
     EndIf
 

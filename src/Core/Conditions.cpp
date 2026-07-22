@@ -123,12 +123,10 @@ namespace OSFDefeat::Conditions
                 const auto token = a_entry.get<std::string>();
                 if (token == "health") {
                     conditions.causes.push_back(DefeatCause::kHealth);
-                } else if (token == "em") {
-                    conditions.causes.push_back(DefeatCause::kEM);
                 } else if (token == "scripted") {
                     conditions.causes.push_back(DefeatCause::kScripted);
                 } else {
-                    REX::WARN("[OSFDefeat] consequence '{}': unknown cause '{}' (use health/em/scripted); ignored", a_owner, token);
+                    REX::WARN("[OSFDefeat] consequence '{}': unknown cause '{}' (use health/scripted); ignored", a_owner, token);
                 }
             };
             if (it->is_array()) {

@@ -19,7 +19,6 @@ compete. The ladder:
 | Priority | Scenario | Fires when | Beat |
 |---|---|---|---|
 | 20 | **Taken Into Custody** | security faction (UC/Freestar/Neon) | vanilla arrest via `Faction.SendPlayerToJail` — bounty, sentence, release all stock |
-| 15 | **Taken Alive** | human aggressor **+ EM cause** (a stun) | held as a non-hostile captive (`ApplyCaptiveFaction`), steeper ransom (20%) into the captor's inventory, then released |
 | 12 | **Left as a Message** | House Va'ruun zealots | fanatics don't loot: no credit loss, a vanilla concussion, short down |
 | 10 | **Robbed and Left** | human aggressor (weight 3) | 10% credits into the aggressor's inventory; 35% chance of a minor sprain |
 | 10 | **Picked Clean** | human aggressor (weight 1, long cooldown) | the harsher sibling: 25% credits **and your digipicks**, plus a contusion |
@@ -33,10 +32,6 @@ compete. The ladder:
 *not* `Cast`), so they read as normal environmental injuries and any doctor or aid item clears
 them. FormIDs mined from `Starfield.esm` with `tools/scan_esm.py` and filled onto the shipped
 records; clear the `Wound`/`HurtAffliction` property in xEdit/CK to disable a wound.
-
-**Cause routing.** `Taken Alive` is what gives EM its own identity: an EM-down (`cause: "em"`) by a
-human routes to capture instead of the lethal-Health robbery family. A stunned target is not a
-beaten one.
 
 When nothing is eligible the framework's built-in down-then-recover fallback runs.
 

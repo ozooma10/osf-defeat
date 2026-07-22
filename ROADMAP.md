@@ -7,7 +7,7 @@ whether content authors choose it and users trust it**, not by an Acheron featur
 
 What we keep from Acheron, because it is proven:
 
-- **Native hook interception, no polling** — the `ModActorValue` clamp (Health + EM) instead of
+- **Native hook interception, no polling** — the `ModActorValue` clamp (Health) instead of
   `OnHit` cloaks or Papyrus polling.
 - **Framework owns physics, content owns meaning** — defeat state, pacify, validation, selection,
   handoff live here; scenes, robbery, capture, outcomes live in content mods.
@@ -26,7 +26,6 @@ What we deliberately do better than Acheron (its known adoption problems):
 
 What we exploit that Skyrim never had:
 
-- **EM damage as a first-class non-lethal channel** → stun-and-capture NPC defeat identity (M4).
 - **Ship combat as a second defeat domain** → "ship disabled → boarded" instead of exploding (M5).
 - **Vanilla consequence primitives** — afflictions, jail (`SendPlayerToJail`), bounty/faction rep —
   as default content that feels native (M3).
@@ -36,8 +35,8 @@ reason the core is solid; we accept the no-Creations/Xbox trade explicitly (READ
 
 ## Implemented Slice
 
-- Player lethal-damage clamp at the verified `ActorValueOwner::ModActorValue` site, covering
-  **both Health and EM Health** (a lethal EM hit routes into defeat instead of the vanilla shock).
+- Player lethal-damage clamp at the verified `ActorValueOwner::ModActorValue` site, on the
+  **Health** gauge (a would-be-lethal Health hit routes into defeat instead of death).
 - Aggressor attribution on the script/null path via the victim's `currentCombatTarget`.
 - `Actor::Set3D` re-assert hook so defeat state survives cell change / save load / `coc`.
 - Defeat registry, persistence, and Defeat / Rescue / Pacify verbs as the foundation spine.
@@ -133,11 +132,10 @@ DLL stays pure; the pack demonstrates the real content-mod workflow.
 - ~~Fill the affliction~~ (v0.2): `HurtAffliction` ships filled with `ENV_AFFL_Injury_Sprain_1`
   (0x002BDD28), applied the vanilla way (`AddSpell` — afflictions are abilities), 35% chance.
 - ~~Condition grammar: gate outcomes on `defeatCause`.~~ Done (2026-07-01): `"cause"` in
-  `conditions` (`health`/`em`/`scripted`, string or array).
-- ~~**Scenario set** (v0.3, 2026-07-01)~~: five more outcomes so every common aggressor context
+  `conditions` (`health`/`scripted`, string or array).
+- ~~**Scenario set** (v0.3, 2026-07-01)~~: more outcomes so every common aggressor context
   gets a plausible beat rather than the built-in fallback, and every framework surface has a
-  shipped consumer. Priority ladder: **Taken Into Custody** 20 (security) > **Taken Alive** 15
-  (human + `cause: em`; `ApplyCaptiveFaction` + ransom + `RemoveCaptiveFaction`) > **Left as a
+  shipped consumer. Priority ladder: **Taken Into Custody** 20 (security) > **Left as a
   Message** 12 (Va'ruun faction; no loot, concussion) > tier 10 { **Robbed and Left** w3,
   **Picked Clean** w1 (credits + digipicks + contusion), **Left for Scrap** (`ActorTypeRobot`;
   short + burn), **Mauled** (`ActorTypeCreature`; long + lacerations + `oncePerLocation`) }.
@@ -147,13 +145,19 @@ DLL stays pure; the pack demonstrates the real content-mod workflow.
     plus persistence promotion for transient aggressors (the Shadow of Skyrim lessons).
   - Runtime-verify the positive `ActorTypeCreature` / `ActorTypeRobot` aggressor case (M0 test).
 
-## Milestone 4 — NPC Defeat Identity: EM + Capture
+## Milestone 4 — NPC Defeat Identity: Capture
 
-Give NPC defeat a vanilla-plausible fantasy: stun-and-capture bounty hunting.
+Give NPC defeat a vanilla-plausible fantasy: capture-and-ransom bounty hunting.
 
-- ~~`defeatCause` in the handoff context.~~ Done (2026-07-01): the clamp records Health vs EM per
-  gauge, the `DefeatActor` verb records scripted; persisted (`DFT0` v1); exposed as
-  `GetDefeatCause(actor)` and `GetLastPlayerDefeatCause()` (0 none / 1 health / 2 EM / 3 scripted).
+> **EM channel removed (2026-07-21).** The player-facing EM/stun gauge never drove the on-foot
+> defeat path in practice (the vanilla EM bar fills without emptying the `electromagneticHealth`
+> AV through the clamp), so the EM damage channel, the `kEM` cause, the `"em"` condition token, and
+> the EM-only **Taken Alive** pack outcome were all removed. Defeat is now Health-or-scripted only.
+> If capture ever wants a stun identity again, it re-REs the player-EM seam first (see Findings).
+
+- ~~`defeatCause` in the handoff context.~~ Done (2026-07-01): the clamp records Health, the
+  `DefeatActor` verb records scripted; persisted (`DFT0` v1); exposed as
+  `GetDefeatCause(actor)` and `GetLastPlayerDefeatCause()` (0 none / 1 health / 2 scripted).
 - **NPC consequence policy**: what happens to a defeated NPC beyond down/recover — default policies
   (recover when combat ends; plunderable while down; executable by aggressor) with content override.
 - ~~Capture/ransom **hooks** for content (claim-a-captive verb, transfer-to-marker helper)~~
@@ -244,7 +248,7 @@ Player consequence v2 (current; v1 files stay valid):
   "oncePerLocation": false,
   "domain": "onfoot",
   "conditions": {
-    "cause": ["health", "em"],
+    "cause": ["health", "scripted"],
     "aggressor": { "keywords": ["ActorTypeHuman"], "factions": [], "match": "any" },
     "victim":    { "keywords": [], "factions": [], "match": "all" }
   }
@@ -274,7 +278,7 @@ current victim/aggressor pair are filtered before the priority/weight roll (no e
 built-in fallback). Keyword/faction entries are form tokens (editorID or hex FormID); `aggressor`
 defaults to `"match": "any"`, `victim` to `"all"` — Acheron's semantics. A non-empty aggressor
 block fails when there is no aggressor. `cause` gates on how the victim went down —
-`"health"` / `"em"` / `"scripted"`, string or array, empty/absent = any. `locations` /
+`"health"` / `"scripted"`, string or array, empty/absent = any. `locations` /
 `questsRunning` / `questsCompleted` are schema-reserved but ignored until their engine seams are
 RE-proven.
 

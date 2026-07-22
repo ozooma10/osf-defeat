@@ -2,18 +2,18 @@
 
 OSF Defeat is a native **defeat framework** for Starfield, inspired by Skyrim's Acheron model and built on [CommonLibSF](https://github.com/Starfield-Reverse-Engineering/CommonLibSF).
 
-When an actor would take a lethal Health (or EM) hit, OSF Defeat clamps the damage before the engine commits death, puts the actor into a framework-owned defeated/down state, applies a recovery timer, persists the state through OSF Animation's `.osf` sidecar, and recovers the actor when the deadline is reached. The player path is the stable core; NPC defeat is supported through the Papyrus verbs and an opt-in auto-defeat for hostile NPCs.
+When an actor would take a lethal Health hit, OSF Defeat clamps the damage before the engine commits death, puts the actor into a framework-owned defeated/down state, applies a recovery timer, persists the state through OSF Animation's `.osf` sidecar, and recovers the actor when the deadline is reached. The player path is the stable core; NPC defeat is supported through the Papyrus verbs and an opt-in auto-defeat for hostile NPCs.
 
 ## Features
 
-- Lethal-damage clamp at the verified `ActorValueOwner::ModActorValue` hook site (`HookTrigger.md`), covering both **Health and EM Health**.
+- Lethal-damage clamp at the verified `ActorValueOwner::ModActorValue` hook site (`HookTrigger.md`), on the **Health** gauge.
 - Player defeat: down/recovery state with combat suppression, JSON-selected consequence, and co-save recovery.
 - NPC defeat: the live-validated per-actor down/recover recipe via the `DefeatActor`/`RescueActor` verbs, plus opt-in auto-defeat for hostile NPCs (`npcAutoDefeat`).
 - Aggressor attribution, including the script/null path via `currentCombatTarget`.
 - 3D-reload re-assert (`Actor::Set3D`) so defeat state survives cell change / save load / `coc`.
 - Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`) for NPC routing.
-- **Defeat cause** (`GetDefeatCause` / `GetLastPlayerDefeatCause`): Health-down vs EM-down vs
-  scripted, persisted — content routes a stunned target differently from a beaten one.
+- **Defeat cause** (`GetDefeatCause` / `GetLastPlayerDefeatCause`): Health-down vs scripted,
+  persisted — content can route a scripted/capture defeat differently from a beaten one.
 - **Struggle primitives**: `OnPlayerDefeatImminent` fires below a configurable health fraction;
   `ResistDefeat` opens a no-defeat grace window (vanilla lethality) for QTE/struggle content.
 - Defeat / Rescue / Pacify verbs backed by `DefeatRegistry` and OSF shared persistence.
