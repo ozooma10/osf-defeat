@@ -35,6 +35,26 @@ records; clear the `Wound`/`HurtAffliction` property in xEdit/CK to disable a wo
 
 When nothing is eligible the framework's built-in down-then-recover fallback runs.
 
+**Wake-up destination.** Every non-arrest quest (arrest already relocates you via
+vanilla `SendPlayerToJail`) ends through the shared
+`OSFDefeatBasicRecovery.FinishAftermath()` (`Scripts/Source/OSFDefeatBasicRecovery.psc`)
+instead of calling `RescueActor` directly. It looks for the nearest
+`OSFDefeatBasicRecoveryMarker`-tagged XMarker in the player's *current cell* and
+moves the player there before recovery; if none exists it falls back to
+same-cell recovery (today's behavior, so this is a zero-regression seam) — a
+generic defeat mod must never guess a distant destination and break a quest or
+ship interior. **Known gap:** the `OSFDefeatBasicRecoveryMarker` keyword itself
+(FormID `000807`, already referenced by the script) has not been added to
+`OSFDefeatBasic.esm` — Spriggit 0.40.1 (this repo's pinned version) silently
+drops *any* newly hand-authored top-level record group folder on deserialize
+(confirmed with both a `Keywords/` and a `Statics/` test group, isolated from
+the working `Quests/` group, including calling the installed
+`Spriggit.Yaml.Starfield.exe` directly to rule out CLI-wrapper exception
+swallowing — no error is ever surfaced, the group is just absent from the
+output ESM). Until that's resolved (try a newer Spriggit release, or hand-add
+the single Keyword record in xEdit/CK as a one-time step), the recovery marker
+path is always a no-op and every consequence falls back to same-cell recovery.
+
 ## Layout
 
 | Path | What |
@@ -54,8 +74,8 @@ When nothing is eligible the framework's built-in down-then-recover fallback run
 
 ## Planned (M3 remainder)
 
-- Relocation ("wake up at the nearest civilized point") once placement validation is designed —
-  the Shadow of Skyrim respawn-jank lesson says don't ship teleports without it.
+- Add the `OSFDefeatBasicRecoveryMarker` keyword record to `OSFDefeatBasic.esm` (see the
+  wake-up destination gap above) so location patches can actually place tagged markers.
 - Richer item stripping for `Picked Clean` (a curated aid/ammo FormList) beyond credits + digipicks.
 - Escalation for repeat defeats by the same faction (uses the cooldown/arbitration fields).
 - Runtime verification that `ActorTypeCreature` / `ActorTypeRobot` fire on the intended aggressors

@@ -31,7 +31,7 @@ Function RunConsequence()
     Debug.Notification("The zealots leave you breathing - as a message.")
 
     Utility.Wait(DownSeconds)
-    OSFDefeat.RescueActor(akPlayer, True)
+    OSFDefeatBasicRecovery.FinishAftermath(akPlayer)
 
     ; Stop so OSF Defeat can Start us again on the next defeat.
     Self.Stop()

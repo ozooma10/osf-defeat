@@ -73,7 +73,7 @@ Function RunConsequence()
     ; wait outlives the consequence's maxHoldSeconds, the watchdog rescues the
     ; player anyway - by design.
     Utility.Wait(DownSeconds)
-    OSFDefeat.RescueActor(akPlayer, True)
+    OSFDefeatBasicRecovery.FinishAftermath(akPlayer)
 
     ; Stop so OSF Defeat can Start us again on the next defeat.
     Self.Stop()
