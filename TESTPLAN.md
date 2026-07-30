@@ -55,6 +55,12 @@ a wait; **Robbed vs Picked Clean** share priority 10 so which fires is a weighte
 - [ ] **Mauled** — killed by a **creature**. **Confirm:** "loses interest and prowls off"; lacerations;
       long down; does not re-fire in the same cell. ***Positive `ActorTypeCreature` keyword test.***
 - [ ] With `explainDecisions` on, **confirm** the log shows the filter reasons + priority/weight roll.
+- [ ] **Wake-up destination** (new 2026-07-30, unverified): the five non-arrest outcomes now exit via
+      `OSFDefeatBasicRecovery.FinishAftermath()`. With no tagged marker placed, **confirm** recovery is
+      unchanged (same spot, no fade) and the log shows `no same-cell recovery marker found; using local
+      recovery` — this is the zero-regression check. Then place a test XMarker carrying
+      `OSFDefeatBasicRecoveryMarker` (000807 in `OSFDefeatBasic.esm`) in the same cell and **confirm**
+      the fade-out → move → recover → fade-in sequence runs.
 
 ## 3. M4 capture hooks (console harness)
 

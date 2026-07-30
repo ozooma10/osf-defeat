@@ -43,23 +43,25 @@ instead of calling `RescueActor` directly. It looks for the nearest
 moves the player there before recovery; if none exists it falls back to
 same-cell recovery (today's behavior, so this is a zero-regression seam) — a
 generic defeat mod must never guess a distant destination and break a quest or
-ship interior. **Known gap:** the `OSFDefeatBasicRecoveryMarker` keyword itself
-(FormID `000807`, already referenced by the script) has not been added to
-`OSFDefeatBasic.esm` — Spriggit 0.40.1 (this repo's pinned version) silently
-drops *any* newly hand-authored top-level record group folder on deserialize
-(confirmed with both a `Keywords/` and a `Statics/` test group, isolated from
-the working `Quests/` group, including calling the installed
-`Spriggit.Yaml.Starfield.exe` directly to rule out CLI-wrapper exception
-swallowing — no error is ever surfaced, the group is just absent from the
-output ESM). Until that's resolved (try a newer Spriggit release, or hand-add
-the single Keyword record in xEdit/CK as a one-time step), the recovery marker
-path is always a no-op and every consequence falls back to same-cell recovery.
+ship interior. The `OSFDefeatBasicRecoveryMarker` keyword (FormID `000807`) ships
+in `OSFDefeatBasic.esm`; until a location patch places tagged markers, the
+fallback path is what runs.
+
+> **Spriggit authoring note.** An earlier attempt to add this keyword concluded
+> that Spriggit 0.40.1 "silently drops brand-new record groups." That was wrong:
+> the group folder was authored as `Keywords/<name>/RecordData.yaml`, copying the
+> shape of `Quests/`. Only records with **children** (quests, cells) get a folder
+> plus `RecordData.yaml`; a simple record is a **single flat file** named
+> `<GroupName>/<EditorID> - <FormID6>_<ModKey>.yaml`. With the flat shape the
+> pinned 0.40.1 builds the KYWD group fine and round-trips it losslessly. Ground
+> truth for any new group: `spriggit serialize` an existing plugin that already
+> contains that record type and copy the layout it emits.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (quests 000800–000806) |
+| `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (quests 000800–000806, keyword 000807) |
 | `Scripts/Source/*.psc` | The consequence scripts (one per scenario) |
 | `SFSE/OSFDefeat/Consequences/Player/*.json` | The consequence registrations (v2 schema) |
 | `tools/scan_esm.py` | Binary SPEL/FACT/KYWD/MISC FormID scanner (`OSF_SCAN_TYPES=KYWD python … <regex>`) |
@@ -74,8 +76,8 @@ path is always a no-op and every consequence falls back to same-cell recovery.
 
 ## Planned (M3 remainder)
 
-- Add the `OSFDefeatBasicRecoveryMarker` keyword record to `OSFDefeatBasic.esm` (see the
-  wake-up destination gap above) so location patches can actually place tagged markers.
+- Runtime-verify the wake-up destination seam: with no tagged marker (fallback = today's
+  same-cell recovery), then with a test XMarker carrying `OSFDefeatBasicRecoveryMarker`.
 - Richer item stripping for `Picked Clean` (a curated aid/ammo FormList) beyond credits + digipicks.
 - Escalation for repeat defeats by the same faction (uses the cooldown/arbitration fields).
 - Runtime verification that `ActorTypeCreature` / `ActorTypeRobot` fire on the intended aggressors

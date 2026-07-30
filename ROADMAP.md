@@ -145,8 +145,13 @@ DLL stays pure; the pack demonstrates the real content-mod workflow.
   short + burn), **Mauled** (`ActorTypeCreature`; long + lacerations + `oncePerLocation`) }.
   All wounds are vanilla afflictions filled from `tools/scan_esm.py` (now also does KYWD/MISC).
 - Remaining for M3:
-  - Relocation ("wake at the nearest civilized point") once placement validation is designed,
-    plus persistence promotion for transient aggressors (the Shadow of Skyrim lessons).
+  - ~~Relocation ("wake at the nearest civilized point")~~ Seam implemented (2026-07-30): the five
+    non-arrest quests exit through `OSFDefeatBasicRecovery.FinishAftermath()`, which moves the player
+    to the nearest same-cell XMarker tagged with the pack's `OSFDefeatBasicRecoveryMarker` keyword
+    (FormID 000807, now shipped in the ESM) and otherwise falls back to same-cell recovery —
+    deliberately never guessing a distant destination (the Shadow of Skyrim respawn-jank lesson).
+    **Runtime verification pending** (both the fallback and the tagged-marker path).
+  - Persistence promotion for transient aggressors (the other Shadow of Skyrim lesson).
   - Runtime-verify the positive `ActorTypeCreature` / `ActorTypeRobot` aggressor case (M0 test).
 
 ## Milestone 4 — NPC Defeat Identity: Capture
