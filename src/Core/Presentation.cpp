@@ -171,4 +171,9 @@ namespace OSFDefeat::Presentation
 		REX::INFO("[OSFDefeat] player-down scene missing (save-load / cell change / external stop) - re-asserting presentation");
 		ShowPlayerDown();
 	}
+
+	void ResetRuntimeState()
+	{
+		g_downSceneMissingSince = {};
+	}
 }

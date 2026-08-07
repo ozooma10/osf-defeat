@@ -4,6 +4,7 @@
 
 #include "Core/Defeat.h"
 #include "Core/PlayerDefeat.h"
+#include "Core/RuntimeState.h"
 #include "Engine/Engine.h"
 
 #include "RE/B/BSScriptUtil.h"
@@ -18,6 +19,7 @@ namespace OSFDefeat::Capture
         {
             FormID captor{ 0 };
             float  capturedDay{ 0.0f };
+            bool   removeFactionOnRelease{ false };
         };
 
         // captiveID -> record. Same map/mutex discipline as Engine's captive-faction tracker:
@@ -34,26 +36,61 @@ namespace OSFDefeat::Capture
 
     bool CaptureActor(RE::Actor* a_captive, RE::Actor* a_captor)
     {
-        if (!a_captive) {
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        if (!a_captive || !Engine::IsCaptiveFactionAvailable()) {
+            if (a_captive) {
+                REX::WARN("[OSFDefeat] capture {:08X} refused: captive faction unavailable", a_captive->GetFormID());
+            }
             return false;
         }
 
         // Put the captive down if it isn't already; a capture without a down-state is meaningless.
-        if (!Defeat::IsDefeated(a_captive)) {
+        const bool newlyDefeated = !Defeat::IsDefeated(a_captive);
+        std::shared_ptr<VictimData> existingData;
+        float previousRecovery = 0.0f;
+        float previousLeaseDeadline = 0.0f;
+        std::string previousLeaseOwner;
+        if (!newlyDefeated) {
+            existingData = DefeatRegistry::Get(a_captive->GetFormID());
+            if (existingData) {
+                previousRecovery = existingData->recoverAtDay.load(std::memory_order_relaxed);
+                previousLeaseDeadline = existingData->leaseDeadlineDay.load(std::memory_order_relaxed);
+                previousLeaseOwner = existingData->CopyLeaseOwner();
+            }
+        } else {
             if (!Defeat::DefeatActor(a_captive, a_captor, DefeatCause::kScripted)) {
                 return false;  // dead / un-defeatable
             }
         }
 
         // Hold it indefinitely (content ends the capture) and pacify it so hostiles ignore the prisoner.
-        PlayerDefeat::SetRecoveryTimer(a_captive, 0.0f);
+        const bool hadOwnedFaction = Engine::HasCaptiveFactionApplied(a_captive);
+        const bool timerHeld = PlayerDefeat::SetRecoveryTimer(a_captive, 0.0f);
         Engine::ApplyCaptiveFaction(a_captive);
+        const bool factionReady = Engine::HasCaptiveFactionApplied(a_captive) || Engine::IsInCaptiveFaction(a_captive);
+        if (!timerHeld || !factionReady) {
+            REX::ERROR("[OSFDefeat] capture {:08X} failed to establish {}{}; rolling back",
+                a_captive->GetFormID(), timerHeld ? "" : "recovery hold", !factionReady ? " captive faction" : "");
+            if (!hadOwnedFaction) {
+                Engine::RemoveCaptiveFaction(a_captive);
+            }
+            if (newlyDefeated) {
+                Defeat::RescueActor(a_captive, true);
+            } else if (existingData) {
+                existingData->recoverAtDay = previousRecovery;
+                existingData->leaseDeadlineDay = previousLeaseDeadline;
+                existingData->SetLeaseOwner(std::move(previousLeaseOwner));
+            }
+            return false;
+        }
 
         const FormID captiveId = a_captive->GetFormID();
         const FormID captorId = a_captor ? a_captor->GetFormID() : 0;
         {
             std::unique_lock lock{ g_capturesLock };
-            g_captives[captiveId] = CaptureRec{ captorId, NowDay() };
+            const bool previouslyOwned = g_captives.contains(captiveId) && g_captives[captiveId].removeFactionOnRelease;
+            const bool captureAddedFaction = !hadOwnedFaction && Engine::HasCaptiveFactionApplied(a_captive);
+            g_captives[captiveId] = CaptureRec{ captorId, NowDay(), previouslyOwned || captureAddedFaction };
         }
         REX::INFO("[OSFDefeat] captured {:08X} (captor {:08X})", captiveId, captorId);
         return true;
@@ -61,23 +98,33 @@ namespace OSFDefeat::Capture
 
     bool ReleaseCaptive(RE::Actor* a_actor, bool a_recover)
     {
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
         if (!a_actor) {
             return false;
         }
 
-        bool wasCaptive = false;
+        std::optional<bool> removeFactionOnRelease;
         {
             std::unique_lock lock{ g_capturesLock };
-            wasCaptive = g_captives.erase(a_actor->GetFormID()) > 0;
+            if (const auto it = g_captives.find(a_actor->GetFormID()); it != g_captives.end()) {
+                removeFactionOnRelease = it->second.removeFactionOnRelease;
+            }
         }
-        if (!wasCaptive) {
+        if (!removeFactionOnRelease.has_value()) {
             return false;
         }
 
         if (a_recover) {
-            Defeat::RescueActor(a_actor, true);  // undo-pacify strips the captive faction for us
+            // Rescue owns removal through NotifyRecovered. If recovery cannot commit, preserve the
+            // capture record so callers can retry instead of reporting a partial release.
+            if (!Defeat::RescueActor(a_actor, true)) {
+                return false;
+            }
         } else {
-            Engine::RemoveCaptiveFaction(a_actor);  // still held, but no longer a claimed captive
+            NotifyRecovered(a_actor->GetFormID());
+            if (*removeFactionOnRelease) {
+                Engine::RemoveCaptiveFaction(a_actor);  // remove only membership capture introduced
+            }
         }
         REX::INFO("[OSFDefeat] released captive {:08X} (recover={})", a_actor->GetFormID(), a_recover);
         return true;
@@ -85,6 +132,7 @@ namespace OSFDefeat::Capture
 
     bool TransferCaptive(RE::Actor* a_actor, RE::TESObjectREFR* a_target)
     {
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
         if (!a_actor || !a_target) {
             REX::WARN("[OSFDefeat] transfer captive: null {}", a_actor ? "target" : "actor");
             return false;
@@ -114,9 +162,18 @@ namespace OSFDefeat::Capture
         // ObjectReference.MoveTo(akTarget, afXOffset, afYOffset, afZOffset, abMatchRotation, abRotateOffset).
         // Six params (the trailing two default in Papyrus, but the VM dispatch fills the whole stack):
         // match the marker's rotation, no rotated offset.
-        auto packArgs = [a_target](RE::BSScrapArray<RE::BSScript::Variable>& a_args) {
+        const FormID targetId = a_target->GetFormID();
+        auto packArgs = [targetId](RE::BSScrapArray<RE::BSScript::Variable>& a_args) {
+            auto* const player = RE::PlayerCharacter::GetSingleton();
+            auto* const target = player && player->GetFormID() == targetId
+                ? static_cast<RE::TESObjectREFR*>(player)
+                : RE::TESForm::LookupByID<RE::TESObjectREFR>(targetId);
+            if (!target) {
+                REX::WARN("[OSFDefeat] transfer captive: target {:08X} unloaded before VM argument packing", targetId);
+                return false;
+            }
             a_args.resize(6);
-            RE::BSScript::PackVariable(a_args[0], a_target);
+            RE::BSScript::PackVariable(a_args[0], target);
             RE::BSScript::PackVariable(a_args[1], 0.0f);
             RE::BSScript::PackVariable(a_args[2], 0.0f);
             RE::BSScript::PackVariable(a_args[3], 0.0f);
@@ -183,24 +240,25 @@ namespace OSFDefeat::Capture
         g_captives.erase(a_captiveId);
     }
 
-    std::vector<std::tuple<FormID, FormID, float>> Snapshot()
+    std::vector<std::tuple<FormID, FormID, float, bool>> Snapshot()
     {
         std::unique_lock lock{ g_capturesLock };
-        std::vector<std::tuple<FormID, FormID, float>> out;
+        std::vector<std::tuple<FormID, FormID, float, bool>> out;
         out.reserve(g_captives.size());
         for (const auto& [captiveId, rec] : g_captives) {
-            out.emplace_back(captiveId, rec.captor, rec.capturedDay);
+            out.emplace_back(captiveId, rec.captor, rec.capturedDay, rec.removeFactionOnRelease);
         }
         return out;
     }
 
-    void RestoreCapture(FormID a_captiveId, FormID a_captorId, float a_capturedDay)
+    void RestoreCapture(FormID a_captiveId, FormID a_captorId, float a_capturedDay, bool a_removeFactionOnRelease)
     {
         if (!a_captiveId) {
             return;
         }
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
         std::unique_lock lock{ g_capturesLock };
-        g_captives[a_captiveId] = CaptureRec{ a_captorId, a_capturedDay };
+        g_captives[a_captiveId] = CaptureRec{ a_captorId, a_capturedDay, a_removeFactionOnRelease };
     }
 
     void Clear()

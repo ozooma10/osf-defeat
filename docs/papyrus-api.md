@@ -1,6 +1,6 @@
 # OSF Defeat Papyrus API
 
-`OSFDefeat.psc` is the public alpha API. Calls that mutate game state are marshaled to the game thread by the native plugin.
+`OSFDefeat.psc` is the public alpha API. Calls that mutate game state are marshaled to the game thread by the native plugin. Their `Bool` return value means the request was accepted for dispatch, not that the deferred operation succeeded. Confirm state with the matching query/callback before starting a dependent transition (for example, wait until `IsDefeated(actor)` is false before handing the player to another quest pipeline).
 
 ## Verbs
 
@@ -57,9 +57,11 @@ so a broken consumer can never strand the player. Rules:
 Bool Function ForceRecoverAll() global native
 ```
 
-Rescues every defeated actor (overriding any lease), releases every pacified actor, and strips
-the captive-faction memberships the framework created. The co-save empties on the next save, so
-this is also the safe-uninstall path: run it, save, remove the DLL. Users can run it from the
+Requests recovery for every resolvable defeated actor (overriding any lease), releases every
+resolvable pacified actor, and strips the captive-faction memberships the framework created.
+Unresolved pacify/faction ownership records are retained and logged so they can be cleaned if the
+actor becomes resolvable later. Verify the log/state, then save; once no records remain, the next
+co-save is empty and the DLL can be removed. Users can run it from the
 console any time they feel stuck:
 
 ```

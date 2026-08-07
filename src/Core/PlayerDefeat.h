@@ -9,6 +9,7 @@ namespace OSFDefeat::PlayerDefeat
     void Install();
     void BeginPlayerDefeat(RE::Actor* a_aggressor = nullptr, DefeatCause a_cause = DefeatCause::kScripted);
     void TickRecovery();
+    void ResetTransientState();
 
     [[nodiscard]] float RecoveryDeadlineForSeconds(float a_realSeconds);
 

@@ -40,8 +40,13 @@ Function RunConsequence()
     ; End the down-state BEFORE the jail hand-over: SendPlayerToJail owns the
     ; player from here (location, sentence, release) and must not fight the
     ; bleedout/ghost state.
-    OSFDefeat.RescueActor(akPlayer, True)
-    Utility.Wait(0.5)
+    If !OSFDefeatBasicRecovery.RequestRecoveryAndWait(akPlayer)
+        ; Do not hand a still-downed player to the jail pipeline. Resume a short framework timer
+        ; and let the watchdog remain the final safety net.
+        OSFDefeat.SetRecoveryTimer(akPlayer, 2.0)
+        Self.Stop()
+        Return
+    EndIf
     kCrimeFaction.SendPlayerToJail(abRemoveInventory = false)
 
     ; Stop so OSF Defeat can Start us again on the next defeat.

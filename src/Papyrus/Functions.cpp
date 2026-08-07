@@ -14,6 +14,7 @@
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
+#include "Core/RuntimeState.h"
 #include "Core/Validation.h"
 #include "Engine/Engine.h"
 
@@ -30,7 +31,12 @@ namespace OSFDefeat::Papyrus
             if (!tasks) {
                 return false;
             }
-            tasks->AddTask(std::move(a_fn));
+            const auto epoch = RuntimeState::CurrentEpoch();
+            tasks->AddTask([epoch, fn = std::move(a_fn)]() mutable {
+                if (RuntimeState::IsCurrent(epoch)) {
+                    fn();
+                }
+            });
             return true;
         }
 

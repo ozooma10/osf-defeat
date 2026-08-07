@@ -19,8 +19,8 @@ namespace OSFDefeat::Capture
     // Claim a_captive as held by a_captor. Defeats the captive first if it is not already down
     // (scripted cause, a_captor as aggressor), holds recovery indefinitely, and applies the captive
     // faction so nearby hostiles ignore it. Re-capturing updates the captor. a_captor may be null
-    // (an un-attributed capture, e.g. "the station holds this prisoner"). Returns false only if the
-    // captive can't be put down (dead / null).
+    // (an un-attributed capture, e.g. "the station holds this prisoner"). Returns false if the
+    // captive cannot be put down or the hold/pacify transaction cannot be established.
     bool CaptureActor(RE::Actor* a_captive, RE::Actor* a_captor);
 
     // End the capture. Removes the capture record and the captive faction; if a_recover, also
@@ -42,8 +42,8 @@ namespace OSFDefeat::Capture
     // by watchdog, or by ForceRecoverAll) stops being a captive. Idempotent.
     void NotifyRecovered(FormID a_captiveId);
 
-    // Co-save support (mirrors the captive-faction tracker): (captiveID, captorID, capturedDay).
-    [[nodiscard]] std::vector<std::tuple<FormID, FormID, float>> Snapshot();
-    void RestoreCapture(FormID a_captiveId, FormID a_captorId, float a_capturedDay);
+    // Co-save support: captive, captor, captured day, and whether capture introduced the faction.
+    [[nodiscard]] std::vector<std::tuple<FormID, FormID, float, bool>> Snapshot();
+    void RestoreCapture(FormID a_captiveId, FormID a_captorId, float a_capturedDay, bool a_removeFactionOnRelease);
     void Clear();
 }

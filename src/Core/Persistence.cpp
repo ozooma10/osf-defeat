@@ -3,9 +3,15 @@
 #include "Core/Persistence.h"
 
 #include "Core/Capture.h"
+#include "Core/Consequence.h"
 #include "Core/Defeat.h"
+#include "Core/DefeatContext.h"
 #include "Core/DefeatRegistry.h"
 #include "Core/Events.h"
+#include "Core/PlayerDefeat.h"
+#include "Core/Presentation.h"
+#include "Core/RuntimeState.h"
+#include "Core/Validation.h"
 #include "Engine/Engine.h"
 #include "External/OSFPersistenceAPI.h"
 
@@ -21,9 +27,11 @@ namespace OSFDefeat::Persistence
         constexpr std::uint32_t kRecDefeated = OSF_PERSISTENCE_FOURCC('D', 'F', 'T', '0');
         constexpr std::uint32_t kRecCaptive = OSF_PERSISTENCE_FOURCC('C', 'P', 'T', '0');
         constexpr std::uint32_t kRecCapture = OSF_PERSISTENCE_FOURCC('C', 'A', 'P', '0');
-        constexpr std::uint32_t kDefeatedVersion = 1;
+        constexpr std::uint32_t kRecPacified = OSF_PERSISTENCE_FOURCC('P', 'C', 'F', '0');
+        constexpr std::uint32_t kDefeatedVersion = 2;
         constexpr std::uint32_t kCaptiveVersion = 1;
-        constexpr std::uint32_t kCaptureVersion = 1;
+        constexpr std::uint32_t kCaptureVersion = 2;
+        constexpr std::uint32_t kPacifiedVersion = 1;
         constexpr std::uint32_t kMaxLeaseOwner = 256;
 
         struct DefeatedRecord
@@ -35,6 +43,7 @@ namespace OSFDefeat::Persistence
             float       leaseDeadlineDay{};
             std::string leaseOwner;
             DefeatCause cause{ DefeatCause::kNone };
+            ActorStateSnapshot priorState;
         };
 
         struct CaptiveFactionRecord
@@ -48,6 +57,13 @@ namespace OSFDefeat::Persistence
             FormID captiveId{};
             FormID captorId{};
             float  capturedDay{};
+            bool   removeFactionOnRelease{ true };  // v1 compatibility: capture historically removed it
+        };
+
+        struct PacifiedRecord
+        {
+            FormID actorId{};
+            bool wasAIEnabled{ true };
         };
 
         struct LoadedState
@@ -55,6 +71,7 @@ namespace OSFDefeat::Persistence
             std::vector<DefeatedRecord>       defeated;
             std::vector<CaptiveFactionRecord> captiveFactions;
             std::vector<CaptureRecord>        captures;
+            std::vector<PacifiedRecord>       pacified;
         };
 
         std::atomic_uint64_t g_loadGeneration{ 0 };
@@ -126,7 +143,7 @@ namespace OSFDefeat::Persistence
                 records.push_back({ id, data->registeredDay, data->aggressor,
                     data->recoverAtDay.load(std::memory_order_relaxed),
                     data->leaseDeadlineDay.load(std::memory_order_relaxed), data->CopyLeaseOwner(),
-                    data->cause.load(std::memory_order_relaxed) });
+                    data->cause.load(std::memory_order_relaxed), data->priorState });
             }
             return records;
         }
@@ -147,10 +164,20 @@ namespace OSFDefeat::Persistence
                 const auto ownerLength = static_cast<std::uint32_t>(
                     std::min<std::size_t>(record.leaseOwner.size(), kMaxLeaseOwner));
                 const auto cause = static_cast<std::uint8_t>(record.cause);
+                std::uint8_t priorFlags = 0;
+                priorFlags |= record.priorState.valid ? 1u << 0 : 0;
+                priorFlags |= record.priorState.aiEnabled ? 1u << 1 : 0;
+                priorFlags |= record.priorState.noBleedoutRecovery ? 1u << 2 : 0;
+                priorFlags |= record.priorState.canSpeakToEssentialDown ? 1u << 3 : 0;
+                priorFlags |= record.priorState.ghost ? 1u << 4 : 0;
+                priorFlags |= record.priorState.actorEssential ? 1u << 5 : 0;
+                priorFlags |= record.priorState.baseEssential ? 1u << 6 : 0;
+                const auto lifeState = static_cast<std::uint8_t>(record.priorState.lifeState);
                 if (!WriteValue(a_writer, record.formId) || !WriteValue(a_writer, record.registeredDay) ||
                     !WriteValue(a_writer, record.aggressor) || !WriteValue(a_writer, record.recoverAtDay) ||
                     !WriteValue(a_writer, record.leaseDeadlineDay) || !WriteValue(a_writer, ownerLength) ||
-                    !WriteBytes(a_writer, record.leaseOwner.data(), ownerLength) || !WriteValue(a_writer, cause)) {
+                    !WriteBytes(a_writer, record.leaseOwner.data(), ownerLength) || !WriteValue(a_writer, cause) ||
+                    !WriteValue(a_writer, priorFlags) || !WriteValue(a_writer, lifeState)) {
                     return false;
                 }
             }
@@ -179,7 +206,7 @@ namespace OSFDefeat::Persistence
         }
 
         bool SaveCaptures(OSFRecordWriterV1* a_writer,
-            const std::vector<std::tuple<FormID, FormID, float>>& a_records)
+            const std::vector<std::tuple<FormID, FormID, float, bool>>& a_records)
         {
             if (a_records.empty()) {
                 return true;
@@ -191,9 +218,31 @@ namespace OSFDefeat::Persistence
             if (!WriteValue(a_writer, count)) {
                 return false;
             }
-            for (const auto& [captiveId, captorId, capturedDay] : a_records) {
+            for (const auto& [captiveId, captorId, capturedDay, removeFactionOnRelease] : a_records) {
+                const std::uint8_t removeFaction = removeFactionOnRelease ? 1 : 0;
                 if (!WriteValue(a_writer, captiveId) || !WriteValue(a_writer, captorId) ||
-                    !WriteValue(a_writer, capturedDay)) {
+                    !WriteValue(a_writer, capturedDay) || !WriteValue(a_writer, removeFaction)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool SavePacified(OSFRecordWriterV1* a_writer, const std::vector<std::pair<FormID, bool>>& a_records)
+        {
+            if (a_records.empty()) {
+                return true;
+            }
+            if (!a_writer->OpenRecord(a_writer, kRecPacified, kPacifiedVersion)) {
+                return false;
+            }
+            const auto count = static_cast<std::uint32_t>(a_records.size());
+            if (!WriteValue(a_writer, count)) {
+                return false;
+            }
+            for (const auto& [actorId, wasAIEnabled] : a_records) {
+                const std::uint8_t enabled = wasAIEnabled ? 1 : 0;
+                if (!WriteValue(a_writer, actorId) || !WriteValue(a_writer, enabled)) {
                     return false;
                 }
             }
@@ -208,16 +257,18 @@ namespace OSFDefeat::Persistence
                     REX::ERROR("[OSFDefeat] OSF persistence supplied an invalid writer");
                     return 0;
                 }
+                std::scoped_lock stateLock{ RuntimeState::Mutex() };
                 const auto defeated = SnapshotDefeated();
                 const auto captiveFactions = Engine::SnapshotCaptiveFactions();
                 const auto captures = Capture::Snapshot();
+                const auto pacified = Defeat::SnapshotPacified();
                 if (!SaveDefeated(a_writer, defeated) || !SaveCaptiveFactions(a_writer, captiveFactions) ||
-                    !SaveCaptures(a_writer, captures)) {
+                    !SaveCaptures(a_writer, captures) || !SavePacified(a_writer, pacified)) {
                     REX::ERROR("[OSFDefeat] failed writing OSF persistence records");
                     return 0;
                 }
-                REX::INFO("[OSFDefeat] saved state: {} defeated, {} captive-faction, {} capture record(s)",
-                    defeated.size(), captiveFactions.size(), captures.size());
+                REX::INFO("[OSFDefeat] saved state: {} defeated, {} captive-faction, {} capture, {} pacified record(s)",
+                    defeated.size(), captiveFactions.size(), captures.size(), pacified.size());
                 return 1;
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] persistence save failed: {}", e.what());
@@ -227,7 +278,7 @@ namespace OSFDefeat::Persistence
             return 0;
         }
 
-        bool ReadDefeated(OSFRecordReaderV1* a_reader, std::uint32_t a_length, LoadedState& a_state)
+        bool ReadDefeated(OSFRecordReaderV1* a_reader, std::uint32_t a_version, std::uint32_t a_length, LoadedState& a_state)
         {
             std::uint32_t count{};
             if (!ReadValue(a_reader, a_length, count)) {
@@ -255,6 +306,34 @@ namespace OSFDefeat::Persistence
                 record.leaseOwner.resize(ownerLength);
                 if (!ReadBytes(a_reader, a_length, record.leaseOwner.data(), ownerLength) ||
                     !ReadValue(a_reader, a_length, cause)) {
+                    return false;
+                }
+                if (a_version >= 2) {
+                    std::uint8_t priorFlags{};
+                    std::uint8_t lifeState{};
+                    if (!ReadValue(a_reader, a_length, priorFlags) || !ReadValue(a_reader, a_length, lifeState) ||
+                        lifeState > 0x0F) {
+                        return false;
+                    }
+                    record.priorState.valid = (priorFlags & (1u << 0)) != 0;
+                    record.priorState.aiEnabled = (priorFlags & (1u << 1)) != 0;
+                    record.priorState.noBleedoutRecovery = (priorFlags & (1u << 2)) != 0;
+                    record.priorState.canSpeakToEssentialDown = (priorFlags & (1u << 3)) != 0;
+                    record.priorState.ghost = (priorFlags & (1u << 4)) != 0;
+                    record.priorState.actorEssential = (priorFlags & (1u << 5)) != 0;
+                    record.priorState.baseEssential = (priorFlags & (1u << 6)) != 0;
+                    record.priorState.lifeState = static_cast<RE::ACTOR_LIFE_STATE>(lifeState);
+                    if (!record.priorState.valid) {
+                        return false;
+                    }
+                } else {
+                    // Version 1 did not persist ownership snapshots. Preserve its documented legacy
+                    // recovery behavior (alive, AI on, OSF flags off) rather than snapshotting the
+                    // already-down state from the game save and restoring that forever.
+                    record.priorState.valid = true;
+                }
+                if (!std::isfinite(record.registeredDay) || !std::isfinite(record.recoverAtDay) ||
+                    !std::isfinite(record.leaseDeadlineDay)) {
                     return false;
                 }
                 if (cause > static_cast<std::uint8_t>(DefeatCause::kScripted)) {
@@ -294,7 +373,7 @@ namespace OSFDefeat::Persistence
             return a_length == 0;
         }
 
-        bool ReadCaptures(OSFRecordReaderV1* a_reader, std::uint32_t a_length, LoadedState& a_state)
+        bool ReadCaptures(OSFRecordReaderV1* a_reader, std::uint32_t a_version, std::uint32_t a_length, LoadedState& a_state)
         {
             std::uint32_t count{};
             constexpr std::uint32_t kEntrySize = sizeof(FormID) * 2 + sizeof(float);
@@ -309,6 +388,16 @@ namespace OSFDefeat::Persistence
                     !ReadValue(a_reader, a_length, record.capturedDay)) {
                     return false;
                 }
+                if (a_version >= 2) {
+                    std::uint8_t removeFaction{};
+                    if (!ReadValue(a_reader, a_length, removeFaction) || removeFaction > 1) {
+                        return false;
+                    }
+                    record.removeFactionOnRelease = removeFaction != 0;
+                }
+                if (!std::isfinite(record.capturedDay)) {
+                    return false;
+                }
                 if (!ResolveRequired(a_reader, savedCaptive, record.captiveId)) {
                     continue;
                 }
@@ -318,24 +407,54 @@ namespace OSFDefeat::Persistence
             return a_length == 0;
         }
 
-        void ApplyLoadedState(LoadedState a_state, std::uint64_t a_generation)
+        bool ReadPacified(OSFRecordReaderV1* a_reader, std::uint32_t a_length, LoadedState& a_state)
         {
-            if (g_loadGeneration.load(std::memory_order_acquire) != a_generation) {
+            std::uint32_t count{};
+            constexpr std::uint32_t kEntrySize = sizeof(FormID) + sizeof(std::uint8_t);
+            if (!ReadValue(a_reader, a_length, count) || count > a_length / kEntrySize) {
+                return false;
+            }
+            a_state.pacified.reserve(a_state.pacified.size() + count);
+            for (std::uint32_t i = 0; i < count; ++i) {
+                FormID savedActor{};
+                std::uint8_t wasAIEnabled{};
+                PacifiedRecord record;
+                if (!ReadValue(a_reader, a_length, savedActor) || !ReadValue(a_reader, a_length, wasAIEnabled) ||
+                    wasAIEnabled > 1) {
+                    return false;
+                }
+                if (ResolveRequired(a_reader, savedActor, record.actorId)) {
+                    record.wasAIEnabled = wasAIEnabled != 0;
+                    a_state.pacified.push_back(record);
+                }
+            }
+            return a_length == 0;
+        }
+
+        void ApplyLoadedState(LoadedState a_state, std::uint64_t a_generation, std::uint64_t a_epoch)
+        {
+            if (g_loadGeneration.load(std::memory_order_acquire) != a_generation || !RuntimeState::IsCurrent(a_epoch)) {
                 REX::WARN("[OSFDefeat] discarded stale deferred persistence load");
                 return;
             }
+            std::scoped_lock stateLock{ RuntimeState::Mutex() };
             for (auto& record : a_state.defeated) {
                 Defeat::RestoreFromSave(record.formId, record.registeredDay, record.aggressor,
-                    record.recoverAtDay, record.leaseDeadlineDay, std::move(record.leaseOwner), record.cause);
+                    record.recoverAtDay, record.leaseDeadlineDay, std::move(record.leaseOwner), record.cause,
+                    record.priorState);
             }
             for (const auto& record : a_state.captiveFactions) {
                 Engine::RestoreCaptiveFaction(record.actorId, record.factionId);
             }
             for (const auto& record : a_state.captures) {
-                Capture::RestoreCapture(record.captiveId, record.captorId, record.capturedDay);
+                Capture::RestoreCapture(record.captiveId, record.captorId, record.capturedDay,
+                    record.removeFactionOnRelease);
             }
-            REX::INFO("[OSFDefeat] loaded state: {} defeated, {} captive-faction, {} capture record(s)",
-                a_state.defeated.size(), a_state.captiveFactions.size(), a_state.captures.size());
+            for (const auto& record : a_state.pacified) {
+                Defeat::RestorePacified(record.actorId, record.wasAIEnabled);
+            }
+            REX::INFO("[OSFDefeat] loaded state: {} defeated, {} captive-faction, {} capture, {} pacified record(s)",
+                a_state.defeated.size(), a_state.captiveFactions.size(), a_state.captures.size(), a_state.pacified.size());
         }
 
         std::uint8_t OSF_PERSISTENCE_CALL Load(void*, OSFRecordReaderV1* a_reader)
@@ -350,12 +469,14 @@ namespace OSFDefeat::Persistence
                 std::uint32_t type{}, version{}, length{};
                 while (a_reader->GetNextRecordInfo(a_reader, &type, &version, &length)) {
                     bool ok = true;
-                    if (type == kRecDefeated && version == kDefeatedVersion) {
-                        ok = ReadDefeated(a_reader, length, state);
+                    if (type == kRecDefeated && (version == 1 || version == kDefeatedVersion)) {
+                        ok = ReadDefeated(a_reader, version, length, state);
                     } else if (type == kRecCaptive && version == kCaptiveVersion) {
                         ok = ReadCaptiveFactions(a_reader, length, state);
-                    } else if (type == kRecCapture && version == kCaptureVersion) {
-                        ok = ReadCaptures(a_reader, length, state);
+                    } else if (type == kRecCapture && (version == 1 || version == kCaptureVersion)) {
+                        ok = ReadCaptures(a_reader, version, length, state);
+                    } else if (type == kRecPacified && version == kPacifiedVersion) {
+                        ok = ReadPacified(a_reader, length, state);
                     }
                     if (!ok) {
                         REX::ERROR("[OSFDefeat] corrupt persistence record type {:#010x} version {}", type, version);
@@ -368,8 +489,9 @@ namespace OSFDefeat::Persistence
                     return 0;
                 }
                 const auto generation = g_loadGeneration.load(std::memory_order_acquire);
-                tasks->AddTask([state = std::move(state), generation]() mutable {
-                    ApplyLoadedState(std::move(state), generation);
+                const auto epoch = RuntimeState::CurrentEpoch();
+                tasks->AddTask([state = std::move(state), generation, epoch]() mutable {
+                    ApplyLoadedState(std::move(state), generation, epoch);
                 });
                 return 1;
             } catch (const std::exception& e) {
@@ -383,11 +505,30 @@ namespace OSFDefeat::Persistence
         void OSF_PERSISTENCE_CALL Revert(void*)
         {
             g_loadGeneration.fetch_add(1, std::memory_order_acq_rel);
-            DefeatRegistry::Clear();
-            Events::Clear();
-            Engine::ClearCaptiveFactions();
-            Capture::Clear();
-            REX::INFO("[OSFDefeat] reverted defeat state");
+            const auto epoch = RuntimeState::AdvanceEpoch();
+            const auto* const tasks = SFSE::GetTaskInterface();
+            if (!tasks) {
+                REX::ERROR("[OSFDefeat] task interface unavailable; runtime revert could not be applied safely");
+                return;
+            }
+            tasks->AddTask([epoch]() {
+                if (!RuntimeState::IsCurrent(epoch)) {
+                    return;
+                }
+                std::scoped_lock stateLock{ RuntimeState::Mutex() };
+                // Events owns VM smart pointers and must be cleared here, never from the persistence
+                // callback thread. The rest closes every session-scoped state seam before Load applies.
+                Events::Clear();
+                Defeat::ResetRuntimeState();
+                Engine::ResetRuntimeState();
+                Capture::Clear();
+                Consequence::ResetRuntimeState();
+                PlayerDefeat::ResetTransientState();
+                DefeatContext::ClearPlayerContext();
+                Presentation::ResetRuntimeState();
+                Validation::SetEnabled(true);
+                REX::INFO("[OSFDefeat] reverted all runtime defeat state (epoch {})", epoch);
+            });
         }
     }
 

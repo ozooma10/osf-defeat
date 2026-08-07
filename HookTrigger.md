@@ -18,7 +18,6 @@ proven against **1.16.244** (`versionlib-1-16-244-0.bin`); the canonical RE stor
 | NPC combat removal | `ProcessLists::StopCombatAndAlarmOnActor` | **103285** | per-actor disengage (others drop the victim) |
 | Aggressor resolve | `BSPointerHandle::GetSmartPointer` | **35638** | resolves `currentCombatTarget` (Actor+0x298) |
 | Down/recover lifeState | `Actor::SetLifeState` (slot 0x16F) | 100787 | `kBleedOut=8` / `kAlive=0` |
-| Global combat gate | `Console::SetCombatAIProcessing` (`tcai`) | gate via handler 66826 | player path only |
 
 All actor mutation runs on the **game thread**; the detours do arithmetic + a deferred SFSE task
 only (no process-list walks, no worker-thread object mutation).
@@ -34,10 +33,11 @@ the only lever is the clamped delta, and the actor is left genuinely alive at th
 A clamp always yields a defeat: it only fires when `Validation::CanProcess() && ValidatePair(...) &&
 !IsDefeated(player)`, then queues `BeginPlayerDefeat` to the game thread.
 
-Down state ([Engine::SetPlayerDownState](src/Engine/Engine.cpp)): base+instance **Essential** (snapshotted
-for restore) + heal to max + `kNoBleedoutRecovery` + `kCanSpeakToEssentialDown` + `SetGhost(true)` +
-`SetAIEnabled(false)` + `SetLifeState(kBleedOut)` + `StopCombat` + `StopCombatAndAlarmOnActor` + global
-`tcai` off. `RestorePlayerState` reverses all of it (incl. restoring the essential snapshot).
+Down state ([Engine::SetPlayerDownState](src/Engine/Engine.cpp)): base+instance **Essential** + heal to
+max + `kNoBleedoutRecovery` + `kCanSpeakToEssentialDown` + `SetGhost(true)` +
+`SetLifeState(kBleedOut)` + `StopCombat` + `StopCombatAndAlarmOnActor`. Player AI is deliberately left
+enabled so camera/look remain usable; the presentation scene owns input lock. `RestorePlayerState`
+restores the exact pre-defeat AI/flag/ghost/life-state/essential snapshot.
 
 ### Aggressor attribution
 `a_ref` (5th arg) is the real damage dealer on the direct combat path. On the slot-7 / Papyrus
@@ -62,12 +62,13 @@ by editorID; the true-on-robot positive is the one low-risk runtime item left.
 
 Down state ([Engine::SetNpcDownState](src/Engine/Engine.cpp)): `kNoBleedoutRecovery` + `SetGhost(true)`
 (invulnerable, so the defeat sticks) + `SetLifeState(kBleedOut)` + `StopCombat` +
-`StopCombatAndAlarmOnActor` (others disengage). **No** essential flip and **no** global `tcai` — those
-are player-only levers. `RestoreNpcState` reverses (heal + unghost + `kAlive` + AI on + re-eval package).
-`Pacify`/`UndoPacify` toggle per-actor AI (`SetAIEnabled`, the `tai`/kProcessMe primitive) — never the player.
+`StopCombatAndAlarmOnActor` (others disengage). **No** essential flip and no global combat-AI gate.
+`RestoreNpcState` heals and restores the exact pre-defeat AI/flag/ghost/life
+state. `Pacify`/`UndoPacify` toggle per-actor AI (`SetAIEnabled`, the `tai`/kProcessMe primitive) —
+never the player — and persist the prior AI value so release cannot blindly enable it.
 
 `Defeat::ApplyDownState`/`RestoreState` dispatch player-vs-NPC so every call site (defeat, rescue, save
-restore, 3D re-assert) routes to the right recipe.
+restore, 3D re-assert) routes to the right recipe and ownership snapshot.
 
 ## 3D-reload re-assert
 
@@ -81,7 +82,9 @@ idempotent `ApplyDownState` re-assert for the next frame — replacing a lifeSta
 A 500 ms worker queues `TickRecovery` on the game thread, which rescues any defeated actor past its
 `recoverAtDay` deadline. Held entries (`recoverAtDay <= 0`, e.g. an NPC awaiting explicit content
 recovery) wait for `RescueActor`. State persists through OSF Animation's `.osf` sidecar (`OSFD` client,
-`DFT0` v1) and is re-applied on the game thread after load.
+backward-compatible `DFT0` v2 plus capture/pacify ownership records) and is re-applied on the game
+thread after load. Revert advances a runtime epoch, so deferred work from the prior save cannot land
+in the newly loaded state.
 
 ## Dead ends (proven false — do not retry)
 

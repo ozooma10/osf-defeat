@@ -49,9 +49,33 @@ Bool Function MoveToNearbyRecoveryMarker(Actor akPlayer) Global
     Return True
 EndFunction
 
+Bool Function RequestRecoveryAndWait(Actor akPlayer, Float afTimeoutSeconds = 5.0) Global
+    If akPlayer == None
+        Return False
+    EndIf
+    ; Mutating OSFDefeat Bool calls report that the request was accepted for the game thread,
+    ; not that the deferred operation has completed. Poll the authoritative query before a
+    ; follow-up transition takes ownership of the player.
+    If !OSFDefeat.RescueActor(akPlayer, True)
+        Debug.Trace("[OSFDefeatBasic] recovery request was not accepted")
+        Return False
+    EndIf
+
+    Float fWaited = 0.0
+    While OSFDefeat.IsDefeated(akPlayer) && fWaited < afTimeoutSeconds
+        Utility.Wait(0.1)
+        fWaited += 0.1
+    EndWhile
+    If OSFDefeat.IsDefeated(akPlayer)
+        Debug.Trace("[OSFDefeatBasic] recovery did not complete before timeout")
+        Return False
+    EndIf
+    Return True
+EndFunction
+
 Function FinishAftermath(Actor akPlayer) Global
     Bool bMoved = MoveToNearbyRecoveryMarker(akPlayer)
-    OSFDefeat.RescueActor(akPlayer, True)
+    RequestRecoveryAndWait(akPlayer)
     If bMoved
         Game.FadeOutGame(False, True, 0.0, 0.5)
     EndIf

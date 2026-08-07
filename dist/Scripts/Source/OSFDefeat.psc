@@ -22,6 +22,10 @@ Scriptname OSFDefeat Native Hidden
 ;   Actor (player + NPC):
 ;     Function OnActorDefeated(Actor akVictim, Actor akAggressor)
 ;     Function OnActorRecovered(Actor akVictim, Actor akAggressor)
+;
+; IMPORTANT: Bool mutators marshaled to the game thread return whether the REQUEST was accepted,
+; not the eventual operation result. Confirm completion with IsDefeated / IsPacified /
+; IsCaptiveFactionApplied / IsCaptive / GetClaimOwner, or with the matching callback.
 
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
@@ -45,9 +49,9 @@ Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds 
 Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
 String Function GetClaimOwner(Actor akActor) global native
 
-; Emergency escape / safe uninstall: rescues every defeated actor (overriding any lease), releases
-; every pacified actor, and strips the captive-faction memberships this framework created, so the
-; co-save empties on the next save. Also works from the console: cgf "OSFDefeat.ForceRecoverAll"
+; Emergency escape / safe uninstall: requests rescue for every resolvable defeated actor (overriding
+; any lease), releases owned pacifies/factions, and logs unresolved records for a later retry. Once
+; no records remain, the next co-save is empty. Console: cgf "OSFDefeat.ForceRecoverAll"
 Bool Function ForceRecoverAll() global native
 
 ; How an actor went down - content can route a scripted/capture defeat distinctly from a Health-down.

@@ -60,9 +60,17 @@ namespace OSFDefeat::Consequence
                 const auto config = Config::Get();
                 PlayerOutcome outcome;
                 outcome.name = json.value("name", a_path.stem().string());
+                if (outcome.name.empty()) {
+                    REX::WARN("[OSFDefeat] consequence JSON {} has an empty name; file skipped", a_path.string());
+                    return std::nullopt;
+                }
                 outcome.priority = json.value("priority", 0);
                 outcome.weight = std::max(1, json.value("weight", 1));
-                outcome.recoverySeconds = std::max(1.0f, json.value("recoverySeconds", config.defaultRecoverySeconds));
+                const auto recoverySeconds = json.value("recoverySeconds", config.defaultRecoverySeconds);
+                if (!std::isfinite(recoverySeconds)) {
+                    throw std::runtime_error("recoverySeconds must be finite");
+                }
+                outcome.recoverySeconds = std::max(1.0f, recoverySeconds);
                 if (const auto it = json.find("quest"); it != json.end() && it->is_string() && !it->get<std::string>().empty()) {
                     outcome.quest = it->get<std::string>();
                 }
@@ -71,6 +79,9 @@ namespace OSFDefeat::Consequence
                 outcome.maxHoldSeconds = json.value("maxHoldSeconds", 0.0f);
                 outcome.enabled = json.value("enabled", true);
                 outcome.cooldownSeconds = json.value("cooldownSeconds", 0.0f);
+                if (!std::isfinite(outcome.maxHoldSeconds) || !std::isfinite(outcome.cooldownSeconds)) {
+                    throw std::runtime_error("maxHoldSeconds and cooldownSeconds must be finite");
+                }
                 outcome.oncePerLocation = json.value("oncePerLocation", false);
                 if (const auto it = json.find("domain"); it != json.end() && it->is_string()) {
                     const auto domain = it->get<std::string>();
@@ -154,17 +165,30 @@ namespace OSFDefeat::Consequence
     {
         std::vector<PlayerOutcome> next;
         const auto root = Config::RootPath() / "Consequences" / "Player";
-        if (std::filesystem::exists(root)) {
-            for (const auto& entry : std::filesystem::directory_iterator{ root }) {
-                if (!entry.is_regular_file() || entry.path().extension() != ".json") {
-                    continue;
+        try {
+            if (std::filesystem::exists(root)) {
+                std::vector<std::filesystem::path> files;
+                for (const auto& entry : std::filesystem::directory_iterator{ root }) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".json") {
+                        files.push_back(entry.path());
+                    }
                 }
-                if (auto outcome = ParseOutcome(entry.path())) {
-                    next.push_back(std::move(*outcome));
+                std::ranges::sort(files);
+                std::set<std::string, std::less<>> names;
+                for (const auto& path : files) {
+                    if (auto outcome = ParseOutcome(path)) {
+                        if (!names.insert(outcome->name).second) {
+                            REX::WARN("[OSFDefeat] duplicate consequence name '{}' in {}; later file skipped", outcome->name, path.string());
+                            continue;
+                        }
+                        next.push_back(std::move(*outcome));
+                    }
                 }
+            } else {
+                REX::INFO("[OSFDefeat] no player consequence JSON directory at {}; using built-in fallback", root.string());
             }
-        } else {
-            REX::INFO("[OSFDefeat] no player consequence JSON directory at {}; using built-in fallback", root.string());
+        } catch (const std::exception& e) {
+            REX::ERROR("[OSFDefeat] consequence directory discovery failed for {}: {}", root.string(), e.what());
         }
         ApplyOverrides(next);
 
@@ -208,6 +232,9 @@ namespace OSFDefeat::Consequence
                 }
                 if (reason.empty()) {
                     switch (Conditions::Explain(outcome.conditions, a_victim, a_aggressor, a_cause)) {
+                    case Conditions::EvalResult::kInvalid:
+                        reason = "invalid or unsupported authored conditions";
+                        break;
                     case Conditions::EvalResult::kAggressorFailed:
                         reason = "aggressor conditions failed";
                         break;
@@ -242,7 +269,7 @@ namespace OSFDefeat::Consequence
         const int bestPriority = best->get().priority;
 
         std::vector<std::reference_wrapper<const PlayerOutcome>> pool;
-        int totalWeight = 0;
+        std::int64_t totalWeight = 0;
         for (const auto& entry : eligible) {
             const auto& outcome = entry.get();
             if (outcome.priority == bestPriority) {
@@ -252,9 +279,9 @@ namespace OSFDefeat::Consequence
         }
 
         static thread_local std::mt19937 rng{ std::random_device{}() };
-        std::uniform_int_distribution dist{ 1, std::max(1, totalWeight) };
-        const int roll = dist(rng);
-        int remaining = roll;
+        std::uniform_int_distribution<std::int64_t> dist{ 1, std::max<std::int64_t>(1, totalWeight) };
+        const auto roll = dist(rng);
+        auto remaining = roll;
         const PlayerOutcome* selected = &pool.front().get();
         for (const auto& entry : pool) {
             const auto& outcome = entry.get();
@@ -293,9 +320,9 @@ namespace OSFDefeat::Consequence
         }
     }
 
-    float DefaultRecoverySeconds()
+    void ResetRuntimeState()
     {
-        std::shared_lock lock{ g_lock };
-        return g_playerOutcomes.empty() ? Config::Get().defaultRecoverySeconds : g_playerOutcomes.front().recoverySeconds;
+        std::unique_lock lock{ g_lock };
+        g_fired.clear();
     }
 }

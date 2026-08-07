@@ -2,7 +2,7 @@
   "version": 2,
   "name": "Basic: Robbed and Left",
   "priority": 10,
-  "weight": 1,
+  "weight": 3,
   "recoverySeconds": 30.0,
   "quest": "OSFDefeatBasicRobbedQuest",
   "holdRecovery": true,

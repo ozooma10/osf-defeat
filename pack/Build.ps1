@@ -57,18 +57,32 @@ if (-not $NoPlugin) {
 }
 
 if (-not $NoDeploy) {
-    Write-Host "Deploying to $Target"
+    $Target = [System.IO.Path]::GetFullPath($Target)
+    $TargetRoot = [System.IO.Path]::GetPathRoot($Target)
+    $RepoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $Root))
+    $TargetLeaf = Split-Path -Leaf $Target
+    $BroadLeaves = @("Data", "mods", "Starfield", "Modding", "Scripts", "SFSE")
+    if ($Target -eq $TargetRoot -or $Target -eq $RepoRoot -or
+        $Target.StartsWith($RepoRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $RepoRoot.StartsWith($Target + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $BroadLeaves -contains $TargetLeaf) {
+        throw "Refusing unsafe deployment target: $Target"
+    }
+    Write-Host "Deploying owned payload paths to $Target"
     New-Item -ItemType Directory -Force -Path $Target | Out-Null
     foreach ($item in @("OSFDefeatBasic.esm", "meta.ini", "Scripts", "SFSE")) {
         $s = Join-Path $Root $item
         if (-not (Test-Path -LiteralPath $s)) { Write-Host "  (skip missing $item)"; continue }
-        $d = Join-Path $Target $item
-        if ((Get-Item -LiteralPath $s).PSIsContainer) {
-            New-Item -ItemType Directory -Force -Path $d | Out-Null
-            Copy-Item -Path (Join-Path $s "*") -Destination $d -Recurse -Force
-        } else {
-            Copy-Item -LiteralPath $s -Destination $d -Force
+        $d = [System.IO.Path]::GetFullPath((Join-Path $Target $item))
+        if (-not $d.StartsWith($Target + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Resolved deployment item escaped target: $d"
         }
+        # Replace each pack-owned path atomically at the path boundary. Copy-merge left stale PEX/
+        # JSON files behind after renames, which made deployed behavior differ from the source tree.
+        if (Test-Path -LiteralPath $d) {
+            Remove-Item -LiteralPath $d -Recurse -Force
+        }
+        Copy-Item -LiteralPath $s -Destination $d -Recurse -Force
     }
 }
 

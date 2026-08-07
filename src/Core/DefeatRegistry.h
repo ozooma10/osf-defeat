@@ -23,6 +23,20 @@ namespace OSFDefeat
 		kScripted = 2  // DefeatActor verb
 	};
 
+	// Engine properties OSF temporarily owns while an actor is down. Persisted so recovery after a
+	// save/load restores the actor's actual prior state instead of imposing guessed defaults.
+	struct ActorStateSnapshot
+	{
+		bool valid{ false };
+		bool aiEnabled{ true };
+		bool noBleedoutRecovery{ false };
+		bool canSpeakToEssentialDown{ false };
+		bool ghost{ false };
+		bool actorEssential{ false };
+		bool baseEssential{ false };
+		RE::ACTOR_LIFE_STATE lifeState{ RE::ACTOR_LIFE_STATE::kAlive };
+	};
+
 	// Per-victim record. Held by shared_ptr because it carries an atomic (so it is
 	// neither copyable nor movable) and callers may hold a handle across the lock.
 	struct VictimData
@@ -36,6 +50,7 @@ namespace OSFDefeat
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
 		std::atomic<DefeatCause> cause{ DefeatCause::kNone };  // how they went down (persisted); write-once at defeat
 		std::atomic<DefeatState> state{ DefeatState::Defeating };
+		ActorStateSnapshot       priorState;  // game-thread only; Save is serialized by RuntimeState
 
 		// Ownership lease (persisted). A held down-state (recoverAtDay <= 0) may be claimed by a
 		// content consumer: leaseOwner names it (consequence name or ClaimDefeat token) and

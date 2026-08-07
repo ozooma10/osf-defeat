@@ -1,6 +1,16 @@
 -- include subprojects
 includes("lib/commonlibsf")
 
+-- CommonLib's plugin rule automatically runs its install action after a rebuild. Apply this rule
+-- after commonlibsf.plugin so verification builds stage that mandatory install inside the repo.
+rule("osfdefeat.install_target")
+    on_config(function(target)
+        if os.getenv("OSF_DEFEAT_SKIP_DEPLOY") == "1" then
+            target:set("installdir", path.join(os.projectdir(), "build", ".verify-mods", target:name()))
+        end
+    end)
+rule_end()
+
 set_project("OSF Defeat")
 set_version("0.1.0")
 set_license("GPL-3.0")
@@ -19,6 +29,7 @@ target("OSF Defeat")
         description = "Native defeat framework foundation for Starfield",
         email = "98544147+ozooma10@users.noreply.github.com"
     })
+    add_rules("osfdefeat.install_target")
 
     add_files("src/**.cpp")
     add_headerfiles("src/**.h")
@@ -28,6 +39,10 @@ target("OSF Defeat")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", "_CRT_SECURE_NO_WARNINGS")
 
     after_build(function(target)
+        if os.getenv("OSF_DEFEAT_SKIP_DEPLOY") == "1" then
+            cprint("${yellow}[OSF Defeat] OSF_DEFEAT_SKIP_DEPLOY=1; skipping post-build deployment")
+            return
+        end
         local modsroot = os.getenv("XSE_SF_MODS_PATH")
         local gameroot = os.getenv("XSE_SF_GAME_PATH")
         local plugindir = nil
@@ -45,7 +60,7 @@ target("OSF Defeat")
         cprint("${bright cyan}[OSF Defeat] copying build outputs to %s", plugindir)
         for _, src in ipairs({ target:targetfile(), target:symbolfile() }) do
             if src and os.isfile(src) then
-                os.trycp(src, path.join(plugindir, path.filename(src)))
+                os.cp(src, path.join(plugindir, path.filename(src)))
                 cprint("${green}[OSF Defeat] copied:${clear} %s", path.filename(src))
             end
         end
@@ -54,12 +69,12 @@ target("OSF Defeat")
                            or path.join(gameroot, "Data", "Scripts")
         for _, pex in ipairs(os.files(path.join(os.projectdir(), "dist", "Scripts", "*.pex"))) do
             os.mkdir(scriptroot)
-            os.trycp(pex, path.join(scriptroot, path.filename(pex)))
+            os.cp(pex, path.join(scriptroot, path.filename(pex)))
             cprint("${green}[OSF Defeat] deployed script:${clear} %s", path.filename(pex))
         end
         for _, psc in ipairs(os.files(path.join(os.projectdir(), "dist", "Scripts", "Source", "*.psc"))) do
             os.mkdir(path.join(scriptroot, "Source"))
-            os.trycp(psc, path.join(scriptroot, "Source", path.filename(psc)))
+            os.cp(psc, path.join(scriptroot, "Source", path.filename(psc)))
         end
         local dataroot = (modsroot and #modsroot > 0) and path.join(modsroot, target:name())
                          or path.join(gameroot, "Data")
@@ -67,7 +82,7 @@ target("OSF Defeat")
             local rel = path.relative(config, path.join(os.projectdir(), "dist"))
             local dst = path.join(dataroot, rel)
             os.mkdir(path.directory(dst))
-            os.trycp(config, dst)
+            os.cp(config, dst)
             cprint("${green}[OSF Defeat] deployed config:${clear} %s", rel)
         end
         -- OSF Animation scene defs (Data/OSF/*.osf.json) — the player down-state cower scene.
@@ -75,7 +90,7 @@ target("OSF Defeat")
             local rel = path.relative(scene, path.join(os.projectdir(), "dist"))
             local dst = path.join(dataroot, rel)
             os.mkdir(path.directory(dst))
-            os.trycp(scene, dst)
+            os.cp(scene, dst)
             cprint("${green}[OSF Defeat] deployed scene:${clear} %s", rel)
         end
     end)

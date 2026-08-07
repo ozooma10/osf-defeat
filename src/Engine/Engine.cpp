@@ -3,6 +3,7 @@
 #include "Engine/Engine.h"
 
 #include "Core/Config.h"
+#include "Core/RuntimeState.h"
 
 #include "RE/B/BSPointerHandle.h"
 #include "RE/P/ProcessLists.h"
@@ -12,9 +13,6 @@ namespace OSFDefeat::Engine
 {
     namespace
     {
-        std::atomic_bool g_hasEssentialSnapshot{ false };
-        bool g_wasEssential{ false };
-
         // Per-actor record of the captive-faction membership WE created (actorID -> factionID)
         // tracked ONLY when we actually add the membership, so removal deletes precisely what we introduced  never a pre-existing or a retargeted membership. 
         // Presence also doubles as the once-per-down guard against re-entrant adds (SetPlayerDownState re-runs on 3D re-attach / save-load re-assert). 
@@ -31,10 +29,57 @@ namespace OSFDefeat::Engine
 			return base ? base->As<RE::TESNPC>() : nullptr;
 		}
 
-        [[nodiscard]] bool PlayerIsEssential(RE::Actor* a_actor)
+        [[nodiscard]] RE::ACTOR_LIFE_STATE LifeStateOf(RE::Actor* a_actor)
         {
-			auto* const npc = NpcOf(a_actor);
-            return npc ? npc->IsEssential() : false;
+            const auto state = (static_cast<RE::ActorState*>(a_actor)->actorState1 >> 17) & 0xF;
+            return static_cast<RE::ACTOR_LIFE_STATE>(state);
+        }
+
+        void CapturePriorState(RE::Actor* a_actor, const std::shared_ptr<VictimData>& a_data)
+        {
+            if (!a_actor || !a_data || a_data->priorState.valid) {
+                return;
+            }
+            auto& prior = a_data->priorState;
+            prior.aiEnabled = a_actor->boolBits.all(RE::Actor::BOOL_BITS::kProcessMe);
+            prior.noBleedoutRecovery = a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+            prior.canSpeakToEssentialDown = a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kCanSpeakToEssentialDown);
+            prior.ghost = a_actor->extraDataList && a_actor->extraDataList->HasType(RE::ExtraDataType::kGhost);
+            prior.actorEssential = a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kEssential);
+            if (auto* const npc = NpcOf(a_actor)) {
+                prior.baseEssential = npc->IsEssential();
+            }
+            prior.lifeState = LifeStateOf(a_actor);
+            prior.valid = true;  // publish last
+        }
+
+        [[nodiscard]] ActorStateSnapshot LegacyPriorState()
+        {
+            ActorStateSnapshot prior;
+            prior.valid = true;
+            return prior;
+        }
+
+        void RestoreOwnedState(RE::Actor* a_actor, const ActorStateSnapshot* a_priorState, bool a_restoreSpeechFlag)
+        {
+            if (!a_actor) {
+                return;
+            }
+            const auto fallback = LegacyPriorState();
+            const auto& prior = a_priorState && a_priorState->valid ? *a_priorState : fallback;
+            a_actor->boolFlags.set(prior.noBleedoutRecovery, RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
+            if (a_restoreSpeechFlag) {
+                a_actor->boolFlags.set(prior.canSpeakToEssentialDown, RE::Actor::BOOL_FLAGS::kCanSpeakToEssentialDown);
+            }
+            a_actor->SetGhost(prior.ghost);
+            a_actor->SetAIEnabled(prior.aiEnabled);
+            a_actor->SetLifeState(prior.lifeState);
+            if (a_actor->IsPlayerRef()) {
+                a_actor->boolFlags.set(prior.actorEssential, RE::Actor::BOOL_FLAGS::kEssential);
+                if (auto* const npc = NpcOf(a_actor)) {
+                    npc->actorData.actorBaseFlags.set(prior.baseEssential, RE::ACTOR_BASE_DATA::Flag::kEssential);
+                }
+            }
         }
 
         // Resolves the configured captive faction an actor joins so hostiles disengage. Returns nullptr when the FormID is 0 or it doesn't resolve to a TESFaction 
@@ -123,10 +168,6 @@ namespace OSFDefeat::Engine
             return;
         }
 
-        bool expected = false;
-        if (g_hasEssentialSnapshot.compare_exchange_strong(expected, true)) {
-            g_wasEssential = PlayerIsEssential(a_actor);
-        }
         SetPlayerEssential(true);
         RestoreHealthToMax(a_actor);
         a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
@@ -157,25 +198,18 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void RestorePlayerState(RE::Actor* a_actor)
+    void RestorePlayerState(RE::Actor* a_actor, const ActorStateSnapshot* a_priorState)
     {
         if (!a_actor || !a_actor->IsPlayerRef()) {
             return;
         }
 
         RestoreHealthToMax(a_actor);
-        a_actor->boolFlags.reset(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-        a_actor->boolFlags.reset(RE::Actor::BOOL_FLAGS::kCanSpeakToEssentialDown);
-        a_actor->SetGhost(false);
-        a_actor->SetAIEnabled(true);
-        a_actor->SetLifeState(kAlive);
+        RestoreOwnedState(a_actor, a_priorState, true);
         // EvaluatePackage is intentionally NOT called: its AddressLib ID is unbound (0) in commonlibsf
         // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
         // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
         // re-eval isn't required for recovery. Re-add only once 150640 is RE-proven for the live build.
-        if (g_hasEssentialSnapshot.exchange(false)) {
-            SetPlayerEssential(g_wasEssential);
-        }
         // Undo any captive-faction pacify (from SetPlayerDownState or the ApplyCaptiveFaction verb):
         // remove exactly the faction we added (tracked by FormID so a config change mid-down can't
         // retarget the removal, and a pre-existing membership we didn't add is left untouched). Normal
@@ -201,17 +235,14 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void RestoreNpcState(RE::Actor* a_actor)
+    void RestoreNpcState(RE::Actor* a_actor, const ActorStateSnapshot* a_priorState)
     {
         if (!a_actor || a_actor->IsPlayerRef()) {
             return;
         }
 
         RestoreHealthToMax(a_actor);
-        a_actor->boolFlags.reset(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
-        a_actor->SetGhost(false);
-        a_actor->SetLifeState(kAlive);
-        a_actor->SetAIEnabled(true);
+        RestoreOwnedState(a_actor, a_priorState, false);
         // EvaluatePackage is intentionally NOT called: its AddressLib ID is unbound (0) in commonlibsf
         // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
         // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
@@ -219,11 +250,12 @@ namespace OSFDefeat::Engine
         RemoveCaptiveFaction(a_actor);  // in case content applied the captive verb to this NPC
     }
 
-    void ApplyDownState(RE::Actor* a_actor)
+    void ApplyDownState(RE::Actor* a_actor, const std::shared_ptr<VictimData>& a_data)
     {
         if (!a_actor) {
             return;
         }
+        CapturePriorState(a_actor, a_data);
         if (a_actor->IsPlayerRef()) {
             SetPlayerDownState(a_actor);
         } else {
@@ -231,20 +263,21 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void RestoreState(RE::Actor* a_actor)
+    void RestoreState(RE::Actor* a_actor, const std::shared_ptr<VictimData>& a_data)
     {
         if (!a_actor) {
             return;
         }
         if (a_actor->IsPlayerRef()) {
-            RestorePlayerState(a_actor);
+            RestorePlayerState(a_actor, a_data ? &a_data->priorState : nullptr);
         } else {
-            RestoreNpcState(a_actor);
+            RestoreNpcState(a_actor, a_data ? &a_data->priorState : nullptr);
         }
     }
 
     bool ApplyCaptiveFaction(RE::Actor* a_actor)
     {
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
         if (!a_actor) {
             return false;
         }
@@ -279,6 +312,7 @@ namespace OSFDefeat::Engine
 
     bool RemoveCaptiveFaction(RE::Actor* a_actor)
     {
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
         if (!a_actor) {
             return false;
         }
@@ -310,6 +344,17 @@ namespace OSFDefeat::Engine
         return g_captiveApplied.contains(a_actor->GetFormID());
     }
 
+    bool IsInCaptiveFaction(RE::Actor* a_actor)
+    {
+        auto* const faction = CaptiveFaction();
+        return a_actor && faction && a_actor->GetFactionRank(faction, a_actor->IsPlayerRef()) >= 0;
+    }
+
+    bool IsCaptiveFactionAvailable()
+    {
+        return CaptiveFaction() != nullptr;
+    }
+
     std::vector<std::pair<std::uint32_t, std::uint32_t>> SnapshotCaptiveFactions()
     {
         std::unique_lock lock{ g_captiveLock };
@@ -321,6 +366,7 @@ namespace OSFDefeat::Engine
         // Re-track only: the membership itself is already in the save. Restoring the record is what
         // lets the eventual recovery remove exactly the membership we created before the save.
         if (a_actorId && a_factionId) {
+            std::scoped_lock stateLock{ RuntimeState::Mutex() };
             std::unique_lock lock{ g_captiveLock };
             g_captiveApplied[a_actorId] = a_factionId;
         }
@@ -330,5 +376,11 @@ namespace OSFDefeat::Engine
     {
         std::unique_lock lock{ g_captiveLock };
         g_captiveApplied.clear();
+    }
+
+    void ResetRuntimeState()
+    {
+        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        ClearCaptiveFactions();
     }
 }

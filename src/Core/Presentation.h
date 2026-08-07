@@ -37,6 +37,10 @@ namespace OSFDefeat::Presentation
 	// is still lost, the next tick re-asserts again. Game thread.
 	void ReassertPlayerDown();
 
+	// Clear session-only debounce state during persistence revert. Does not touch an engine scene;
+	// the load pipeline owns scene teardown and the restored defeat will reassert if needed.
+	void ResetRuntimeState();
+
 	// Low-level player-AI-driven toggle (Game.SetPlayerAIDriven via the VM). Used defensively by
 	// ClearPlayerDown to clear any stale AI-driven flag on recovery. Unrelated to the scene API.
 	void SetPlayerAIDriven(bool a_driven);

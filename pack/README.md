@@ -9,7 +9,7 @@ Acheron's empty-by-default mistake, not repeated.
 Ships as its **own MO2 mod** (`OSF Defeat - Basic Consequences`) so users can toggle or replace
 the default content without touching the framework.
 
-## v0.3 — seven scenarios, one per defeat context
+## v0.3 — six scenarios, one per defeat context
 
 Each aggressor context produces a *plausible* beat instead of the framework's meaningless
 built-in down-then-recover fallback. Selection is highest-priority-tier-wins, weights break ties

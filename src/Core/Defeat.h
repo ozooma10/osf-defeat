@@ -29,9 +29,16 @@ namespace OSFDefeat::Defeat
 	[[nodiscard]] std::vector<RE::Actor*> GetAllDefeated(bool a_loadedOnly);
 
 	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay,
-		float a_leaseDeadlineDay = 0.0f, std::string a_leaseOwner = {}, DefeatCause a_cause = DefeatCause::kNone);
+		float a_leaseDeadlineDay = 0.0f, std::string a_leaseOwner = {}, DefeatCause a_cause = DefeatCause::kNone,
+		ActorStateSnapshot a_priorState = {});
 
 	void               Pacify(RE::Actor* a_victim);
 	void               UndoPacify(RE::Actor* a_victim);
 	[[nodiscard]] bool IsPacified(const RE::Actor* a_victim);
+
+	// Persistence support for explicitly pacified actors. The bool is the AI-enabled state that
+	// must be restored, so ReleaseActor never blindly enables AI that another system had disabled.
+	[[nodiscard]] std::vector<std::pair<FormID, bool>> SnapshotPacified();
+	void RestorePacified(FormID a_id, bool a_wasAIEnabled);
+	void ResetRuntimeState();
 }

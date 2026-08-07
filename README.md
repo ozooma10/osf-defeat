@@ -20,10 +20,10 @@ When an actor would take a lethal Health hit, OSF Defeat clamps the damage befor
 - **Ownership lease + watchdog**: content claims a held down-state under its name with a deadline
   (`ClaimDefeat` / `ReleaseClaim`, or `holdRecovery` JSON auto-claims); a lapsed deadline
   force-rescues and logs the defaulting consumer — a broken content mod can never strand the player.
-- **Emergency escape / safe uninstall**: `cgf "OSFDefeat.ForceRecoverAll"` rescues everyone,
-  releases pacifies, strips captive factions, and empties the co-save.
+- **Emergency escape / safe uninstall**: `cgf "OSFDefeat.ForceRecoverAll"` rescues resolvable
+  actors, releases owned pacifies/captive factions, and reports any unresolved records to retry.
 - **Legible death boundary**: every deliberate player passthrough (processing disabled, in-scene,
-  excluded location…) logs its reason; `explainDecisions` adds NPC passthroughs and full
+  resist window…) logs its reason; `explainDecisions` adds NPC passthroughs and full
   consequence-selection detail (per-outcome filter reasons + the priority/weight roll).
 - Player defeated/recovered/consequence-started Papyrus events.
 - JSON validation/config and player consequences under `Data/SFSE/OSFDefeat/` (schema v2:
@@ -94,9 +94,16 @@ highest `priority` tier wins with weighted random among ties. A resolving `quest
 for the ship-defeat milestone. `Overrides.json` (root of `SFSE/OSFDefeat/`) lets users override
 `enabled`/`weight`/`priority` per consequence name in one place.
 
+`excludedLocations`, `excludedQuests`, and consequence `locations`/quest-state gates are reserved
+schema fields. This CommonLibSF build does not yet expose proven safe engine seams for them, so
+non-empty authored gates are warned and parked; they never call the known-unmapped location thunk.
+
 ## Papyrus API
 
 The declarations live in `dist/Scripts/Source/OSFDefeat.psc`, with compiled output in `dist/Scripts/OSFDefeat.pex`.
+
+Mutating `Bool` natives return request acceptance because their engine work is queued. Confirm the
+eventual state with the corresponding query/callback before a dependent action.
 
 ```papyrus
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
@@ -121,16 +128,17 @@ Bool Function IsNonFlesh(Actor akActor) global native
 Bool Function IsHostile(Actor akActor, Actor akTarget) global native
 Function DisableProcessing(Bool abDisable) global native
 Bool Function IsProcessingDisabled() global native
-Function RegisterForPlayerDefeated(Form akReceiver) global native
-Function UnregisterForPlayerDefeated(Form akReceiver) global native
-Function RegisterForPlayerRecovered(Form akReceiver) global native
-Function UnregisterForPlayerRecovered(Form akReceiver) global native
-Function RegisterForPlayerConsequenceStarted(Form akReceiver) global native
-Function UnregisterForPlayerConsequenceStarted(Form akReceiver) global native
+Int Function RegisterForPlayerDefeated(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerDefeated(Int aiToken) global native
+Int Function RegisterForPlayerRecovered(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerRecovered(Int aiToken) global native
+Int Function RegisterForPlayerConsequenceStarted(ScriptObject akReceiver, String asCallback) global native
+Bool Function UnregisterForPlayerConsequenceStarted(Int aiToken) global native
 Actor Function GetLastPlayerAggressor() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
 Float Function GetLastPlayerRecoverySeconds() global native
+Actor[] Function GetLastPlayerParticipants() global native
 Function ReloadJSON() global native
 ```
 
@@ -143,7 +151,7 @@ xmake f -p windows -a x64 -m debug -y
 xmake build
 ```
 
-Set `XSE_SF_MODS_PATH` to your mod-manager `mods` folder, or `XSE_SF_GAME_PATH` to the game install, to auto-deploy the DLL/PDB, Papyrus files, and `SFSE/OSFDefeat` JSON.
+Set `XSE_SF_MODS_PATH` to your mod-manager `mods` folder, or `XSE_SF_GAME_PATH` to the game install, to auto-deploy the DLL/PDB, Papyrus files, and `SFSE/OSFDefeat` JSON. Set `OSF_DEFEAT_SKIP_DEPLOY=1` for a compile-only verification build.
 
 To compile Papyrus manually:
 

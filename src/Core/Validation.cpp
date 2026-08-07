@@ -32,12 +32,9 @@ namespace OSFDefeat::Validation
         if (Config::ShouldDisableInScenes() && a_victim->GetCurrentScene()) {
             return Verdict::kInScene;
         }
-        // GetCurrentLocation has an unmapped AddrLib ID (0) in this CommonLibSF copy and crashes if
-        // called (REL/IDDB "Invalid ID: 0"), so only touch it when locations are actually excluded.
-        // The default (empty) set never calls it. Populating excludedLocations needs a verified ID.
-        if (Config::HasExcludedLocations() && Config::IsLocationExcluded(a_victim->GetCurrentLocation())) {
-            return Verdict::kLocationExcluded;
-        }
+        // excludedLocations/excludedQuests remain schema-reserved, but are intentionally not
+        // evaluated: this CommonLibSF's location relocation is unmapped and calling it crashes.
+        // Config loading warns when either list is non-empty. Safety beats a fail-open/crash gate.
         return Verdict::kOk;
     }
 

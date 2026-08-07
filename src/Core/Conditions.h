@@ -17,7 +17,7 @@ namespace OSFDefeat::Conditions
     // Location and quest-state conditions are schema-reserved but UNSUPPORTED until
     // their engine seams are RE-proven for this CommonLibSF (GetCurrentLocation has
     // an unmapped AddrLib ID and crashes if called; TESQuest state natives are
-    // unbound). Authoring them logs a warning and the block is ignored.
+    // unbound). Authoring them parks the outcome instead of silently widening it.
 
     struct ActorBlock
     {
@@ -33,6 +33,7 @@ namespace OSFDefeat::Conditions
         ActorBlock aggressor;  // defaults to matchAll = false ("any")
         ActorBlock victim;     // defaults to matchAll = true ("all")
         std::vector<DefeatCause> causes;  // "cause": "health" | ["health","scripted"]; empty = any
+        bool valid{ true };  // false = malformed, unknown, or currently unsupported authored gate
 
         [[nodiscard]] bool Empty() const { return aggressor.Empty() && victim.Empty() && causes.empty(); }
     };
@@ -53,6 +54,7 @@ namespace OSFDefeat::Conditions
     enum class EvalResult
     {
         kPass,
+        kInvalid,
         kAggressorFailed,
         kVictimFailed,
         kCauseFailed

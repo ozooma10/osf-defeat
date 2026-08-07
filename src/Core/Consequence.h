@@ -48,6 +48,5 @@ namespace OSFDefeat::Consequence
     // Arbitration bookkeeping: call once when the selected outcome actually fires.
     // Stamps the cooldown clock and the oncePerLocation cell. Game thread.
     void MarkFired(const PlayerOutcome& a_outcome, RE::Actor* a_victim);
-
-    [[nodiscard]] float DefaultRecoverySeconds();
+    void ResetRuntimeState();
 }
