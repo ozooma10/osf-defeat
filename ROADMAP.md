@@ -9,8 +9,8 @@ What we keep from Acheron, because it is proven:
 
 - **Native hook interception, no polling** — the `ModActorValue` clamp (Health) instead of
   `OnHit` cloaks or Papyrus polling.
-- **Framework owns physics, content owns meaning** — defeat state, pacify, validation, selection,
-  handoff live here; scenes, robbery, capture, outcomes live in content mods.
+- **Framework owns physics, content owns meaning** — defeat state, AI suspension, eligibility, selection,
+  and handoff live here; scenes, robbery, capture, and authored consequences live in content mods.
 - **Declarative drop-in registration** — JSON consequence files; priority → conditions → weighted
   random selection.
 - **Design humility about death** — scripted kills and excluded contexts pass through; the
@@ -39,25 +39,25 @@ reason the core is solid; we accept the no-Creations/Xbox trade explicitly (READ
   **Health** gauge (a would-be-lethal Health hit routes into defeat instead of death).
 - Aggressor attribution on the script/null path via the victim's `currentCombatTarget`.
 - `Actor::Set3D` re-assert hook so defeat state survives cell change / save load / `coc`.
-- Defeat registry, persistence, and Defeat / Rescue / Pacify verbs as the foundation spine.
+- Defeat registry, persistence, and defeat/recovery/AI-suspension verbs as the foundation spine.
 - Player down/recovery engine state; combat is deliberately **not** paused during the down beat
   (player is ghosted; enemies resume naturally on recovery — no tcai-gate freeze).
 - **Verb-driven NPC defeat/recover** using the live-validated per-actor recipe (bleedout + ghost +
   per-actor combat removal).
-- Recovery generalized to any defeated actor by `recoverAtDay`; held entries await explicit rescue.
-- `recoverAtDay` stored in co-save so save/load during defeat can resume recovery.
-- JSON validation under `Data/SFSE/OSFDefeat/Validation/*.json`; player consequences under
+- Recovery generalized to any defeated actor by `autoRecoverAtDay`; held entries await explicit recovery.
+- `autoRecoverAtDay` stored in co-save so save/load during defeat can resume recovery.
+- Framework settings under `Data/SFSE/OSFDefeat/Settings/*.json`; player consequences under
   `Data/SFSE/OSFDefeat/Consequences/Player/*.json`.
-- Highest-priority, weighted-random player outcome selection with built-in fallback.
+- Highest-priority, weighted-random player consequence selection with built-in fallback.
 - Player defeated/recovered/consequence-started Papyrus events with handoff context getters.
 - Robot/turret + hostility classification (`ClassifyActor`, `IsNonFlesh`, `IsHostile`).
 - Opt-in **NPC auto-defeat** (`npcAutoDefeat`) on would-be-lethal hits, symmetric with the player path.
-- `ReloadJSON` hot-reload of validation/consequence JSON without a restart.
+- `ReloadJSON` hot-reload of settings/consequence JSON without a restart.
 - **SAF-parity handoff API**: consequence `quest` tokens VM-dispatch `Quest.Start`
-  (`startQuest` opt-out); `SetRecoveryTimer` / `GetRecoverySecondsRemaining` + per-consequence
-  `holdRecovery`; captive-faction pacify verbs (`ApplyCaptiveFaction` / `RemoveCaptiveFaction` /
-  `IsCaptiveFactionApplied`), co-save persisted, auto-removed on rescue; defeat-time participant
-  snapshot (`GetLastPlayerParticipants`, `participantScanRadius`).
+  (`startQuest` opt-out); explicit `ScheduleAutomaticRecovery` / `HoldRecovery` verbs + per-consequence
+  `recoveryMode: "held"`; captive-faction non-hostility verbs (`ApplyCaptiveFaction` / `RemoveCaptiveFaction` /
+  `IsCaptiveFactionApplied`), co-save persisted, auto-removed on recovery; defeat-time recent-hostile-attacker
+  snapshot (`GetLastPlayerRecentHostileAttackers`, `recentHostileAttackerRadius`).
 - **Condition grammar (actor tier)**: per-consequence aggressor/victim keyword+faction matching
   (any/all semantics, Acheron-style) as a selection gate before the priority/weight roll.
 - Package defaults in `dist/SFSE/OSFDefeat` plus Papyrus source/PEX in `dist/Scripts`.
@@ -66,12 +66,12 @@ reason the core is solid; we accept the no-Creations/Xbox trade explicitly (READ
 
 Ship a build a user can trust for a whole playthrough.
 
-- [x] In-game verify the current no-pacify build: down → recover with no `tcai`, no enemy freeze,
+- [x] In-game verify the current no-global-AI-gate build: down → recover with no `tcai`, no enemy freeze,
       no crash (**verified 2026-07-22**).
 - [x] Runtime-verify the robot/turret keyword **positive** case (**verified 2026-07-22**: "Left for
       Scrap" fired on `ActorTypeRobot`, "Mauled" on `ActorTypeCreature` — first positive matches).
 - [~] Alpha test plan (below) green end-to-end — **all sections verified 2026-07-22 except the
-      watchdog force-rescue (deferred; needs a staged never-releasing hold).** Two bugs found + fixed:
+      watchdog force-recovery (deferred; needs a staged never-releasing hold).** Two bugs found + fixed:
       camera restore after the down-scene (OSF Animation side), and the player-singleton lookup in
       `TransferCaptive` (`LookupByID(0x14)` returns null → resolve the player via the singleton).
 - [ ] Hook resilience across Starfield updates (Address Library discipline; version-gated IDs).
@@ -81,21 +81,21 @@ Ship a build a user can trust for a whole playthrough.
 
 The features that make OSF Defeat *more* trustworthy than Acheron. All native, no RE blockers.
 
-1. ~~**Ownership lease + watchdog.**~~ Done: `ClaimDefeat(actor, owner, maxHoldSeconds)` /
-   `ReleaseClaim` / `GetClaimOwner` verbs; re-claim by the same owner extends, a competing owner is
-   refused; `holdRecovery` auto-claims under the consequence name (`maxHoldSeconds` JSON field);
-   lapsed deadline → force-rescue + WARN naming the defaulter. Player held entries are always
+1. ~~**Defeat lease + watchdog.**~~ Done: `AcquireDefeatLease(actor, holderId, timeoutSeconds)` /
+   `ReleaseDefeatLease` / `GetDefeatLeaseHolder` verbs; reacquiring by the same holder extends, a competing holder is
+   refused; held consequences auto-acquire under `consequence:<id>` (`leaseTimeoutSeconds` JSON field);
+   lapsed deadline → force-recovery + WARN naming the defaulter. Player held entries are always
    watchdog-armed (`watchdogSeconds`, default 600, 0 disables); NPC held entries only when leased
    (a held captive is a legitimate long-term state). Lease persists in the OSF sidecar (`DFT0` v1).
    Quest-stop detection is deferred — TESQuest state reads are RE-blocked; the deadline covers it.
 2. ~~**Emergency escape.**~~ Done: `ForceRecoverAll()` verb, console-callable via
    `cgf "OSFDefeat.ForceRecoverAll"`. Overrides any lease. (Held-key binding deferred — needs an
    input hook; the console path covers the unstick case.)
-3. ~~**Decision transparency ("explain mode").**~~ Done: `explainDecisions` validation flag adds
-   NPC passthrough reasons and full selection detail (per-outcome filter reason: disabled /
+3. ~~**Decision transparency ("explain mode").**~~ Done: `explainDecisions` settings flag adds
+   NPC passthrough reasons and full selection detail (per-consequence filter reason: disabled /
    off-domain / cooldown / once-per-location / aggressor-or-victim conditions; then the
-   priority/weight pool and the roll). Filter reasons for outcomes log at INFO always.
-4. ~~**Safe uninstall / recover-all.**~~ Done: `ForceRecoverAll` also releases pacified actors and
+   priority/weight pool and the roll). Filter reasons for consequences log at INFO always.
+4. ~~**Safe uninstall / recover-all.**~~ Done: `ForceRecoverAll` also resumes framework-suspended AI and
    strips framework-created captive factions; the co-save empties on the next save.
 5. ~~**Legible death boundary.**~~ Done: every deliberate player passthrough logs at INFO with its
    reason (API-disabled, config-disabled, in-scene, excluded location, already dead), debounced.
@@ -109,11 +109,11 @@ Cheap now, painful to retrofit once content packs exist in the wild.
   `oncePerLocation` keys on the **parent cell** (GetCurrentLocation is RE-blocked); revisit when
   the location seam is proven.
 - ~~Central user overrides file.~~ Done: `SFSE/OSFDefeat/Overrides.json` overrides
-  `enabled`/`weight`/`priority` per consequence name; unknown names log a hint; applied on load
+  `enabled`/`weight`/`priority` per stable consequence ID; unknown IDs log a hint; applied on load
   and `ReloadJSON`.
 - ~~`domain` field.~~ Done: `"onfoot"` default, `"ship"` parses but never competes (parked with a
   log line); *unknown* domains also park rather than misfire on foot. v1 files stay valid.
-- ~~Schema `version: 2` with v1 accepted.~~ Done for consequence + validation JSON; unknown
+- ~~Schema `version: 2` with v1 accepted.~~ Superseded by schema v3; v1/v2 consequence and settings JSON remain accepted; unknown
   top-level consequence fields warn with file + field (`//`-prefixed keys stay silent for
   comment conventions).
 
@@ -127,17 +127,17 @@ prove the M1 lease/handoff API as its own first consumer.
 DLL stays pure; the pack demonstrates the real content-mod workflow.
 
 - ~~**"Robbed and Left"** (v0.1, 2026-07-01)~~: human aggressors take a credits cut (default 10%,
-  min 25 / cap 2500) **into their own inventory** — hunt them down to recover it. `holdRecovery`
-  + auto-claim + `maxHoldSeconds: 120` watchdog, `cooldownSeconds: 300` arbitration, explicit
-  rescue handshake. Optional `HurtAffliction` spell property (ships unfilled).
+  min 25 / cap 2500) **into their own inventory** — hunt them down to recover it. Held recovery
+  + automatic defeat lease + `leaseTimeoutSeconds: 120` watchdog, `cooldownSeconds: 300` arbitration, explicit
+  recovery handshake. Optional `HurtAffliction` spell property (ships unfilled).
 - ~~**"Taken Into Custody"** (v0.2, 2026-07-01)~~: security aggressors arrest instead of kill —
   `Actor.GetCrimeFaction()` → `Faction.SendPlayerToJail` (inventory kept), gated on the
   security-faction FormIDs mined from Starfield.esm. Priority 20 beats robbery's 10.
 - ~~Fill the affliction~~ (v0.2): `HurtAffliction` ships filled with `ENV_AFFL_Injury_Sprain_1`
   (0x002BDD28), applied the vanilla way (`AddSpell` — afflictions are abilities), 35% chance.
-- ~~Condition grammar: gate outcomes on `defeatCause`.~~ Done (2026-07-01): `"cause"` in
+- ~~Condition grammar: gate consequences on `defeatCause`.~~ Done (2026-07-01): `"cause"` in
   `conditions` (`health`/`scripted`, string or array).
-- ~~**Scenario set** (v0.3, 2026-07-01)~~: more outcomes so every common aggressor context
+- ~~**Scenario set** (v0.3, 2026-07-01)~~: more consequences so every common aggressor context
   gets a plausible beat rather than the built-in fallback, and every framework surface has a
   shipped consumer. Priority ladder: **Taken Into Custody** 20 (security) > **Left as a
   Message** 12 (Va'ruun faction; no loot, concussion) > tier 10 { **Robbed and Left** w3,
@@ -161,7 +161,7 @@ Give NPC defeat a vanilla-plausible fantasy: capture-and-ransom bounty hunting.
 > **EM channel removed (2026-07-21).** The player-facing EM/stun gauge never drove the on-foot
 > defeat path in practice (the vanilla EM bar fills without emptying the `electromagneticHealth`
 > AV through the clamp), so the EM damage channel, the `kEM` cause, the `"em"` condition token, and
-> the EM-only **Taken Alive** pack outcome were all removed. Defeat is now Health-or-scripted only.
+> the EM-only **Taken Alive** pack consequence were all removed. Defeat is now Health-or-scripted only.
 > If capture ever wants a stun identity again, it re-REs the player-EM seam first (see Findings).
 
 - ~~`defeatCause` in the handoff context.~~ Done (2026-07-01): the clamp records Health, the
@@ -169,15 +169,15 @@ Give NPC defeat a vanilla-plausible fantasy: capture-and-ransom bounty hunting.
   `GetDefeatCause(actor)` and `GetLastPlayerDefeatCause()` (0 none / 1 health / 2 scripted).
 - **NPC consequence policy**: what happens to a defeated NPC beyond down/recover — default policies
   (recover when combat ends; plunderable while down; executable by aggressor) with content override.
-- ~~Capture/ransom **hooks** for content (claim-a-captive verb, transfer-to-marker helper)~~
+- ~~Capture/ransom **hooks** for content (capture-relationship verb, transfer-to-marker helper)~~
   Implemented 2026-07-01 (build-verified; deploy + in-game runtime pending). New `Core/Capture`
   module: a persisted captor→captive relationship (co-save `CAP0`) layered on defeat + hold +
-  captive-faction pacify. Verbs: `CaptureActor(captive, captor)` (defeats-if-needed, holds
-  recovery, pacifies, records captor), `ReleaseCaptive(actor, recover)`, `TransferCaptive(actor,
+  captive-faction non-hostility. Verbs: `CaptureActor(captive, captor)` (defeats-if-needed, holds
+  recovery, suspends AI, applies the captive faction, records captor), `ReleaseCaptive(actor, recover)`, `TransferCaptive(actor,
   target)` (ObjectReference.MoveTo via VM-dispatch — same unbound-native path as the quest
   handoff; the Set3D re-assert keeps the down-state coherent at the destination — MoveTo dispatch
   is the one part still needing in-game verification), `IsCaptive`, `GetCaptor`, `GetCaptives(captor)`
-  (null captor = all). Captures auto-clear on any recovery path (rescue / watchdog /
+  (null captor = all). Capture relationships auto-clear on any recovery path (explicit recovery / watchdog /
   `ForceRecoverAll`) and on Revert, so the co-save empties and safe-uninstall stays intact.
 - Follower/companion policy: companions get follower-specific down behavior, never auto-executed,
   excluded from `npcAutoDefeat` by default.
@@ -209,29 +209,29 @@ The most Starfield-native leapfrog: the player's disabled ship gets boarded inst
 ## Alpha Test Plan
 
 - Lethal player hit causes defeat instead of death.
-- Player recovers after configured `recoverySeconds`.
-- Combat resumes cleanly after recovery (no pacify, no freeze, no `tcai` needed).
+- Player recovers after configured `autoRecoveryDelaySeconds`.
+- Combat resumes cleanly after recovery (no AI suspension, no freeze, no `tcai` needed).
 - Save/load while defeated preserves and resumes defeat state.
 - Invalid JSON logs an error and falls back safely.
 - `DisableProcessing(true)` lets vanilla death/behavior proceed without OSF handling.
-- A consequence that never calls back gets force-rescued by the watchdog (M1).
+- A consequence that never calls back gets force-recovered by the watchdog (M1).
 - `xmake build` passes and deploys DLL/PDB, Papyrus files, and JSON defaults.
 
 ## JSON Schemas
 
-Validation v2 (current; v1 files stay valid):
+Framework settings v3 (legacy v1/v2 files and the `Validation` directory stay readable):
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "processingEnabled": true,
   "disableInScenes": false,
-  "defaultRecoverySeconds": 8.0,
+  "defaultAutoRecoveryDelaySeconds": 8.0,
   "npcAutoDefeat": false,
   "npcAutoDefeatIncludeRobots": false,
-  "factionPacify": false,
+  "applyCaptiveFactionOnPlayerDefeat": false,
   "captiveFaction": "0x0003E0C8",
-  "participantScanRadius": 4096.0,
+  "recentHostileAttackerRadius": 4096.0,
   "explainDecisions": false,
   "watchdogSeconds": 600.0,
   "excludedLocations": [],
@@ -239,19 +239,20 @@ Validation v2 (current; v1 files stay valid):
 }
 ```
 
-Player consequence v2 (current; v1 files stay valid):
+Player consequence v3 (legacy v1/v2 files stay valid):
 
 ```json
 {
-  "version": 2,
-  "name": "Alpha Down Then Recover",
+  "version": 3,
+  "id": "example.down_then_recover",
+  "displayName": "Down Then Recover",
   "priority": 0,
   "weight": 1,
-  "recoverySeconds": 8.0,
+  "autoRecoveryDelaySeconds": 8.0,
   "quest": "OptionalQuestEditorID",
   "startQuest": true,
-  "holdRecovery": true,
-  "maxHoldSeconds": 0.0,
+  "recoveryMode": "held",
+  "leaseTimeoutSeconds": 0.0,
   "enabled": true,
   "cooldownSeconds": 0.0,
   "oncePerLocation": false,
@@ -265,25 +266,25 @@ Player consequence v2 (current; v1 files stay valid):
 ```
 
 A `quest` token that resolves (editorID first, then hex FormID) gets `Quest.Start` dispatched
-before the consequence event fires; `startQuest: false` opts out. `holdRecovery: true` skips the
-auto-recovery timer and auto-claims the down-state under the consequence's name (`maxHoldSeconds`
-sets the watchdog deadline; 0 = config `watchdogSeconds`) — the consequence owns the down-state
-and ends it via `RescueActor`, `ReleaseClaim`, or `SetRecoveryTimer`.
+before the consequence event fires; `startQuest: false` opts out. `recoveryMode: "held"` skips the
+automatic recovery timer and leases the down-state under `consequence:<id>` (`leaseTimeoutSeconds`
+sets the watchdog deadline; 0 = settings `watchdogSeconds`) — the consequence owns the down-state
+and ends it via `RecoverActor`, `ReleaseDefeatLease`, or `ScheduleAutomaticRecovery`.
 
 User overrides (`SFSE/OSFDefeat/Overrides.json`):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "consequences": {
-    "Some Pack's Outcome": { "enabled": false },
-    "Another Outcome":     { "weight": 5, "priority": 10 }
+    "some_pack.some_consequence": { "enabled": false },
+    "another_pack.consequence":   { "weight": 5, "priority": 10 }
   }
 }
 ```
 
-`conditions` gates whether an outcome competes at all: outcomes whose conditions fail for the
-current victim/aggressor pair are filtered before the priority/weight roll (no eligible outcome →
+`conditions` gates whether a consequence competes at all: consequences whose conditions fail for the
+current victim/aggressor pair are filtered before the priority/weight roll (no eligible consequence →
 built-in fallback). Keyword/faction entries are form tokens (editorID or hex FormID); `aggressor`
 defaults to `"match": "any"`, `victim` to `"all"` — Acheron's semantics. A non-empty aggressor
 block fails when there is no aggressor. `cause` gates on how the victim went down —
@@ -295,5 +296,5 @@ RE-proven.
 
 Scenes and animation, stripping/robbery item policy, ransom/bad-end/device systems, capture
 dialogue and captivity gameplay, per-content configuration UIs. The framework provides the
-down-state, the handoff, the pacify verbs, and the context — content provides the meaning.
+down-state, the handoff, the AI-suspension and captive-faction verbs, and the context; content provides the meaning.
 Reference consumers: the M3 default pack (SFW) and OSF Surrender (adult) prove the same API.

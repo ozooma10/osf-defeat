@@ -1,0 +1,20 @@
+{
+  "version": 3,
+
+  "// This is a non-applying template so an existing Validation/default.json keeps its user-edited values during upgrade.": true,
+  "// Remove the leading // and space from any key you want this canonical Settings file to override.": true,
+
+  "// processingEnabled": true,
+  "// disableInScenes": false,
+  "// defaultAutoRecoveryDelaySeconds": 8.0,
+  "// npcAutoDefeat": false,
+  "// npcAutoDefeatIncludeRobots": false,
+  "// applyCaptiveFactionOnPlayerDefeat": false,
+  "// captiveFaction": "0x0003E0C8",
+  "// recentHostileAttackerRadius": 4096.0,
+  "// explainDecisions": true,
+  "// watchdogSeconds": 600.0,
+  "// imminentHealthFraction": 0.25,
+  "// excludedLocations": [],
+  "// excludedQuests": []
+}

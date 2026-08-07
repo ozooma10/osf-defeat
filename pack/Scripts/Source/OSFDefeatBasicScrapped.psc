@@ -6,7 +6,7 @@ Scriptname OSFDefeatBasicScrapped extends Quest
   neutralized and disengages. The shortest beat in the pack - an energy burn and
   a quick recovery - because nothing is sticking around to loot you.
 
-  Started natively by OSF Defeat; down-state arrives held + auto-claimed, so the
+  Started natively by OSF Defeat; down-state arrives held + automatically leased, so the
   M1 watchdog covers any failure here. }
 
 Float Property DownSeconds = 8.0 Auto Const

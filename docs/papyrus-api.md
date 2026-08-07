@@ -6,49 +6,48 @@
 
 ```papyrus
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
-Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
-Bool Function PacifyActor(Actor akActor) global native
-Bool Function ReleaseActor(Actor akActor) global native
+Bool Function RecoverActor(Actor akActor, Bool abResumeAI = True) global native
+Bool Function SuspendActorAI(Actor akActor) global native
+Bool Function ResumeActorAI(Actor akActor) global native
 ```
 
-`DefeatActor` records the actor as defeated and persists that state. For the player, it also applies the native down state. `RescueActor` removes defeat state and restores the player if needed. `PacifyActor` / `ReleaseActor` are foundation-level state hooks for future combat behavior.
+`DefeatActor` records the actor as defeated and persists that state. `RecoverActor` ends the defeat and restores framework-owned actor state. `SuspendActorAI` records the actor's prior AI-processing state before disabling it; `ResumeActorAI` restores that exact state.
 
 ## Recovery Handshake
 
 ```papyrus
-Bool Function SetRecoveryTimer(Actor akActor, Float afSeconds) global native
-Float Function GetRecoverySecondsRemaining(Actor akActor) global native
+Bool Function ScheduleAutomaticRecovery(Actor akActor, Float afDelaySeconds) global native
+Bool Function HoldRecovery(Actor akActor) global native
+Float Function GetAutomaticRecoverySecondsRemaining(Actor akActor) global native
 ```
 
-This is how a content mod takes ownership of a down-state. `SetRecoveryTimer(actor, 0.0)` (or any `afSeconds <= 0`) **holds** the actor down — the framework's auto-recovery skips them until you call `RescueActor` (or set a positive timer again). A positive value reschedules auto-recovery that many real seconds out. `GetRecoverySecondsRemaining` returns the remaining real seconds (`-1` = held awaiting explicit rescue, `0` = not defeated).
+This is how a content mod schedules or holds recovery. `HoldRecovery` creates a **recovery hold**: automatic recovery skips the actor until you call `RecoverActor`, release a lease, or schedule it again. `ScheduleAutomaticRecovery` requires a positive real-time delay and ends any lease. `GetAutomaticRecoverySecondsRemaining` returns the remaining real seconds (`-1` = held awaiting explicit recovery, `0` = not defeated).
 
-A consequence JSON can also ship `"holdRecovery": true` so the player enters the down-state already held — no race against the recovery timer.
+A consequence JSON can use `"recoveryMode": "held"` so the player enters the down-state already held, with no race against an automatic timer.
 
-## Ownership Lease + Watchdog
+## Defeat Lease + Watchdog
 
 ```papyrus
-Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds = 0.0) global native
-Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
-String Function GetClaimOwner(Actor akActor) global native
+Bool Function AcquireDefeatLease(Actor akActor, String asHolderId, Float afTimeoutSeconds = 0.0) global native
+Bool Function ReleaseDefeatLease(Actor akActor, String asHolderId) global native
+String Function GetDefeatLeaseHolder(Actor akActor) global native
 ```
 
-The formal version of the recovery handshake. `ClaimDefeat` holds the down-state under your
-mod's name with a **watchdog deadline** (`afMaxHoldSeconds <= 0` uses the configured
-`watchdogSeconds`, default 600). If the deadline lapses — your quest stopped, errored out, or
-forgot to finish — the framework force-rescues the actor and logs your name as the defaulter,
+The exclusive form of the recovery handshake. `AcquireDefeatLease` holds the down-state under your
+mod's stable holder ID with a **watchdog deadline** (`afTimeoutSeconds <= 0` uses the configured
+`watchdogSeconds`, default 600). If the deadline lapses, the framework force-recovers the actor
+and logs the holder ID as the defaulter,
 so a broken consumer can never strand the player. Rules:
 
-- Re-claim with the **same** name to extend the deadline before it lapses (long scenes should
-  re-claim periodically, or pass a generous `afMaxHoldSeconds` up front).
-- A claim against a **different** live lease is refused (two content packs cannot fight over
-  one down-state). Claims are queued to the game thread; confirm with `GetClaimOwner`.
-- `ReleaseClaim` (name must match) ends the lease and resumes the default recovery timer.
-- `RescueActor` always works, lease or not.
-- A consequence with `"holdRecovery": true` is auto-claimed under the consequence's name, with
-  its `"maxHoldSeconds"` (or the config default) as deadline — JSON packs get watchdog
+- Acquire with the **same** holder ID again to extend the deadline before it lapses.
+- Acquisition by a **different** holder is refused. Calls are queued to the game thread; confirm with `GetDefeatLeaseHolder`.
+- `ReleaseDefeatLease` (holder ID must match) ends the lease and resumes the default recovery timer.
+- `RecoverActor` always works, lease or not.
+- A consequence with `"recoveryMode": "held"` automatically leases under `consequence:<id>`, with
+  `"leaseTimeoutSeconds"` (or the settings default) as its deadline, so JSON packs get watchdog
   protection without writing a line of script.
-- The player's held down-states are **always** watchdog-protected, even without a claim. NPC
-  held entries are only deadline-checked when leased — a held NPC captive is a legitimate
+- The player's held down-states are **always** watchdog-protected, even without a lease. NPC
+  held entries are deadline-checked only when leased; a held NPC captive is a legitimate
   long-term state.
 
 ## Emergency Escape / Safe Uninstall
@@ -57,9 +56,9 @@ so a broken consumer can never strand the player. Rules:
 Bool Function ForceRecoverAll() global native
 ```
 
-Requests recovery for every resolvable defeated actor (overriding any lease), releases every
-resolvable pacified actor, and strips the captive-faction memberships the framework created.
-Unresolved pacify/faction ownership records are retained and logged so they can be cleaned if the
+Requests recovery for every resolvable defeated actor (overriding any lease), resumes AI for every
+resolvable actor whose AI the framework suspended, and removes captive-faction memberships it created.
+Unresolved AI-suspension/faction ownership records are retained and logged so they can be cleaned if the
 actor becomes resolvable later. Verify the log/state, then save; once no records remain, the next
 co-save is empty and the DLL can be removed. Users can run it from the
 console any time they feel stuck:
@@ -68,7 +67,7 @@ console any time they feel stuck:
 cgf "OSFDefeat.ForceRecoverAll"
 ```
 
-## Captive-Faction Pacify (surrender-to-base)
+## Captive-Faction Non-Hostility (surrender-to-base)
 
 ```papyrus
 Bool Function ApplyCaptiveFaction(Actor akActor) global native
@@ -76,13 +75,13 @@ Bool Function RemoveCaptiveFaction(Actor akActor) global native
 Bool Function IsCaptiveFactionApplied(Actor akActor) global native
 ```
 
-Adds the actor to the configured `captiveFaction` (default: vanilla `0x0003E0C8`) so **all** hostiles treat them as non-hostile — the full SAF Surrender-style calm, on demand, independent of the automatic `factionPacify` config gate. Guarded per actor: the membership is added at most once, never over a pre-existing membership, and removal deletes exactly (and only) the membership the framework created. It is removed automatically on `RescueActor`; the tracking survives save/load via the co-save.
+Adds the actor to the configured `captiveFaction` (default: vanilla `0x0003E0C8`) so **all** hostiles treat them as non-hostile. This is distinct from AI suspension and is independent of `applyCaptiveFactionOnPlayerDefeat`. Membership is added at most once, never over a pre-existing membership, and removal deletes only membership the framework created. It is removed automatically on `RecoverActor`; tracking survives save/load via the co-save.
 
 ## Queries
 
 ```papyrus
 Bool Function IsDefeated(Actor akActor) global native
-Bool Function IsPacified(Actor akActor) global native
+Bool Function IsActorAISuspended(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native
 Int Function GetDefeatCause(Actor akActor) global native
 Int Function GetLastPlayerDefeatCause() global native
@@ -103,7 +102,7 @@ Bool Function IsResistingDefeat(Actor akActor) global native
 ```
 
 The framework exposes the *moment*; content builds the minigame. `OnPlayerDefeatImminent` fires
-once when a Health hit takes the player below `imminentHealthFraction` × max health (validation
+once when a Health hit takes the player below `imminentHealthFraction` × max health (settings
 JSON, default `0.25`, `0` disables); it re-arms after healing back above the threshold, and after
 a defeat. Use it for struggle QTEs, surrender prompts, or last-stand effects.
 
@@ -111,7 +110,7 @@ a defeat. Use it for struggle QTEs, surrender prompts, or last-stand effects.
 hits pass through the clamp untouched — **vanilla lethality returns**, the actor fights on and
 can genuinely die. That is the intended tension of a successful struggle roll. `afSeconds <= 0`
 clears the window; calling it on an already-defeated actor is refused (a resist window is not a
-rescue — use `RescueActor`). Works on NPCs too (e.g. a boss that shrugs off the first defeat).
+recovery — use `RecoverActor`). Works on NPCs too (e.g. a boss that shrugs off the first defeat).
 
 ## Processing Gate
 
@@ -170,9 +169,9 @@ Bool Function IsHostile(Actor akActor, Actor akTarget) global native
 Function ReloadJSON() global native
 ```
 
-`ReloadJSON()` reloads validation, consequence, and override files without restarting the game.
-Pair it with `"explainDecisions": true` (validation JSON) for a live authoring loop: edit JSON,
-reload, defeat, and read the selection log — every filtered outcome logs its reason (disabled,
+`ReloadJSON()` reloads settings, consequence, and override files without restarting the game.
+Pair it with `"explainDecisions": true` (settings JSON) for a live authoring loop: edit JSON,
+reload, defeat, and read the selection log — every filtered consequence logs its reason (disabled,
 off-domain, cooling down, spent for this location, aggressor/victim conditions failed) plus the
 final priority/weight roll.
 ## Player Consequence Handoff
@@ -181,10 +180,12 @@ final priority/weight roll.
 Int  Function RegisterForPlayerConsequenceStarted(ScriptObject akReceiver, String asCallback) global native
 Bool Function UnregisterForPlayerConsequenceStarted(Int aiToken) global native
 Actor Function GetLastPlayerAggressor() global native
+String Function GetLastPlayerConsequenceId() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
-Float Function GetLastPlayerRecoverySeconds() global native
-Actor[] Function GetLastPlayerParticipants() global native
+Float Function GetLastPlayerAutoRecoveryDelaySeconds() global native
+Bool Function IsLastPlayerRecoveryHeld() global native
+Actor[] Function GetLastPlayerRecentHostileAttackers() global native
 ```
 
 The callback takes no arguments:
@@ -196,7 +197,7 @@ EndFunction
 
 Use this for content mods such as OSF Surrender. The callback has no direct parameters; content reads the payload through the `GetLastPlayer*` functions so the broadcaster stays simple and stable.
 
-`GetLastPlayerParticipants` returns the fight's cast at defeat time: the aggressor plus everyone who damaged the player in the last ~30 seconds and is still a live hostile — scene casting for group content. `participantScanRadius` (validation JSON, default 4096 units, `0` = no radius filter) additionally drops distant entries. The list is recorded from actual damage events, so it is combatants, not bystanders.
+`GetLastPlayerConsequenceId` is the stable machine identity; `GetLastPlayerConsequenceName` is the display label retained for compatibility. `GetLastPlayerRecentHostileAttackers` returns the aggressor plus recent damage sources that are still live and hostile. `recentHostileAttackerRadius` (settings JSON, default 4096 units, `0` = no radius filter) drops distant entries. The list comes from actual damage events, so it contains combatants rather than bystanders.
 
 ### Consequence quest start
 
@@ -223,7 +224,7 @@ EndFunction
 
 ### NPC consequence content (consumer recipe)
 
-OSF Defeat owns the neutral defeat state; **content mods own what a defeat means**. To author NPC consequences, register a callback, classify the victim, and run your own scene/outcome:
+OSF Defeat owns the neutral defeat state; **content mods own what a defeat means**. To author NPC consequences, register a callback, classify the victim role, and run your own content:
 
 ```papyrus
 Event OnInit()
@@ -243,4 +244,8 @@ Function OnActorDefeated(Actor akVictim, Actor akAggressor)
 EndFunction
 ```
 
-Recovery: an actor downed via `DefeatActor` is **held** until you call `RescueActor`, so content fully controls its lifetime. An auto-defeated NPC (the opt-in `npcAutoDefeat`) carries the default recovery timer instead — defeat it yourself via `DefeatActor` if you need a longer hold.
+Recovery: an actor downed via `DefeatActor` is **held** until you call `RecoverActor`, so content fully controls its lifetime. An auto-defeated NPC (the opt-in `npcAutoDefeat`) carries the default automatic recovery delay instead; defeat it yourself via `DefeatActor` if you need a longer hold.
+
+## Legacy aliases
+
+Existing compiled consumers remain supported. `RescueActor`, `PacifyActor`, `ReleaseActor`, `IsPacified`, `ClaimDefeat`, `ReleaseClaim`, `GetClaimOwner`, `SetRecoveryTimer`, `GetRecoverySecondsRemaining`, `GetLastPlayerParticipants`, and `GetLastPlayerRecoverySeconds` forward to the canonical APIs. New integrations should use the canonical names above. See [the vocabulary contract](VOCABULARY.md) for the complete JSON and directory compatibility map.

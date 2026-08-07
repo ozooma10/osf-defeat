@@ -24,34 +24,52 @@ Scriptname OSFDefeat Native Hidden
 ;     Function OnActorRecovered(Actor akVictim, Actor akAggressor)
 ;
 ; IMPORTANT: Bool mutators marshaled to the game thread return whether the REQUEST was accepted,
-; not the eventual operation result. Confirm completion with IsDefeated / IsPacified /
-; IsCaptiveFactionApplied / IsCaptive / GetClaimOwner, or with the matching callback.
+; not the eventual operation result. Confirm completion with IsDefeated / IsActorAISuspended /
+; IsCaptiveFactionApplied / IsCaptive / GetDefeatLeaseHolder, or with the matching callback.
 
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
+Bool Function RecoverActor(Actor akActor, Bool abResumeAI = True) global native
+
+; Legacy recovery name retained for source and binary compatibility. Prefer RecoverActor.
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
 
+Bool Function SuspendActorAI(Actor akActor) global native
+Bool Function ResumeActorAI(Actor akActor) global native
+Bool Function IsActorAISuspended(Actor akActor) global native
+
+; Legacy AI-suspension names retained for compatibility. Prefer the explicit AI verbs above.
 Bool Function PacifyActor(Actor akActor) global native
 Bool Function ReleaseActor(Actor akActor) global native
 
-; Recovery handshake mods: take ownership of a down-state or reschedule it.
-; afSeconds <= 0 holds the actor down until an explicit RescueActor (content owns the exit).
-; GetRecoverySecondsRemaining: > 0 counting down, -1 held (awaiting rescue), 0 not defeated.
+; Explicit recovery scheduling. ScheduleAutomaticRecovery requires a positive real-time delay and
+; ends any defeat lease. HoldRecovery disables automatic recovery until explicit recovery, lease
+; release, or a new schedule. Remaining: > 0 counting down, -1 held, 0 not defeated.
+Bool Function ScheduleAutomaticRecovery(Actor akActor, Float afDelaySeconds) global native
+Bool Function HoldRecovery(Actor akActor) global native
+Float Function GetAutomaticRecoverySecondsRemaining(Actor akActor) global native
+
+; Legacy overloaded timer names retained for compatibility. Prefer the explicit functions above.
 Bool Function SetRecoveryTimer(Actor akActor, Float afSeconds) global native
 Float Function GetRecoverySecondsRemaining(Actor akActor) global native
 
-; Ownership lease. ClaimDefeat holds the down-state under your name with a watchdog deadline
-; (afMaxHoldSeconds <= 0 uses the configured watchdogSeconds). Re-claim with the same name to
-; EXTEND the deadline before it lapses; if it lapses, the framework force-rescues and logs your
-; name as the defaulter. ReleaseClaim (name must match) ends the lease and resumes the default
-; recovery timer. RescueActor always works regardless of any lease. The claim is queued to the
-; game thread - confirm with GetClaimOwner if another mod might be competing.
+; Defeat lease. AcquireDefeatLease holds the down-state for a consumer with a watchdog deadline
+; (afTimeoutSeconds <= 0 uses the configured watchdogSeconds). Acquire again with the same ID to
+; extend the deadline. ReleaseDefeatLease (ID must match) ends the lease and resumes the default
+; recovery timer. RecoverActor always works regardless of a lease. Acquisition is queued to the
+; game thread - confirm with GetDefeatLeaseHolder if another mod might be competing.
+Bool Function AcquireDefeatLease(Actor akActor, String asHolderId, Float afTimeoutSeconds = 0.0) global native
+Bool Function ReleaseDefeatLease(Actor akActor, String asHolderId) global native
+String Function GetDefeatLeaseHolder(Actor akActor) global native
+
+; Legacy lease names retained for compatibility. Prefer the functions above.
 Bool Function ClaimDefeat(Actor akActor, String asOwner, Float afMaxHoldSeconds = 0.0) global native
 Bool Function ReleaseClaim(Actor akActor, String asOwner) global native
 String Function GetClaimOwner(Actor akActor) global native
 
-; Emergency escape / safe uninstall: requests rescue for every resolvable defeated actor (overriding
-; any lease), releases owned pacifies/factions, and logs unresolved records for a later retry. Once
-; no records remain, the next co-save is empty. Console: cgf "OSFDefeat.ForceRecoverAll"
+; Emergency escape / safe uninstall: requests recovery for every resolvable defeated actor (overriding
+; any lease), resumes framework-suspended AI, removes owned captive-faction memberships, and logs
+; unresolved records for a later retry. Once no records remain, the next co-save is empty.
+; Console: cgf "OSFDefeat.ForceRecoverAll"
 Bool Function ForceRecoverAll() global native
 
 ; How an actor went down - content can route a scripted/capture defeat distinctly from a Health-down.
@@ -60,7 +78,7 @@ Int Function GetDefeatCause(Actor akActor) global native
 Int Function GetLastPlayerDefeatCause() global native
 
 ; Struggle primitive. RegisterForPlayerDefeatImminent fires once when a Health hit takes the
-; player below imminentHealthFraction x max health (validation JSON, default 0.25; re-arms after
+; player below imminentHealthFraction x max health (settings JSON, default 0.25; re-arms after
 ; healing above the threshold or after a defeat). Build your QTE/struggle beat in the callback;
 ; on a successful resist call ResistDefeat: while the window is active, would-be-lethal hits pass
 ; through untouched - VANILLA LETHALITY - the actor fights on and can genuinely die.
@@ -70,18 +88,18 @@ Bool Function IsResistingDefeat(Actor akActor) global native
 Int Function RegisterForPlayerDefeatImminent(ScriptObject akReceiver, String asCallback) global native
 Bool Function UnregisterForPlayerDefeatImminent(Int aiToken) global native
 
-; Captive-faction pacify on demand (surrender-to-base): adds the actor to the configured captiveFaction so ALL hostiles treat them as non-hostile.
+; Captive-faction non-hostility on demand (surrender-to-base): adds the actor to the configured captiveFaction so ALL hostiles treat them as non-hostile.
 Bool Function ApplyCaptiveFaction(Actor akActor) global native
 Bool Function RemoveCaptiveFaction(Actor akActor) global native
 Bool Function IsCaptiveFactionApplied(Actor akActor) global native
 
-; Capture hooks: claim a defeated NPC as a captor's prisoner - the foundation for a bounty/ransom
+; Capture hooks: register a defeated NPC as a captor's prisoner - the foundation for a bounty/ransom
 ; board. CaptureActor puts the captive down if needed (scripted cause, akCaptor as aggressor), holds
 ; recovery indefinitely, applies the captive faction (hostiles ignore the prisoner), and records the
 ; captor (akCaptor may be None for an un-attributed hold). The capture is co-save persisted and is
-; auto-cleared when the captive recovers by any path (rescue / watchdog / ForceRecoverAll).
-; ReleaseCaptive ends it: abRecover also rescues (ends the down-state); otherwise the captive stays
-; down but is no longer claimed. TransferCaptive moves a captive to a marker/ref (brig, ship, cell)
+; auto-cleared when the captive recovers by any path (explicit recovery / watchdog / ForceRecoverAll).
+; ReleaseCaptive ends it: abRecover also recovers the actor; otherwise the captive stays
+; down without a capture relationship. TransferCaptive moves a captive to a marker/ref (brig, ship, cell)
 ; via ObjectReference.MoveTo - the framework re-asserts the down-state at the destination.
 ; GetCaptives(None) returns every captive; pass a captor to list only theirs.
 Bool Function CaptureActor(Actor akCaptive, Actor akCaptor = None) global native
@@ -92,6 +110,7 @@ Actor Function GetCaptor(Actor akActor) global native
 Actor[] Function GetCaptives(Actor akCaptor = None) global native
 
 Bool Function IsDefeated(Actor akActor) global native
+; Legacy alias for IsActorAISuspended.
 Bool Function IsPacified(Actor akActor) global native
 Actor[] Function GetDefeated(Bool abLoadedOnly = False) global native
 
@@ -118,11 +137,20 @@ Int Function RegisterForActorRecovered(ScriptObject akReceiver, String asCallbac
 Bool Function UnregisterForActorRecovered(Int aiToken) global native
 
 Actor Function GetLastPlayerAggressor() global native
+String Function GetLastPlayerConsequenceId() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
+Float Function GetLastPlayerAutoRecoveryDelaySeconds() global native
+Bool Function IsLastPlayerRecoveryHeld() global native
 Float Function GetLastPlayerRecoverySeconds() global native
 
-; The fight's actors at defeat time: the aggressor plus recent attackers still live and hostile (recorded from actual damage events; radius-filtered by participantScanRadius).
+; Recent attackers at defeat time that remain live and hostile. The aggressor is included first.
+; Entries come from actual damage events and are radius-filtered by recentHostileAttackerRadius.
+Actor[] Function GetLastPlayerRecentHostileAttackers() global native
+
+; AutoRecoveryDelaySeconds is > 0 when automatic recovery is scheduled and -1 while held.
+; Legacy aliases: Name returns the display name, RecoverySeconds mirrors the delay/sentinel,
+; and Participants returns the recent-hostile-attacker snapshot.
 Actor[] Function GetLastPlayerParticipants() global native
 
 Function ReloadJSON() global native

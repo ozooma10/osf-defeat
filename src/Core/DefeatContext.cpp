@@ -10,20 +10,22 @@ namespace OSFDefeat::DefeatContext
         std::shared_mutex g_lock;
     }
 
-    void SetPlayerContext(RE::Actor* a_player, RE::Actor* a_aggressor, const Consequence::PlayerOutcome& a_outcome,
-        const std::vector<RE::Actor*>& a_participants, DefeatCause a_cause)
+    void SetPlayerContext(RE::Actor* a_player, RE::Actor* a_aggressor, const Consequence::PlayerConsequence& a_consequence,
+        const std::vector<RE::Actor*>& a_recentHostileAttackers, DefeatCause a_cause)
     {
         PlayerContext next;
         next.player = a_player ? a_player->GetFormID() : 0x14;
         next.aggressor = a_aggressor ? a_aggressor->GetFormID() : 0;
-        next.consequenceName = a_outcome.name;
-        next.consequenceQuest = a_outcome.quest.value_or("");
-        next.recoverySeconds = a_outcome.recoverySeconds;
+        next.consequenceId = a_consequence.id;
+        next.consequenceDisplayName = a_consequence.displayName;
+        next.consequenceQuest = a_consequence.quest.value_or("");
+        next.autoRecoveryDelaySeconds = a_consequence.HoldsRecovery() ? -1.0f : a_consequence.autoRecoveryDelaySeconds;
+        next.recoveryHeld = a_consequence.HoldsRecovery();
         next.cause = a_cause;
-        next.participants.reserve(a_participants.size());
-        for (auto* const participant : a_participants) {
-            if (participant) {
-                next.participants.push_back(participant->GetFormID());
+        next.recentHostileAttackerIds.reserve(a_recentHostileAttackers.size());
+        for (auto* const attacker : a_recentHostileAttackers) {
+            if (attacker) {
+                next.recentHostileAttackerIds.push_back(attacker->GetFormID());
             }
         }
 
@@ -49,9 +51,14 @@ namespace OSFDefeat::DefeatContext
         return context.aggressor ? RE::TESForm::LookupByID<RE::Actor>(context.aggressor) : nullptr;
     }
 
+    std::string GetLastPlayerConsequenceId()
+    {
+        return GetPlayerContext().consequenceId;
+    }
+
     std::string GetLastPlayerConsequenceName()
     {
-        return GetPlayerContext().consequenceName;
+        return GetPlayerContext().consequenceDisplayName;
     }
 
     std::string GetLastPlayerConsequenceQuest()
@@ -61,7 +68,17 @@ namespace OSFDefeat::DefeatContext
 
     float GetLastPlayerRecoverySeconds()
     {
-        return GetPlayerContext().recoverySeconds;
+        return GetPlayerContext().autoRecoveryDelaySeconds;
+    }
+
+    float GetLastPlayerAutoRecoveryDelaySeconds()
+    {
+        return GetPlayerContext().autoRecoveryDelaySeconds;
+    }
+
+    bool IsLastPlayerRecoveryHeld()
+    {
+        return GetPlayerContext().recoveryHeld;
     }
 
     DefeatCause GetLastPlayerDefeatCause()
@@ -69,16 +86,21 @@ namespace OSFDefeat::DefeatContext
         return GetPlayerContext().cause;
     }
 
-    std::vector<RE::Actor*> GetLastPlayerParticipants()
+    std::vector<RE::Actor*> GetLastPlayerRecentHostileAttackers()
     {
         const auto context = GetPlayerContext();
         std::vector<RE::Actor*> out;
-        out.reserve(context.participants.size());
-        for (const auto id : context.participants) {
+        out.reserve(context.recentHostileAttackerIds.size());
+        for (const auto id : context.recentHostileAttackerIds) {
             if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
                 out.push_back(actor);
             }
         }
         return out;
+    }
+
+    std::vector<RE::Actor*> GetLastPlayerParticipants()
+    {
+        return GetLastPlayerRecentHostileAttackers();
     }
 }

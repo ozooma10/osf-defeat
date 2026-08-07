@@ -56,7 +56,7 @@ Bool Function RequestRecoveryAndWait(Actor akPlayer, Float afTimeoutSeconds = 5.
     ; Mutating OSFDefeat Bool calls report that the request was accepted for the game thread,
     ; not that the deferred operation has completed. Poll the authoritative query before a
     ; follow-up transition takes ownership of the player.
-    If !OSFDefeat.RescueActor(akPlayer, True)
+    If !OSFDefeat.RecoverActor(akPlayer, True)
         Debug.Trace("[OSFDefeatBasic] recovery request was not accepted")
         Return False
     EndIf

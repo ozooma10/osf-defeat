@@ -1,10 +1,10 @@
 #include "pch.h"
 
-#include "Core/Validation.h"
+#include "Core/Eligibility.h"
 
 #include "Core/Config.h"
 
-namespace OSFDefeat::Validation
+namespace OSFDefeat::Eligibility
 {
     namespace
     {
@@ -15,7 +15,7 @@ namespace OSFDefeat::Validation
     bool IsEnabled() { return g_enabled.load(); }
     bool CanProcess() { return IsEnabled() && Config::IsProcessingEnabled(); }
 
-    Verdict ExplainPair(RE::Actor* a_victim, RE::Actor* /*a_aggressor*/)
+    Verdict Explain(RE::Actor* a_victim, RE::Actor* /*a_aggressor*/)
     {
         if (!IsEnabled()) {
             return Verdict::kApiDisabled;
@@ -32,15 +32,14 @@ namespace OSFDefeat::Validation
         if (Config::ShouldDisableInScenes() && a_victim->GetCurrentScene()) {
             return Verdict::kInScene;
         }
-        // excludedLocations/excludedQuests remain schema-reserved, but are intentionally not
-        // evaluated: this CommonLibSF's location relocation is unmapped and calling it crashes.
-        // Config loading warns when either list is non-empty. Safety beats a fail-open/crash gate.
+        // excludedLocations/excludedQuests remain schema-reserved and fail closed at load time;
+        // this CommonLibSF's location seam is unmapped and unsafe to call.
         return Verdict::kOk;
     }
 
-    bool ValidatePair(RE::Actor* a_victim, RE::Actor* a_aggressor)
+    bool IsEligible(RE::Actor* a_victim, RE::Actor* a_aggressor)
     {
-        return ExplainPair(a_victim, a_aggressor) == Verdict::kOk;
+        return Explain(a_victim, a_aggressor) == Verdict::kOk;
     }
 
     std::string_view VerdictName(Verdict a_verdict)
@@ -51,7 +50,7 @@ namespace OSFDefeat::Validation
         case Verdict::kApiDisabled:
             return "processing disabled via DisableProcessing API";
         case Verdict::kConfigDisabled:
-            return "processingEnabled: false in validation JSON";
+            return "processingEnabled: false in framework settings";
         case Verdict::kNoVictim:
             return "no victim";
         case Verdict::kVictimDead:

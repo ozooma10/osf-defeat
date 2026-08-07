@@ -33,7 +33,7 @@ namespace OSFDefeat::Presentation
 	// leaving the player held in raw kBleedOut: frozen, unposed, no orbit camera. Called from the
 	// recovery tick while the player is registered defeated: once no scene has held the player for
 	// ~1.5s, re-runs ShowPlayerDown. The debounce keeps the re-start clear of OSF's own post-load
-	// teardown and of the content hand-back window (scene ended, RescueActor imminent); if a race
+	// teardown and of the content hand-back window (scene ended, RecoverActor imminent); if a race
 	// is still lost, the next tick re-asserts again. Game thread.
 	void ReassertPlayerDown();
 

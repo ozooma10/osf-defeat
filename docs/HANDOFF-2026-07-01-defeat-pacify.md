@@ -1,5 +1,9 @@
 # OSF Defeat — Session Handoff (2026-07-01): down-camera + combat-resume + faction-pacify
 
+> Historical snapshot. It intentionally preserves the terminology and repository state used on
+> 2026-07-01. Current code distinguishes AI suspension, captive-faction non-hostility, recovery,
+> and defeat leases; see [VOCABULARY.md](VOCABULARY.md). Do not copy API names from this handoff.
+
 Cold-start handoff for continuing on another machine. Covers two fixed bugs, the
 architecture decision behind them, how the reference mods pacify, and an in-progress
 OSF RE lead for the "proper" pacify. Read the workspace `AGENTS.md` first for routing.

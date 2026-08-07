@@ -6,7 +6,7 @@ Scriptname OSFDefeatBasicMauled extends Quest
   off. The longest down beat in the pack and the deepest wound (lacerations);
   once-per-location so a den does not maul you on a loop the moment you recover.
 
-  Started natively by OSF Defeat; down-state arrives held + auto-claimed, so the
+  Started natively by OSF Defeat; down-state arrives held + automatically leased, so the
   M1 watchdog covers any failure here. }
 
 Float Property DownSeconds = 20.0 Auto Const

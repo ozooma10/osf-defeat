@@ -8,7 +8,7 @@ namespace OSFDefeat::Config
 {
     namespace
     {
-        RuntimeConfig g_config;
+        FrameworkSettings g_config;
         std::filesystem::path g_root;
         std::shared_mutex g_lock;
 
@@ -83,7 +83,7 @@ namespace OSFDefeat::Config
             return std::filesystem::current_path() / "Data" / "SFSE" / "OSFDefeat";
         }
 
-        void LoadFile(const std::filesystem::path& a_path, RuntimeConfig& a_config)
+        void LoadFile(const std::filesystem::path& a_path, FrameworkSettings& a_config)
         {
             try {
                 std::ifstream input{ a_path };
@@ -92,20 +92,22 @@ namespace OSFDefeat::Config
                 }
                 const auto json = nlohmann::json::parse(input, nullptr, true, true);
                 const int version = json.value("version", 0);
-                if (version != 1 && version != 2) {
-                    REX::WARN("[OSFDefeat] validation JSON {} has unsupported version {}", a_path.string(), version);
+                if (version != 1 && version != 2 && version != 3) {
+                    REX::WARN("[OSFDefeat] settings JSON {} has unsupported version {}", a_path.string(), version);
                     return;
                 }
-                constexpr std::array<std::string_view, 15> kKnownKeys{
-                    "version", "processingEnabled", "disableInScenes", "defaultRecoverySeconds",
-                    "npcAutoDefeat", "npcAutoDefeatIncludeRobots", "factionPacify", "captiveFaction",
-                    "participantScanRadius", "explainDecisions", "watchdogSeconds", "imminentHealthFraction",
+                constexpr std::array<std::string_view, 18> kKnownKeys{
+                    "version", "processingEnabled", "disableInScenes", "defaultAutoRecoveryDelaySeconds",
+                    "defaultRecoverySeconds",
+                    "npcAutoDefeat", "npcAutoDefeatIncludeRobots", "applyCaptiveFactionOnPlayerDefeat",
+                    "factionPacify", "captiveFaction", "recentHostileAttackerRadius", "participantScanRadius",
+                    "explainDecisions", "watchdogSeconds", "imminentHealthFraction",
                     "excludedLocations", "excludedQuests", "//"
                 };
                 for (const auto& [key, _] : json.items()) {
                     if (!key.starts_with("//") &&
                         std::find(kKnownKeys.begin(), kKnownKeys.end(), key) == kKnownKeys.end()) {
-                        REX::WARN("[OSFDefeat] validation JSON {}: unknown field '{}' (typo?)", a_path.string(), key);
+                        REX::WARN("[OSFDefeat] settings JSON {}: unknown field '{}' (typo?)", a_path.string(), key);
                     }
                 }
 
@@ -118,12 +120,14 @@ namespace OSFDefeat::Config
                 if (json.contains("disableInScenes")) {
                     candidate.disableInScenes = json.value("disableInScenes", false);
                 }
-                if (json.contains("defaultRecoverySeconds")) {
-                    const auto value = json.value("defaultRecoverySeconds", 8.0f);
+                if (json.contains("defaultAutoRecoveryDelaySeconds") || json.contains("defaultRecoverySeconds")) {
+                    const auto value = json.contains("defaultAutoRecoveryDelaySeconds")
+                        ? json.value("defaultAutoRecoveryDelaySeconds", 8.0f)
+                        : json.value("defaultRecoverySeconds", 8.0f);
                     if (!std::isfinite(value)) {
-                        throw std::runtime_error("defaultRecoverySeconds must be finite");
+                        throw std::runtime_error("defaultAutoRecoveryDelaySeconds must be finite");
                     }
-                    candidate.defaultRecoverySeconds = std::max(1.0f, value);
+                    candidate.defaultAutoRecoveryDelaySeconds = std::max(1.0f, value);
                 }
                 if (json.contains("npcAutoDefeat")) {
                     candidate.npcAutoDefeat = json.value("npcAutoDefeat", false);
@@ -131,8 +135,10 @@ namespace OSFDefeat::Config
                 if (json.contains("npcAutoDefeatIncludeRobots")) {
                     candidate.npcAutoDefeatIncludeRobots = json.value("npcAutoDefeatIncludeRobots", false);
                 }
-                if (json.contains("factionPacify")) {
-                    candidate.factionPacify = json.value("factionPacify", false);
+                if (json.contains("applyCaptiveFactionOnPlayerDefeat")) {
+                    candidate.applyCaptiveFactionOnPlayerDefeat = json.value("applyCaptiveFactionOnPlayerDefeat", false);
+                } else if (json.contains("factionPacify")) {
+                    candidate.applyCaptiveFactionOnPlayerDefeat = json.value("factionPacify", false);
                 }
                 if (const auto it = json.find("captiveFaction"); it != json.end()) {
                     if (const auto id = ParseFormID(*it)) {
@@ -141,12 +147,14 @@ namespace OSFDefeat::Config
                         REX::WARN("[OSFDefeat] captiveFaction is not a numeric formID; keeping default");
                     }
                 }
-                if (json.contains("participantScanRadius")) {
-                    const auto value = json.value("participantScanRadius", 4096.0f);
+                if (json.contains("recentHostileAttackerRadius") || json.contains("participantScanRadius")) {
+                    const auto value = json.contains("recentHostileAttackerRadius")
+                        ? json.value("recentHostileAttackerRadius", 4096.0f)
+                        : json.value("participantScanRadius", 4096.0f);
                     if (!std::isfinite(value)) {
-                        throw std::runtime_error("participantScanRadius must be finite");
+                        throw std::runtime_error("recentHostileAttackerRadius must be finite");
                     }
-                    candidate.participantScanRadius = value;
+                    candidate.recentHostileAttackerRadius = value;
                 }
                 if (json.contains("explainDecisions")) {
                     candidate.explainDecisions = json.value("explainDecisions", false);
@@ -174,24 +182,31 @@ namespace OSFDefeat::Config
                     REX::WARN("[OSFDefeat] excludedQuests is currently unsupported (quest-state engine seam unproven); entries are parked safely");
                 }
                 a_config = std::move(candidate);
-                REX::INFO("[OSFDefeat] loaded validation JSON {}", a_path.string());
+                REX::INFO("[OSFDefeat] loaded framework settings {}", a_path.string());
             } catch (const std::exception& e) {
-                REX::ERROR("[OSFDefeat] validation JSON {} failed: {}", a_path.string(), e.what());
+                REX::ERROR("[OSFDefeat] settings JSON {} failed: {}", a_path.string(), e.what());
             }
         }
     }
 
     void Load()
     {
-        RuntimeConfig next;
+        FrameworkSettings next;
         auto root = std::filesystem::path{};
         try {
             root = ResolveRoot();
-            const auto validationRoot = root / "Validation";
-
-            if (std::filesystem::exists(validationRoot)) {
+            const auto legacyRoot = root / "Validation";
+            const auto settingsRoot = root / "Settings";
+            if (std::filesystem::exists(legacyRoot)) {
+                REX::INFO("[OSFDefeat] loading legacy settings directory {}; migrate edits to {} when convenient",
+                    legacyRoot.string(), settingsRoot.string());
+            }
+            for (const auto& directory : { legacyRoot, settingsRoot }) {
+                if (!std::filesystem::exists(directory)) {
+                    continue;
+                }
                 std::vector<std::filesystem::path> files;
-                for (const auto& entry : std::filesystem::directory_iterator{ validationRoot }) {
+                for (const auto& entry : std::filesystem::directory_iterator{ directory }) {
                     if (entry.is_regular_file() && entry.path().extension() == ".json") {
                         files.push_back(entry.path());
                     }
@@ -200,11 +215,12 @@ namespace OSFDefeat::Config
                 for (const auto& path : files) {
                     LoadFile(path, next);
                 }
-            } else {
-                REX::INFO("[OSFDefeat] no validation JSON directory at {}; using defaults", validationRoot.string());
+            }
+            if (!std::filesystem::exists(legacyRoot) && !std::filesystem::exists(settingsRoot)) {
+                REX::INFO("[OSFDefeat] no settings directory at {}; using defaults", settingsRoot.string());
             }
         } catch (const std::exception& e) {
-            REX::ERROR("[OSFDefeat] validation directory discovery failed: {}; using defaults", e.what());
+            REX::ERROR("[OSFDefeat] settings directory discovery failed: {}; using defaults", e.what());
             root.clear();
         }
 
@@ -215,7 +231,7 @@ namespace OSFDefeat::Config
 
     void Reload() { Load(); }
 
-    RuntimeConfig Get()
+    FrameworkSettings Get()
     {
         std::shared_lock lock{ g_lock };
         return g_config;
@@ -260,10 +276,10 @@ namespace OSFDefeat::Config
         return g_config.npcAutoDefeatIncludeRobots;
     }
 
-    bool IsFactionPacifyEnabled()
+    bool ShouldApplyCaptiveFactionOnPlayerDefeat()
     {
         std::shared_lock lock{ g_lock };
-        return g_config.factionPacify;
+        return g_config.applyCaptiveFactionOnPlayerDefeat;
     }
 
     FormID CaptiveFactionID()
@@ -272,10 +288,10 @@ namespace OSFDefeat::Config
         return g_config.captiveFaction;
     }
 
-    float ParticipantScanRadius()
+    float RecentHostileAttackerRadius()
     {
         std::shared_lock lock{ g_lock };
-        return g_config.participantScanRadius;
+        return g_config.recentHostileAttackerRadius;
     }
 
     bool IsExplainEnabled()

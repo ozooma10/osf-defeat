@@ -6,7 +6,7 @@ Scriptname OSFDefeatBasicMessage extends Quest
   you wounded and conscious as a warning - a message. Pure flavor: no credit
   loss, just a concussion and a short down beat.
 
-  Started natively by OSF Defeat; down-state arrives held + auto-claimed, so the
+  Started natively by OSF Defeat; down-state arrives held + automatically leased, so the
   M1 watchdog covers any failure here. }
 
 Float Property DownSeconds = 12.0 Auto Const

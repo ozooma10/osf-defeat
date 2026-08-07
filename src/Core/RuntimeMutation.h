@@ -1,0 +1,14 @@
+#pragma once
+
+#include "pch.h"
+
+namespace OSFDefeat::RuntimeMutation
+{
+    // Coordinates composite runtime mutations with off-thread persistence snapshots.
+    [[nodiscard]] std::recursive_mutex& Mutex();
+
+    // Deferred work captures the current epoch; save reversion advances it so stale work no-ops.
+    [[nodiscard]] std::uint64_t CurrentEpoch();
+    [[nodiscard]] std::uint64_t AdvanceEpoch();
+    [[nodiscard]] bool IsCurrent(std::uint64_t a_epoch);
+}

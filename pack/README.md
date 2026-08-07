@@ -1,9 +1,9 @@
 # OSF Defeat — Basic Consequences
 
 The SFW default consequence pack that ships with OSF Defeat (roadmap M3), and the
-**reference consumer** of the framework's handoff API: quest start, held recovery with the
-auto-claim/watchdog lease, context getters (`GetLastPlayerAggressor`, `GetLastPlayerDefeatCause`),
-and the explicit rescue handshake. It exists so the framework is worth installing on its own —
+**reference consumer** of the framework's handoff API: quest start, held recovery with an
+automatic watchdog-bounded defeat lease, context getters (`GetLastPlayerAggressor`, `GetLastPlayerDefeatCause`),
+and the explicit recovery handshake. It exists so the framework is worth installing on its own —
 Acheron's empty-by-default mistake, not repeated.
 
 Ships as its **own MO2 mod** (`OSF Defeat - Basic Consequences`) so users can toggle or replace
@@ -38,7 +38,7 @@ When nothing is eligible the framework's built-in down-then-recover fallback run
 **Wake-up destination.** Every non-arrest quest (arrest already relocates you via
 vanilla `SendPlayerToJail`) ends through the shared
 `OSFDefeatBasicRecovery.FinishAftermath()` (`Scripts/Source/OSFDefeatBasicRecovery.psc`)
-instead of calling `RescueActor` directly. It looks for the nearest
+instead of calling `RecoverActor` directly. It looks for the nearest
 `OSFDefeatBasicRecoveryMarker`-tagged XMarker in the player's *current cell* and
 moves the player there before recovery; if none exists it falls back to
 same-cell recovery (today's behavior, so this is a zero-regression seam) — a
@@ -63,7 +63,7 @@ fallback path is what runs.
 |---|---|
 | `Plugin/` | Spriggit YAML source for `OSFDefeatBasic.esm` (quests 000800–000806, keyword 000807) |
 | `Scripts/Source/*.psc` | The consequence scripts (one per scenario) |
-| `SFSE/OSFDefeat/Consequences/Player/*.json` | The consequence registrations (v2 schema) |
+| `SFSE/OSFDefeat/Consequences/Player/*.json` | The consequence registrations (v3 schema) |
 | `tools/scan_esm.py` | Binary SPEL/FACT/KYWD/MISC FormID scanner (`OSF_SCAN_TYPES=KYWD python … <regex>`) |
 | `Build.ps1` | Compile Papyrus → build ESM via Spriggit → deploy to MO2 |
 

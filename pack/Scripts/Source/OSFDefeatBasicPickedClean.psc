@@ -7,7 +7,7 @@ Scriptname OSFDefeatBasicPickedClean extends Quest
   competes with "Robbed and Left" against human aggressors; a longer cooldown
   keeps the bigger loss uncommon.
 
-  Started natively by OSF Defeat; down-state arrives held + auto-claimed, so the
+  Started natively by OSF Defeat; down-state arrives held + automatically leased, so the
   M1 watchdog covers any failure here. }
 
 Float Property DownSeconds = 18.0 Auto Const

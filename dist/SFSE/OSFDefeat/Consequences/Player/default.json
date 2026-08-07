@@ -1,16 +1,18 @@
 {
-  "version": 2,
-  "name": "Alpha Down Then Recover",
+  "version": 3,
+  "id": "osfdefeat.default.down_then_recover",
+  "displayName": "Down Then Recover",
   "priority": 0,
   "weight": 1,
-  "recoverySeconds": 8.0,
+  "autoRecoveryDelaySeconds": 8.0,
+  "recoveryMode": "automatic",
 
-  // v2 arbitration fields (all optional; shown at their defaults):
+  // Arbitration fields (all optional; shown at their defaults):
   //   "enabled": true,          authoring kill-switch (users override in Overrides.json)
   //   "cooldownSeconds": 0.0,   min real seconds between firings (session-scoped)
   //   "oncePerLocation": false, at most once per cell per session
   //   "domain": "onfoot",       "ship" is reserved for the ship-defeat milestone
-  //   "maxHoldSeconds": 0.0,    watchdog deadline when holdRecovery is true (0 = config watchdogSeconds)
+  //   "leaseTimeoutSeconds": 0.0, watchdog deadline when recoveryMode is "held" (0 = settings watchdogSeconds)
   "enabled": true,
   "domain": "onfoot"
 }

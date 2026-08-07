@@ -9,10 +9,10 @@
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/DefeatRegistry.h"
-#include "Core/Presentation.h"
 #include "Core/QuestHandoff.h"
-#include "Core/RuntimeState.h"
-#include "Core/Validation.h"
+#include "Core/Recovery.h"
+#include "Core/RuntimeMutation.h"
+#include "Core/Eligibility.h"
 #include "Engine/Engine.h"
 
 #include "REL/ASM.h"
@@ -35,15 +35,15 @@ namespace OSFDefeat::PlayerDefeat
         std::atomic_bool g_workerStarted{ false };
         std::atomic_bool g_tickQueued{ false };
 
-        // --- Participant recording -----------------------------------------------------------------
-        // Who damaged the player recently, fed passively by the hook below. This is the participant
-        // source for the defeat-time snapshot: live ProcessLists actor arrays must NOT be iterated from
+        // --- Recent hostile-attacker recording -----------------------------------------------------
+        // Who damaged the player recently, fed passively by the hook below. This is the recent-attacker
+        // source for the defeat-time consequence cast: live ProcessLists actor arrays must NOT be iterated from
         // an SFSE task (proven crash: races the sim thread's realloc → AV in GetSmartPointer), so we
         // only store PODs here (FormID + timestamp, worker thread) and resolve via LookupByID on the
         // game thread later. "Damaged the player in the last window" is also the better cast list —
         // actual combatants, not bystanders.
-        constexpr auto kParticipantWindow = std::chrono::seconds{ 30 };
-        constexpr std::size_t kParticipantCap = 64;
+        constexpr auto kRecentAttackerWindow = std::chrono::seconds{ 30 };
+        constexpr std::size_t kRecentAttackerCap = 64;
         std::map<FormID, std::chrono::steady_clock::time_point> g_recentAttackers;
         std::mutex g_recentAttackersLock;
 
@@ -55,8 +55,8 @@ namespace OSFDefeat::PlayerDefeat
             const FormID id = a_ref->GetFormID();
             const auto now = std::chrono::steady_clock::now();
             std::unique_lock lock{ g_recentAttackersLock };
-            std::erase_if(g_recentAttackers, [&](const auto& entry) { return now - entry.second > kParticipantWindow; });
-            if (g_recentAttackers.size() < kParticipantCap || g_recentAttackers.contains(id)) {
+            std::erase_if(g_recentAttackers, [&](const auto& entry) { return now - entry.second > kRecentAttackerWindow; });
+            if (g_recentAttackers.size() < kRecentAttackerCap || g_recentAttackers.contains(id)) {
                 g_recentAttackers[id] = now;
             }
         }
@@ -67,17 +67,17 @@ namespace OSFDefeat::PlayerDefeat
             std::vector<FormID> out;
             std::unique_lock lock{ g_recentAttackersLock };
             for (const auto& [id, when] : g_recentAttackers) {
-                if (now - when <= kParticipantWindow) {
+                if (now - when <= kRecentAttackerWindow) {
                     out.push_back(id);
                 }
             }
             return out;
         }
 
-        // Defeat-time participant snapshot: the aggressor plus every recent attacker that is still a
+        // Defeat-time hostile-attacker snapshot: the aggressor plus every recent attacker that is still a
         // live hostile within a_radius (<= 0 = no radius filter). Game thread (LookupByID + engine
         // reads). Recorded attackers that resolve to non-actors (traps, hazards) drop out here.
-        [[nodiscard]] std::vector<RE::Actor*> CollectParticipants(RE::Actor* a_player, RE::Actor* a_aggressor, float a_radius)
+        [[nodiscard]] std::vector<RE::Actor*> CollectRecentHostileAttackers(RE::Actor* a_player, RE::Actor* a_aggressor, float a_radius)
         {
             std::vector<RE::Actor*> out;
             if (!a_player) {
@@ -102,7 +102,7 @@ namespace OSFDefeat::PlayerDefeat
                 out.push_back(a_actor);
             };
 
-            // The aggressor is always cast (no hostility re-check: the captive-faction pacify or the
+            // The aggressor is always included (no hostility re-check: captive-faction membership or the
             // target-list drop may already have cleared formal hostility by the time content asks).
             consider(a_aggressor, false);
             for (const auto id : RecentAttackerIDs()) {
@@ -142,9 +142,9 @@ namespace OSFDefeat::PlayerDefeat
         void QueueImminentBroadcast()
         {
             if (const auto* const tasks = SFSE::GetTaskInterface()) {
-                const auto epoch = RuntimeState::CurrentEpoch();
+                const auto epoch = RuntimeMutation::CurrentEpoch();
                 tasks->AddTask([epoch]() {
-                    if (!RuntimeState::IsCurrent(epoch)) {
+                    if (!RuntimeMutation::IsCurrent(epoch)) {
                         return;
                     }
                     auto* const player = static_cast<RE::Actor*>(RE::PlayerCharacter::GetSingleton());
@@ -174,18 +174,6 @@ namespace OSFDefeat::PlayerDefeat
             }
         }
 
-        [[nodiscard]] float NowDay()
-        {
-            const auto* const cal = RE::Calendar::GetSingleton();
-            return cal ? cal->GetDaysPassedExact() : 0.0f;
-        }
-
-        [[nodiscard]] float TimeScale()
-        {
-            const auto* const cal = RE::Calendar::GetSingleton();
-            return cal ? std::max(1.0f, cal->GetTimeScale()) : 20.0f;
-        }
-
         [[nodiscard]] RE::Actor* PlayerActor()
         {
             return static_cast<RE::Actor*>(RE::PlayerCharacter::GetSingleton());
@@ -209,9 +197,9 @@ namespace OSFDefeat::PlayerDefeat
             }
 
             const FormID aggressorId = a_ref ? a_ref->GetFormID() : 0;
-            const auto epoch = RuntimeState::CurrentEpoch();
+            const auto epoch = RuntimeMutation::CurrentEpoch();
             tasks->AddTask([aggressorId, a_cause, epoch]() {
-                    if (!RuntimeState::IsCurrent(epoch)) {
+                    if (!RuntimeMutation::IsCurrent(epoch)) {
                         g_pendingDefeat.store(false);
                         return;
                     }
@@ -264,9 +252,9 @@ namespace OSFDefeat::PlayerDefeat
             if (!tasks) {
                 return false;
             }
-            const auto epoch = RuntimeState::CurrentEpoch();
+            const auto epoch = RuntimeMutation::CurrentEpoch();
             tasks->AddTask([a_victimId, a_aggressorId, a_cause, epoch]() {
-                if (!RuntimeState::IsCurrent(epoch)) {
+                if (!RuntimeMutation::IsCurrent(epoch)) {
                     return;
                 }
                 auto* const victim = a_victimId ? RE::TESForm::LookupByID<RE::Actor>(a_victimId) : nullptr;
@@ -282,7 +270,7 @@ namespace OSFDefeat::PlayerDefeat
                 // the health floor without either vanilla death or an OSF down-state.
                 if (Defeat::DefeatActor(victim, aggressor, a_cause)) {
                     if (auto data = DefeatRegistry::Get(a_victimId)) {
-                        data->recoverAtDay = RecoveryDeadlineForSeconds(Config::Get().defaultRecoverySeconds);
+                        data->autoRecoverAtDay = Recovery::DeadlineForSeconds(Config::Get().defaultAutoRecoveryDelaySeconds);
                     }
                 }
             });
@@ -324,7 +312,7 @@ namespace OSFDefeat::PlayerDefeat
             if (g_original && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
                 const auto cause = DefeatCause::kHealth;
                 if (IsPlayerAVOwner(a_owner)) {
-                    RecordAttacker(a_ref);  // participant snapshot source (POD-only on this thread)
+                    RecordAttacker(a_ref);  // recent-hostile-attacker snapshot source (POD-only on this thread)
                     auto* const player = PlayerActor();
                     const float current = a_owner->GetActorValue(a_info);
                     const bool  lethal = current + a_delta <= 0.0f;
@@ -335,9 +323,9 @@ namespace OSFDefeat::PlayerDefeat
                         if (!lethal) {
                             MaybeSignalImminent(a_owner, a_info, current, a_delta);
                         } else {
-                            const auto verdict = Validation::ExplainPair(player, aggressor);
-                            if (verdict != Validation::Verdict::kOk) {
-                                LogPlayerPassthrough(Validation::VerdictName(verdict));
+                            const auto verdict = Eligibility::Explain(player, aggressor);
+                            if (verdict != Eligibility::Verdict::kOk) {
+                                LogPlayerPassthrough(Eligibility::VerdictName(verdict));
                             } else if (ResistWindowActive(player->GetFormID())) {
                                 LogPlayerPassthrough("resist window active (ResistDefeat) - vanilla lethality");
                             } else {
@@ -358,11 +346,11 @@ namespace OSFDefeat::PlayerDefeat
                         const bool  lethal = current + a_delta <= 0.0f;
                         auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
                         if (lethal && !Defeat::IsDefeated(victim)) {
-                            const auto verdict = Validation::ExplainPair(victim, aggressor);
-                            if (verdict != Validation::Verdict::kOk) {
+                            const auto verdict = Eligibility::Explain(victim, aggressor);
+                            if (verdict != Eligibility::Verdict::kOk) {
                                 if (Config::IsExplainEnabled()) {
                                     REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: {}",
-                                        victim->GetFormID(), Validation::VerdictName(verdict));
+                                        victim->GetFormID(), Eligibility::VerdictName(verdict));
                                 }
                             } else if (!ShouldAutoDefeatNpc(victim)) {
                                 if (Config::IsExplainEnabled()) {
@@ -431,115 +419,17 @@ namespace OSFDefeat::PlayerDefeat
                 for (;;) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
                     if (const auto* const tasks = SFSE::GetTaskInterface(); tasks && !g_tickQueued.exchange(true)) {
-                        const auto epoch = RuntimeState::CurrentEpoch();
+                        const auto epoch = RuntimeMutation::CurrentEpoch();
                         tasks->AddTask([epoch]() {
                             g_tickQueued.store(false);
-                            if (RuntimeState::IsCurrent(epoch)) {
-                                TickRecovery();
+                            if (RuntimeMutation::IsCurrent(epoch)) {
+                                Recovery::Tick();
                             }
                         });
                     }
                 }
             }).detach();
         }
-    }
-
-    float RecoveryDeadlineForSeconds(float a_realSeconds)
-    {
-        if (!std::isfinite(a_realSeconds)) {
-            a_realSeconds = 1.0f;
-        }
-        return NowDay() + ((std::max(1.0f, a_realSeconds) * TimeScale()) / 86400.0f);
-    }
-
-    bool SetRecoveryTimer(RE::Actor* a_actor, float a_seconds)
-    {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
-        if (!a_actor || !std::isfinite(a_seconds)) {
-            return false;
-        }
-        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
-        if (!data) {
-            return false;
-        }
-        if (a_seconds > 0.0f) {
-            // A positive timer puts the entry back on framework auto-recovery; any lease is over.
-            data->recoverAtDay = RecoveryDeadlineForSeconds(a_seconds);
-            data->leaseDeadlineDay = 0.0f;
-            data->SetLeaseOwner({});
-            REX::INFO("[OSFDefeat] recovery timer for {:08X} set to {:.2f}s", a_actor->GetFormID(), a_seconds);
-        } else {
-            // Hold. An existing lease keeps its own deadline; an unleased player hold gets the
-            // watchdog deadline armed by the recovery tick.
-            data->recoverAtDay = 0.0f;
-            REX::INFO("[OSFDefeat] recovery for {:08X} held; awaiting explicit rescue", a_actor->GetFormID());
-        }
-        return true;
-    }
-
-    bool ClaimDefeat(RE::Actor* a_actor, std::string_view a_owner, float a_maxHoldSeconds)
-    {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
-        if (!a_actor || a_owner.empty() || !std::isfinite(a_maxHoldSeconds)) {
-            return false;
-        }
-        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
-        if (!data) {
-            return false;
-        }
-        const auto currentOwner = data->CopyLeaseOwner();
-        if (!currentOwner.empty() && currentOwner != a_owner) {
-            REX::WARN("[OSFDefeat] claim on {:08X} refused: already leased by '{}' (requested by '{}')",
-                a_actor->GetFormID(), currentOwner, a_owner);
-            return false;
-        }
-
-        const float holdSeconds = a_maxHoldSeconds > 0.0f ? a_maxHoldSeconds : Config::WatchdogSeconds();
-        data->recoverAtDay = 0.0f;  // held: the owner ends it via RescueActor / ReleaseClaim / SetRecoveryTimer
-        data->SetLeaseOwner(std::string{ a_owner });
-        data->leaseDeadlineDay = holdSeconds > 0.0f ? RecoveryDeadlineForSeconds(holdSeconds) : 0.0f;
-        if (holdSeconds > 0.0f) {
-            REX::INFO("[OSFDefeat] '{}' claimed down-state of {:08X} for up to {:.0f}s", a_owner, a_actor->GetFormID(), holdSeconds);
-        } else {
-            REX::INFO("[OSFDefeat] '{}' claimed down-state of {:08X} with no deadline (watchdog disabled)", a_owner, a_actor->GetFormID());
-        }
-        return true;
-    }
-
-    bool ReleaseClaim(RE::Actor* a_actor, std::string_view a_owner)
-    {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
-        if (!a_actor) {
-            return false;
-        }
-        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
-        if (!data) {
-            return false;
-        }
-        const auto currentOwner = data->CopyLeaseOwner();
-        if (currentOwner.empty()) {
-            return false;
-        }
-        if (currentOwner != a_owner) {
-            REX::WARN("[OSFDefeat] release of {:08X} refused: leased by '{}', not '{}'",
-                a_actor->GetFormID(), currentOwner, a_owner);
-            return false;
-        }
-
-        data->SetLeaseOwner({});
-        data->leaseDeadlineDay = 0.0f;
-        data->recoverAtDay = RecoveryDeadlineForSeconds(Config::Get().defaultRecoverySeconds);
-        REX::INFO("[OSFDefeat] '{}' released its claim on {:08X}; default recovery resumes", a_owner, a_actor->GetFormID());
-        return true;
-    }
-
-    std::string GetClaimOwner(RE::Actor* a_actor)
-    {
-        if (!a_actor) {
-            return {};
-        }
-        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
-        return data ? data->CopyLeaseOwner() : std::string{};
     }
 
     bool SetResistWindow(RE::Actor* a_actor, float a_seconds)
@@ -554,7 +444,7 @@ namespace OSFDefeat::PlayerDefeat
             return true;
         }
         if (Defeat::IsDefeated(a_actor)) {
-            return false;  // a resist window is not a rescue
+            return false;  // a resist window is not recovery
         }
         const auto deadline = std::chrono::steady_clock::now() +
                               std::chrono::milliseconds{ static_cast<std::int64_t>(a_seconds * 1000.0f) };
@@ -571,131 +461,58 @@ namespace OSFDefeat::PlayerDefeat
         return a_actor && ResistWindowActive(a_actor->GetFormID());
     }
 
-    float GetRecoverySecondsRemaining(RE::Actor* a_actor)
-    {
-        if (!a_actor) {
-            return 0.0f;
-        }
-        const auto data = DefeatRegistry::Get(a_actor->GetFormID());
-        if (!data) {
-            return 0.0f;
-        }
-        if (data->recoverAtDay <= 0.0f) {
-            return -1.0f;
-        }
-        return std::max(0.0f, (data->recoverAtDay - NowDay()) * 86400.0f / TimeScale());
-    }
-
     void BeginPlayerDefeat(RE::Actor* a_aggressor, DefeatCause a_cause)
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         auto* const player = PlayerActor();
-        // QueueBegin is the validation/commit boundary for Health defeats. Do not re-evaluate
+        // QueueBegin is the eligibility/commit boundary for Health defeats. Do not re-evaluate
         // mutable config after the hook has already clamped lethal damage.
         if (!player || player->IsDead() || Defeat::IsDefeated(player)) {
             return;
         }
 
-        const auto outcome = Consequence::SelectPlayerOutcome(player, a_aggressor, a_cause);
-        // Snapshot participants BEFORE the down state applies: DefeatActor drops the player from
-        // combatant target lists (and may captive-pacify), which can clear the hostility the
-        // participant filter keys on.
-        const auto participants = CollectParticipants(player, a_aggressor, Config::ParticipantScanRadius());
+        const auto consequence = Consequence::SelectPlayerConsequence(player, a_aggressor, a_cause);
+        // Snapshot recent hostile attackers BEFORE the engine down state applies: DefeatActor drops the player from
+        // combatant target lists (and may apply captive-faction membership), which can clear the hostility the
+        // recent-hostile-attacker filter keys on.
+        const auto recentHostileAttackers = CollectRecentHostileAttackers(player, a_aggressor, Config::RecentHostileAttackerRadius());
         if (!Defeat::DefeatActor(player, a_aggressor, a_cause)) {
             return;
         }
-        Consequence::MarkFired(outcome, player);  // stamp cooldown / oncePerLocation arbitration state
+        Consequence::MarkFired(consequence, player);  // stamp cooldown / oncePerLocation arbitration state
         g_imminentSignaled.store(false);          // re-arm the defeat-imminent signal for the next fight
 
         if (auto data = DefeatRegistry::Get(player->GetFormID())) {
-            if (outcome.holdRecovery) {
+            if (consequence.HoldsRecovery()) {
                 // Held for content: the consequence owns the down-state and must end it via
-                // RescueActor (or SetRecoveryTimer / ReleaseClaim). The lease is armed on its
-                // behalf so a consequence that errors out gets watchdog-rescued, not stranded.
-                const float hold = outcome.maxHoldSeconds > 0.0f ? outcome.maxHoldSeconds : Config::WatchdogSeconds();
-                data->recoverAtDay = 0.0f;
-                data->SetLeaseOwner(outcome.name);
-                data->leaseDeadlineDay = hold > 0.0f ? RecoveryDeadlineForSeconds(hold) : 0.0f;
+                // RecoverActor (or ScheduleAutomaticRecovery / ReleaseDefeatLease). The lease is armed on its
+                // behalf so a consequence that errors out gets watchdog-recovered, not stranded.
+                const float hold = consequence.leaseTimeoutSeconds > 0.0f ? consequence.leaseTimeoutSeconds : Config::WatchdogSeconds();
+                data->autoRecoverAtDay = 0.0f;
+                data->SetLeaseHolderId(std::format("consequence:{}", consequence.id));
+                data->leaseExpiresAtDay = hold > 0.0f ? Recovery::DeadlineForSeconds(hold) : 0.0f;
             } else {
-                data->recoverAtDay = RecoveryDeadlineForSeconds(outcome.recoverySeconds);
+                data->autoRecoverAtDay = Recovery::DeadlineForSeconds(consequence.autoRecoveryDelaySeconds);
             }
         }
 
-        if (outcome.holdRecovery) {
-            REX::INFO("[OSFDefeat] player outcome '{}' selected; recovery held for content", outcome.name);
+        if (consequence.HoldsRecovery()) {
+            REX::INFO("[OSFDefeat] player consequence '{}' selected; recovery held for content", consequence.id);
         } else {
-            REX::INFO("[OSFDefeat] player outcome '{}' selected; recovery in {:.2f}s", outcome.name, outcome.recoverySeconds);
+            REX::INFO("[OSFDefeat] player consequence '{}' selected; automatic recovery in {:.2f}s", consequence.id, consequence.autoRecoveryDelaySeconds);
         }
 
         // Stage the handoff payload (read back through the GetLastPlayer* Papyrus
-        // getters) — including the participant snapshot (recent attackers, Acheron
+        // getters) — including the recent-hostile-attacker snapshot (Acheron
         // member-list parity) — then start the consequence quest, then notify content
         // consumers such as OSF Surrender. Context-before-quest so a quest's
         // OnQuestInit can already read the payload. We are on the game thread here,
         // so the VM dispatches are safe.
-        DefeatContext::SetPlayerContext(player, a_aggressor, outcome, participants, a_cause);
-        if (outcome.quest && outcome.startQuest) {
-            QuestHandoff::TryStartQuestToken(*outcome.quest);
+        DefeatContext::SetPlayerContext(player, a_aggressor, consequence, recentHostileAttackers, a_cause);
+        if (consequence.quest && consequence.startQuest) {
+            QuestHandoff::TryStartQuestToken(*consequence.quest);
         }
         Events::BroadcastPlayerConsequenceStarted();
-    }
-
-    void TickRecovery()
-    {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
-        // Auto-recover every defeated actor whose deadline has passed. Held entries (recoverAtDay <= 0)
-        // are governed by the watchdog instead: the player's held entries always carry a lease deadline
-        // (auto-armed here if a consumer held without claiming), NPC held entries only when content
-        // claimed them — a held NPC captive is a legitimate long-term state. A lapsed deadline means the
-        // owning consumer stopped, errored out, or forgot to extend: force-rescue so the player is never
-        // stranded, and log who defaulted. Snapshot is a copy of IDs, so RescueActor mutating the
-        // registry mid-loop is safe.
-        const float now = NowDay();
-        const float watchdog = Config::WatchdogSeconds();
-        for (const auto id : DefeatRegistry::Snapshot()) {
-            const auto data = DefeatRegistry::Get(id);
-            if (!data) {
-                continue;
-            }
-
-            if (data->recoverAtDay > 0.0f) {
-                if (now >= data->recoverAtDay) {
-                    if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
-                        Defeat::RescueActor(actor, true);
-                    }
-                }
-                continue;
-            }
-
-            // Held entry.
-            if (data->leaseDeadlineDay <= 0.0f) {
-                if (id == 0x14 && watchdog > 0.0f) {
-                    data->leaseDeadlineDay = RecoveryDeadlineForSeconds(watchdog);
-                    if (data->CopyLeaseOwner().empty()) {
-                        data->SetLeaseOwner("(unclaimed hold)");
-                    }
-                }
-                continue;
-            }
-            if (now >= data->leaseDeadlineDay) {
-                const auto owner = data->CopyLeaseOwner();
-                REX::WARN("[OSFDefeat] watchdog: held down-state of {:08X} expired (owner '{}' never extended or rescued) - force-rescuing",
-                    id, owner.empty() ? "(unclaimed hold)" : owner);
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
-                    Defeat::RescueActor(actor, true);
-                } else {
-                    DefeatRegistry::Remove(id);  // unresolvable: purge so the entry cannot strand the co-save
-                }
-            }
-        }
-
-        // Presentation self-heal: the engine down-state survives a save-load / cell change (co-save +
-        // Set3D re-assert) but the OSF scene that poses and locks the player does not — without this
-        // the player sits in raw kBleedOut, frozen and unposed, until recovery. Debounced inside.
-        auto* const player = PlayerActor();
-        if (player && Defeat::IsDefeated(player)) {
-            Presentation::ReassertPlayerDown();
-        }
     }
 
     void Install()
@@ -709,7 +526,7 @@ namespace OSFDefeat::PlayerDefeat
 
     void ResetTransientState()
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         g_pendingDefeat.store(false);
         g_tickQueued.store(false);
         g_imminentSignaled.store(false);

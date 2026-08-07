@@ -14,8 +14,9 @@
 #include "Core/DefeatContext.h"
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
-#include "Core/RuntimeState.h"
-#include "Core/Validation.h"
+#include "Core/Recovery.h"
+#include "Core/RuntimeMutation.h"
+#include "Core/Eligibility.h"
 #include "Engine/Engine.h"
 
 #include <variant>
@@ -31,9 +32,9 @@ namespace OSFDefeat::Papyrus
             if (!tasks) {
                 return false;
             }
-            const auto epoch = RuntimeState::CurrentEpoch();
+            const auto epoch = RuntimeMutation::CurrentEpoch();
             tasks->AddTask([epoch, fn = std::move(a_fn)]() mutable {
-                if (RuntimeState::IsCurrent(epoch)) {
+                if (RuntimeMutation::IsCurrent(epoch)) {
                     fn();
                 }
             });
@@ -51,27 +52,32 @@ namespace OSFDefeat::Papyrus
             return QueueGameTask([victimId, aggressorId]() {
                 auto* const victim = RE::TESForm::LookupByID<RE::Actor>(victimId);
                 auto* const aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
-                if (Validation::CanProcess() && Validation::ValidatePair(victim, aggressor)) {
+                if (Eligibility::CanProcess() && Eligibility::IsEligible(victim, aggressor)) {
                     Defeat::DefeatActor(victim, aggressor);
                 }
             });
         }
 
-        bool RescueActor(std::monostate, RE::Actor* a_victim, bool a_undoPacify)
+        bool RecoverActor(std::monostate, RE::Actor* a_actor, bool a_resumeAI)
         {
-            if (!a_victim) {
+            if (!a_actor) {
                 return false;
             }
 
-            const FormID victimId = a_victim->GetFormID();
-            return QueueGameTask([victimId, a_undoPacify]() {
-                if (auto* const victim = RE::TESForm::LookupByID<RE::Actor>(victimId)) {
-                    Defeat::RescueActor(victim, a_undoPacify);
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, a_resumeAI]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    Defeat::RecoverActor(actor, a_resumeAI);
                 }
             });
         }
 
-        bool PacifyActor(std::monostate, RE::Actor* a_actor)
+        bool RescueActor(std::monostate a_self, RE::Actor* a_victim, bool a_undoPacify)
+        {
+            return RecoverActor(a_self, a_victim, a_undoPacify);
+        }
+
+        bool SuspendActorAI(std::monostate, RE::Actor* a_actor)
         {
             if (!a_actor) {
                 return false;
@@ -80,12 +86,12 @@ namespace OSFDefeat::Papyrus
             const FormID actorId = a_actor->GetFormID();
             return QueueGameTask([actorId]() {
                 if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Defeat::Pacify(actor);
+                    Defeat::SuspendAI(actor);
                 }
             });
         }
 
-        bool ReleaseActor(std::monostate, RE::Actor* a_actor)
+        bool ResumeActorAI(std::monostate, RE::Actor* a_actor)
         {
             if (!a_actor) {
                 return false;
@@ -94,66 +100,105 @@ namespace OSFDefeat::Papyrus
             const FormID actorId = a_actor->GetFormID();
             return QueueGameTask([actorId]() {
                 if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Defeat::UndoPacify(actor);
+                    Defeat::ResumeAI(actor);
                 }
             });
         }
 
-        // Recovery handshake: content takes ownership of a down-state ("hold, my scene is
-        // running") or reschedules it. afSeconds <= 0 holds until an explicit RescueActor.
+        bool PacifyActor(std::monostate a_self, RE::Actor* a_actor) { return SuspendActorAI(a_self, a_actor); }
+        bool ReleaseActor(std::monostate a_self, RE::Actor* a_actor) { return ResumeActorAI(a_self, a_actor); }
+
+        bool QueueRecoveryOperation(RE::Actor* a_actor, auto a_operation)
+        {
+            if (!a_actor) {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, operation = std::move(a_operation)]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    operation(actor);
+                }
+            });
+        }
+
+        bool ScheduleAutomaticRecovery(std::monostate, RE::Actor* a_actor, float a_delaySeconds)
+        {
+            return QueueRecoveryOperation(a_actor, [a_delaySeconds](RE::Actor* a_resolvedActor) {
+                Recovery::ScheduleAutomatic(a_resolvedActor, a_delaySeconds);
+            });
+        }
+
+        bool HoldRecovery(std::monostate, RE::Actor* a_actor)
+        {
+            return QueueRecoveryOperation(a_actor, [](RE::Actor* a_resolvedActor) { Recovery::Hold(a_resolvedActor); });
+        }
+
+        float GetAutomaticRecoverySecondsRemaining(std::monostate, RE::Actor* a_actor)
+        {
+            return Recovery::SecondsRemaining(a_actor);
+        }
+
+        // Compatibility verb: positive seconds schedule automatic recovery; non-positive holds it.
         bool SetRecoveryTimer(std::monostate, RE::Actor* a_actor, float a_seconds)
         {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, a_seconds]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    PlayerDefeat::SetRecoveryTimer(actor, a_seconds);
-                }
+            return QueueRecoveryOperation(a_actor, [a_seconds](RE::Actor* a_resolvedActor) {
+                Recovery::SetTimer(a_resolvedActor, a_seconds);
             });
         }
 
         float GetRecoverySecondsRemaining(std::monostate, RE::Actor* a_actor)
         {
-            return PlayerDefeat::GetRecoverySecondsRemaining(a_actor);
+            return GetAutomaticRecoverySecondsRemaining({}, a_actor);
         }
 
-        // Ownership lease: content claims a held down-state under a named owner with a watchdog
-        // deadline. Queued to the game thread — check GetClaimOwner afterwards to confirm the
-        // claim landed (a competing owner's live lease refuses it).
-        bool ClaimDefeat(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_owner, float a_maxHoldSeconds)
+        // Defeat lease: a named, watchdog-protected recovery hold.
+        bool AcquireDefeatLease(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_holderId, float a_timeoutSeconds)
         {
-            if (!a_actor || !a_owner.c_str() || *a_owner.c_str() == '\0') {
+            if (!a_actor || !a_holderId.c_str() || *a_holderId.c_str() == '\0') {
                 return false;
             }
 
             const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, owner = std::string{ a_owner.c_str() }, a_maxHoldSeconds]() {
+            return QueueGameTask([actorId, holderId = std::string{ a_holderId.c_str() }, a_timeoutSeconds]() {
                 if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    PlayerDefeat::ClaimDefeat(actor, owner, a_maxHoldSeconds);
+                    Recovery::AcquireLease(actor, holderId, a_timeoutSeconds);
                 }
             });
         }
 
-        bool ReleaseClaim(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_owner)
+        bool ReleaseDefeatLease(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_holderId)
         {
-            if (!a_actor || !a_owner.c_str()) {
+            if (!a_actor || !a_holderId.c_str()) {
                 return false;
             }
 
             const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, owner = std::string{ a_owner.c_str() }]() {
+            return QueueGameTask([actorId, holderId = std::string{ a_holderId.c_str() }]() {
                 if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    PlayerDefeat::ReleaseClaim(actor, owner);
+                    Recovery::ReleaseLease(actor, holderId);
                 }
             });
         }
 
-        std::string GetClaimOwner(std::monostate, RE::Actor* a_actor)
+        std::string GetDefeatLeaseHolder(std::monostate, RE::Actor* a_actor)
         {
-            return PlayerDefeat::GetClaimOwner(a_actor);
+            return Recovery::GetLeaseHolder(a_actor);
+        }
+
+        bool ClaimDefeat(std::monostate a_self, RE::Actor* a_actor, RE::BSFixedString a_owner, float a_maxHoldSeconds)
+        {
+            return AcquireDefeatLease(a_self, a_actor, a_owner, a_maxHoldSeconds);
+        }
+
+        bool ReleaseClaim(std::monostate a_self, RE::Actor* a_actor, RE::BSFixedString a_owner)
+        {
+            return ReleaseDefeatLease(a_self, a_actor, a_owner);
+        }
+
+        std::string GetClaimOwner(std::monostate a_self, RE::Actor* a_actor)
+        {
+            return GetDefeatLeaseHolder(a_self, a_actor);
         }
 
         // Emergency escape / safe uninstall. Console: cgf "OSFDefeat.ForceRecoverAll"
@@ -187,8 +232,8 @@ namespace OSFDefeat::Papyrus
             return PlayerDefeat::IsResistWindowActive(a_actor);
         }
 
-        // Captive-faction pacify on demand (surrender-to-base), independent of the automatic
-        // `factionPacify` config gate. Removal also happens automatically on rescue.
+        // Captive-faction non-hostility on demand (surrender-to-base), independent of the automatic
+        // player-defeat setting. Removal also happens automatically on recovery.
         bool ApplyCaptiveFaction(std::monostate, RE::Actor* a_actor)
         {
             if (!a_actor) {
@@ -222,8 +267,8 @@ namespace OSFDefeat::Papyrus
             return Engine::HasCaptiveFactionApplied(a_actor);
         }
 
-        // Capture hooks (M4): claim a defeated NPC as a captor's prisoner. CaptureActor defeats +
-        // holds + pacifies the captive and records the captor; content builds the bounty board on top.
+        // Capture hooks (M4): register a defeated NPC as a captor's prisoner. CaptureActor defeats,
+        // holds, suspends AI, applies non-hostility, and records the captor.
         bool CaptureActor(std::monostate, RE::Actor* a_captive, RE::Actor* a_captor)
         {
             if (!a_captive) {
@@ -303,8 +348,10 @@ namespace OSFDefeat::Papyrus
 
         bool IsPacified(std::monostate, RE::Actor* a_actor)
         {
-            return Defeat::IsPacified(a_actor);
+            return Defeat::IsAISuspended(a_actor);
         }
+
+        bool IsActorAISuspended(std::monostate, RE::Actor* a_actor) { return Defeat::IsAISuspended(a_actor); }
 
         // Classification for content NPC-consequence routing (and the future NPC auto-defeat gate):
         // 0 = flesh, 1 = robot, 2 = turret.
@@ -330,12 +377,12 @@ namespace OSFDefeat::Papyrus
 
         void DisableProcessing(std::monostate, bool a_disable)
         {
-            Validation::SetEnabled(!a_disable);
+            Eligibility::SetEnabled(!a_disable);
         }
 
         bool IsProcessingDisabled(std::monostate)
         {
-            return !Validation::IsEnabled();
+            return !Eligibility::IsEnabled();
         }
 
         // Event delivery is callback-style (Starfield can't deliver Papyrus events to non-native
@@ -410,6 +457,11 @@ namespace OSFDefeat::Papyrus
             return DefeatContext::GetLastPlayerConsequenceName();
         }
 
+        std::string GetLastPlayerConsequenceId(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerConsequenceId();
+        }
+
         std::string GetLastPlayerConsequenceQuest(std::monostate)
         {
             return DefeatContext::GetLastPlayerConsequenceQuest();
@@ -420,9 +472,24 @@ namespace OSFDefeat::Papyrus
             return DefeatContext::GetLastPlayerRecoverySeconds();
         }
 
+        float GetLastPlayerAutoRecoveryDelaySeconds(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerAutoRecoveryDelaySeconds();
+        }
+
+        bool IsLastPlayerRecoveryHeld(std::monostate)
+        {
+            return DefeatContext::IsLastPlayerRecoveryHeld();
+        }
+
         std::vector<RE::Actor*> GetLastPlayerParticipants(std::monostate)
         {
             return DefeatContext::GetLastPlayerParticipants();
+        }
+
+        std::vector<RE::Actor*> GetLastPlayerRecentHostileAttackers(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerRecentHostileAttackers();
         }
 
         void ReloadJSON(std::monostate)
@@ -449,11 +516,15 @@ namespace OSFDefeat::Papyrus
 
         constexpr std::string_view kClass = "OSFDefeat";
         vm->BindNativeMethod(kClass, "DefeatActor", &DefeatActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RecoverActor", &RecoverActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RescueActor", &RescueActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "SuspendActorAI", &SuspendActorAI, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ResumeActorAI", &ResumeActorAI, std::nullopt, false);
         vm->BindNativeMethod(kClass, "PacifyActor", &PacifyActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReleaseActor", &ReleaseActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsDefeated", &IsDefeated, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsPacified", &IsPacified, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsActorAISuspended", &IsActorAISuspended, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ClassifyActor", &ClassifyActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsNonFlesh", &IsNonFlesh, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsHostile", &IsHostile, std::nullopt, false);
@@ -471,12 +542,22 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "RegisterForActorRecovered", &RegisterForActorRecovered, std::nullopt, false);
         vm->BindNativeMethod(kClass, "UnregisterForActorRecovered", &UnregisterForActorRecovered, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerAggressor", &GetLastPlayerAggressor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceId", &GetLastPlayerConsequenceId, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceName", &GetLastPlayerConsequenceName, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceQuest", &GetLastPlayerConsequenceQuest, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerRecoverySeconds", &GetLastPlayerRecoverySeconds, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerAutoRecoveryDelaySeconds", &GetLastPlayerAutoRecoveryDelaySeconds, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsLastPlayerRecoveryHeld", &IsLastPlayerRecoveryHeld, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerParticipants", &GetLastPlayerParticipants, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerRecentHostileAttackers", &GetLastPlayerRecentHostileAttackers, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ScheduleAutomaticRecovery", &ScheduleAutomaticRecovery, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "HoldRecovery", &HoldRecovery, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetAutomaticRecoverySecondsRemaining", &GetAutomaticRecoverySecondsRemaining, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SetRecoveryTimer", &SetRecoveryTimer, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetRecoverySecondsRemaining", &GetRecoverySecondsRemaining, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "AcquireDefeatLease", &AcquireDefeatLease, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ReleaseDefeatLease", &ReleaseDefeatLease, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetDefeatLeaseHolder", &GetDefeatLeaseHolder, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ClaimDefeat", &ClaimDefeat, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReleaseClaim", &ReleaseClaim, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetClaimOwner", &GetClaimOwner, std::nullopt, false);

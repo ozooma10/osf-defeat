@@ -73,12 +73,12 @@ namespace OSFDefeat::Conditions
             }
             for (const auto& [key, _] : a_json.items()) {
                 if (key != "keywords" && key != "factions" && key != "match" && !key.starts_with("//")) {
-                    REX::WARN("[OSFDefeat] consequence '{}': unknown actor-condition field '{}' (typo?); outcome parked", a_owner, key);
+                    REX::WARN("[OSFDefeat] consequence '{}': unknown actor-condition field '{}' (typo?); consequence parked", a_owner, key);
                     a_valid = false;
                 }
             }
             if (block.Empty()) {
-                REX::WARN("[OSFDefeat] consequence '{}': authored actor-condition block has no valid tests; outcome parked", a_owner);
+                REX::WARN("[OSFDefeat] consequence '{}': authored actor-condition block has no valid tests; consequence parked", a_owner);
                 a_valid = false;
             }
             return block;
@@ -120,35 +120,35 @@ namespace OSFDefeat::Conditions
         }
     }
 
-    OutcomeConditions Parse(const nlohmann::json& a_json, std::string_view a_owner)
+    ConsequenceConditions Parse(const nlohmann::json& a_json, std::string_view a_consequenceId)
     {
-        OutcomeConditions conditions;
+        ConsequenceConditions conditions;
         if (!a_json.is_object()) {
-            REX::WARN("[OSFDefeat] consequence '{}': conditions must be an object", a_owner);
+            REX::WARN("[OSFDefeat] consequence '{}': conditions must be an object", a_consequenceId);
             conditions.valid = false;
             return conditions;
         }
 
         if (const auto it = a_json.find("aggressor"); it != a_json.end()) {
             if (it->is_object()) {
-                conditions.aggressor = ParseActorBlock(*it, a_owner, /*defaultMatchAll=*/false, conditions.valid);
+                conditions.aggressor = ParseActorBlock(*it, a_consequenceId, /*defaultMatchAll=*/false, conditions.valid);
             } else {
-                REX::WARN("[OSFDefeat] consequence '{}': conditions.aggressor must be an object; outcome parked", a_owner);
+                REX::WARN("[OSFDefeat] consequence '{}': conditions.aggressor must be an object; consequence parked", a_consequenceId);
                 conditions.valid = false;
             }
         }
         if (const auto it = a_json.find("victim"); it != a_json.end()) {
             if (it->is_object()) {
-                conditions.victim = ParseActorBlock(*it, a_owner, /*defaultMatchAll=*/true, conditions.valid);
+                conditions.victim = ParseActorBlock(*it, a_consequenceId, /*defaultMatchAll=*/true, conditions.valid);
             } else {
-                REX::WARN("[OSFDefeat] consequence '{}': conditions.victim must be an object; outcome parked", a_owner);
+                REX::WARN("[OSFDefeat] consequence '{}': conditions.victim must be an object; consequence parked", a_consequenceId);
                 conditions.valid = false;
             }
         }
         if (const auto it = a_json.find("cause"); it != a_json.end()) {
             const auto addCause = [&](const nlohmann::json& a_entry) {
                 if (!a_entry.is_string()) {
-                    REX::WARN("[OSFDefeat] consequence '{}': conditions cause entries must be strings", a_owner);
+                    REX::WARN("[OSFDefeat] consequence '{}': conditions cause entries must be strings", a_consequenceId);
                     conditions.valid = false;
                     return;
                 }
@@ -158,7 +158,7 @@ namespace OSFDefeat::Conditions
                 } else if (token == "scripted") {
                     conditions.causes.push_back(DefeatCause::kScripted);
                 } else {
-                    REX::WARN("[OSFDefeat] consequence '{}': unknown cause '{}' (use health/scripted); outcome parked", a_owner, token);
+                    REX::WARN("[OSFDefeat] consequence '{}': unknown cause '{}' (use health/scripted); consequence parked", a_consequenceId, token);
                     conditions.valid = false;
                 }
             };
@@ -170,7 +170,7 @@ namespace OSFDefeat::Conditions
                 addCause(*it);
             }
             if (conditions.causes.empty()) {
-                REX::WARN("[OSFDefeat] consequence '{}': conditions.cause has no valid entries; outcome parked", a_owner);
+                REX::WARN("[OSFDefeat] consequence '{}': conditions.cause has no valid entries; consequence parked", a_consequenceId);
                 conditions.valid = false;
             }
         }
@@ -178,26 +178,26 @@ namespace OSFDefeat::Conditions
         // Schema-reserved, engine seams not yet RE-proven for this CommonLibSF.
         for (const auto key : { "locations", "questsRunning", "questsCompleted" }) {
             if (a_json.contains(key)) {
-                REX::WARN("[OSFDefeat] consequence '{}': conditions.{} is not supported yet (engine seam unproven); outcome parked", a_owner, key);
+                REX::WARN("[OSFDefeat] consequence '{}': conditions.{} is not supported yet (engine seam unproven); consequence parked", a_consequenceId, key);
                 conditions.valid = false;
             }
         }
         for (const auto& [key, _] : a_json.items()) {
             if (key != "aggressor" && key != "victim" && key != "cause" && key != "locations" &&
                 key != "questsRunning" && key != "questsCompleted" && !key.starts_with("//")) {
-                REX::WARN("[OSFDefeat] consequence '{}': unknown conditions field '{}' (typo?); outcome parked", a_owner, key);
+                REX::WARN("[OSFDefeat] consequence '{}': unknown conditions field '{}' (typo?); consequence parked", a_consequenceId, key);
                 conditions.valid = false;
             }
         }
         return conditions;
     }
 
-    bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
+    bool Evaluate(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         return Explain(a_conditions, a_victim, a_aggressor, a_cause) == EvalResult::kPass;
     }
 
-    EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
+    EvalResult Explain(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         if (!a_conditions.valid) {
             return EvalResult::kInvalid;

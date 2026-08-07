@@ -17,7 +17,7 @@ namespace OSFDefeat::Conditions
     // Location and quest-state conditions are schema-reserved but UNSUPPORTED until
     // their engine seams are RE-proven for this CommonLibSF (GetCurrentLocation has
     // an unmapped AddrLib ID and crashes if called; TESQuest state natives are
-    // unbound). Authoring them parks the outcome instead of silently widening it.
+    // unbound). Authoring them parks the consequence instead of silently widening it.
 
     struct ActorBlock
     {
@@ -28,7 +28,7 @@ namespace OSFDefeat::Conditions
         [[nodiscard]] bool Empty() const { return keywords.empty() && factions.empty(); }
     };
 
-    struct OutcomeConditions
+    struct ConsequenceConditions
     {
         ActorBlock aggressor;  // defaults to matchAll = false ("any")
         ActorBlock victim;     // defaults to matchAll = true ("all")
@@ -38,16 +38,16 @@ namespace OSFDefeat::Conditions
         [[nodiscard]] bool Empty() const { return aggressor.Empty() && victim.Empty() && causes.empty(); }
     };
 
-    // Parses the "conditions" object of a consequence JSON. a_owner is the
-    // consequence name, used for warnings about unsupported/unknown fields.
-    [[nodiscard]] OutcomeConditions Parse(const nlohmann::json& a_json, std::string_view a_owner);
+    // Parses the "conditions" object of a consequence JSON. a_consequenceId is
+    // used for warnings about unsupported or unknown fields.
+    [[nodiscard]] ConsequenceConditions Parse(const nlohmann::json& a_json, std::string_view a_consequenceId);
 
     // Evaluates on the game thread (HasKeyword / GetFactionRank engine reads).
     // A non-empty aggressor block demands an aggressor: null aggressor fails it.
     // Unresolvable form tokens count as non-matches (and warn once per token).
     // a_cause gates the "cause" list (a defeat property, not an actor test); pass
     // kNone for contexts with no cause — a non-empty cause list then fails.
-    [[nodiscard]] bool Evaluate(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
+    [[nodiscard]] bool Evaluate(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
         DefeatCause a_cause = DefeatCause::kNone);
 
     // Evaluate, but say which block failed — the selection explain log names it.
@@ -59,6 +59,6 @@ namespace OSFDefeat::Conditions
         kVictimFailed,
         kCauseFailed
     };
-    [[nodiscard]] EvalResult Explain(const OutcomeConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
+    [[nodiscard]] EvalResult Explain(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
         DefeatCause a_cause = DefeatCause::kNone);
 }

@@ -1,6 +1,6 @@
 # Lethal-handling design — native hooks & defeat recipes
 
-How OSF Defeat intercepts would-be-lethal outcomes and holds an actor in a framework-owned
+How OSF Defeat intercepts would-be-lethal Health writes and holds an actor in a framework-owned
 defeat state, adapted to Starfield (not a blind Skyrim/Acheron port). Every AddrLib ID below is
 proven against **1.16.244** (`versionlib-1-16-244-0.bin`); the canonical RE store is OSF RE's
 `gameplay.defeat_damage_hook` module (Responses 2026-06-24 … 2026-06-26).
@@ -30,7 +30,7 @@ The `ModActorValue` detour ([src/Core/PlayerDefeat.cpp](src/Core/PlayerDefeat.cp
 a small floor — the engine's terminal path never reads `<= 0`. Not a negate, not a lifeState reroute;
 the only lever is the clamped delta, and the actor is left genuinely alive at the floor (no death race).
 
-A clamp always yields a defeat: it only fires when `Validation::CanProcess() && ValidatePair(...) &&
+A clamp always yields a defeat: it only fires when `Eligibility::CanProcess() && IsEligible(...) &&
 !IsDefeated(player)`, then queues `BeginPlayerDefeat` to the game thread.
 
 Down state ([Engine::SetPlayerDownState](src/Engine/Engine.cpp)): base+instance **Essential** + heal to
@@ -64,10 +64,10 @@ Down state ([Engine::SetNpcDownState](src/Engine/Engine.cpp)): `kNoBleedoutRecov
 (invulnerable, so the defeat sticks) + `SetLifeState(kBleedOut)` + `StopCombat` +
 `StopCombatAndAlarmOnActor` (others disengage). **No** essential flip and no global combat-AI gate.
 `RestoreNpcState` heals and restores the exact pre-defeat AI/flag/ghost/life
-state. `Pacify`/`UndoPacify` toggle per-actor AI (`SetAIEnabled`, the `tai`/kProcessMe primitive) —
-never the player — and persist the prior AI value so release cannot blindly enable it.
+state. `SuspendAI`/`ResumeAI` toggle per-actor AI (`SetAIEnabled`, the `tai`/kProcessMe primitive) —
+never the player — and persist the prior AI value so recovery cannot blindly enable it.
 
-`Defeat::ApplyDownState`/`RestoreState` dispatch player-vs-NPC so every call site (defeat, rescue, save
+`Engine::ApplyDownState`/`RestoreState` dispatch player-vs-NPC so every call site (defeat, recovery, save
 restore, 3D re-assert) routes to the right recipe and ownership snapshot.
 
 ## 3D-reload re-assert
@@ -79,10 +79,10 @@ idempotent `ApplyDownState` re-assert for the next frame — replacing a lifeSta
 
 ## Recovery & persistence
 
-A 500 ms worker queues `TickRecovery` on the game thread, which rescues any defeated actor past its
-`recoverAtDay` deadline. Held entries (`recoverAtDay <= 0`, e.g. an NPC awaiting explicit content
-recovery) wait for `RescueActor`. State persists through OSF Animation's `.osf` sidecar (`OSFD` client,
-backward-compatible `DFT0` v2 plus capture/pacify ownership records) and is re-applied on the game
+A 500 ms worker queues `TickRecovery` on the game thread, which recovers any defeated actor past its
+`autoRecoverAtDay` deadline. Held entries (`autoRecoverAtDay <= 0`, e.g. an NPC awaiting explicit content
+recovery) wait for `RecoverActor`. State persists through OSF Animation's `.osf` sidecar (`OSFD` client,
+backward-compatible `DFT0` v2 plus capture-relationship, AI-suspension, and faction-ownership records) and is re-applied on the game
 thread after load. Revert advances a runtime epoch, so deferred work from the prior save cannot land
 in the newly loaded state.
 
@@ -95,11 +95,12 @@ in the newly loaded state.
 
 ## Files
 
-- [src/Core/PlayerDefeat.cpp](src/Core/PlayerDefeat.cpp) — ModActorValue clamp, attribution, recovery worker.
+- [src/Core/PlayerDefeat.cpp](src/Core/PlayerDefeat.cpp) — ModActorValue clamp, attribution, and player consequence orchestration.
+- [src/Core/Recovery.cpp](src/Core/Recovery.cpp) — actor-generic recovery timers, holds, leases, and watchdog tick.
 - [src/Engine/Engine.cpp](src/Engine/Engine.cpp) — player/NPC down & restore recipes, AV + combat-target helpers.
-- [src/Core/Defeat.cpp](src/Core/Defeat.cpp) — registry verbs + dispatch.
+- [src/Core/Defeat.cpp](src/Core/Defeat.cpp) — defeat/recovery and AI-suspension verbs.
 - [src/Core/Reattach.cpp](src/Core/Reattach.cpp) — Set3D re-assert hook.
-- [src/Papyrus/Functions.cpp](src/Papyrus/Functions.cpp) — Papyrus API surface (defeat/rescue/pacify verbs, events, classification).
+- [src/Papyrus/Functions.cpp](src/Papyrus/Functions.cpp) — Papyrus API surface (defeat/recovery/AI verbs, events, classification).
 
 ## In-game validation
 
@@ -112,7 +113,7 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\OSFDefeat.log`.
 3. **Attribution** — a console `damageav health 9999` while fighting an NPC attributes that NPC (via
    `currentCombatTarget`); a non-combat `damageav` stays `00000000`.
 5. **NPC defeat** — with `npcAutoDefeat` enabled, a would-be-lethal hit on a hostile NPC drops it into
-   bleedout+ghost and others disengage; it recovers on the timer (or via a content `OSFDefeat.RescueActor`).
+   bleedout+ghost and others disengage; it recovers on the timer (or via a content `OSFDefeat.RecoverActor`).
 6. **3D re-assert** — defeat, then `coc` round-trip → state holds.
 
 ### Fallback

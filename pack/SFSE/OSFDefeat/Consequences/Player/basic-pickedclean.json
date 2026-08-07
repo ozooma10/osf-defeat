@@ -1,12 +1,13 @@
 {
-  "version": 2,
-  "name": "Basic: Picked Clean",
+  "version": 3,
+  "id": "osfdefeat.basic.picked_clean",
+  "displayName": "Basic: Picked Clean",
   "priority": 10,
   "weight": 1,
-  "recoverySeconds": 30.0,
+  "autoRecoveryDelaySeconds": 30.0,
   "quest": "OSFDefeatBasicPickedCleanQuest",
-  "holdRecovery": true,
-  "maxHoldSeconds": 120.0,
+  "recoveryMode": "held",
+  "leaseTimeoutSeconds": 120.0,
   "cooldownSeconds": 900.0,
   "domain": "onfoot",
 

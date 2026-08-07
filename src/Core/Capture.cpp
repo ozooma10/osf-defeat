@@ -3,8 +3,8 @@
 #include "Core/Capture.h"
 
 #include "Core/Defeat.h"
-#include "Core/PlayerDefeat.h"
-#include "Core/RuntimeState.h"
+#include "Core/Recovery.h"
+#include "Core/RuntimeMutation.h"
 #include "Engine/Engine.h"
 
 #include "RE/B/BSScriptUtil.h"
@@ -15,17 +15,17 @@ namespace OSFDefeat::Capture
 {
     namespace
     {
-        struct CaptureRec
+        struct CaptureRelationshipData
         {
             FormID captor{ 0 };
             float  capturedDay{ 0.0f };
-            bool   removeFactionOnRelease{ false };
+            bool   removeOwnedFactionOnRelease{ false };
         };
 
         // captiveID -> record. Same map/mutex discipline as Engine's captive-faction tracker:
         // written on the game thread, read from the save thread (Snapshot) under the lock.
-        std::map<FormID, CaptureRec> g_captives;
-        std::mutex                   g_capturesLock;
+        std::map<FormID, CaptureRelationshipData> g_captureRelationships;
+        std::mutex g_captureRelationshipsLock;
 
         [[nodiscard]] float NowDay()
         {
@@ -36,7 +36,7 @@ namespace OSFDefeat::Capture
 
     bool CaptureActor(RE::Actor* a_captive, RE::Actor* a_captor)
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         if (!a_captive || !Engine::IsCaptiveFactionAvailable()) {
             if (a_captive) {
                 REX::WARN("[OSFDefeat] capture {:08X} refused: captive faction unavailable", a_captive->GetFormID());
@@ -46,16 +46,16 @@ namespace OSFDefeat::Capture
 
         // Put the captive down if it isn't already; a capture without a down-state is meaningless.
         const bool newlyDefeated = !Defeat::IsDefeated(a_captive);
-        std::shared_ptr<VictimData> existingData;
-        float previousRecovery = 0.0f;
-        float previousLeaseDeadline = 0.0f;
-        std::string previousLeaseOwner;
+        std::shared_ptr<ActiveDefeat> existingData;
+        float previousAutoRecoverAtDay = 0.0f;
+        float previousLeaseExpiresAtDay = 0.0f;
+        std::string previousLeaseHolderId;
         if (!newlyDefeated) {
             existingData = DefeatRegistry::Get(a_captive->GetFormID());
             if (existingData) {
-                previousRecovery = existingData->recoverAtDay.load(std::memory_order_relaxed);
-                previousLeaseDeadline = existingData->leaseDeadlineDay.load(std::memory_order_relaxed);
-                previousLeaseOwner = existingData->CopyLeaseOwner();
+                previousAutoRecoverAtDay = existingData->autoRecoverAtDay.load(std::memory_order_relaxed);
+                previousLeaseExpiresAtDay = existingData->leaseExpiresAtDay.load(std::memory_order_relaxed);
+                previousLeaseHolderId = existingData->CopyLeaseHolderId();
             }
         } else {
             if (!Defeat::DefeatActor(a_captive, a_captor, DefeatCause::kScripted)) {
@@ -63,23 +63,23 @@ namespace OSFDefeat::Capture
             }
         }
 
-        // Hold it indefinitely (content ends the capture) and pacify it so hostiles ignore the prisoner.
+        // Hold it indefinitely (content ends the capture), suspend its AI, and apply non-hostility.
         const bool hadOwnedFaction = Engine::HasCaptiveFactionApplied(a_captive);
-        const bool timerHeld = PlayerDefeat::SetRecoveryTimer(a_captive, 0.0f);
+        const bool recoveryHeld = Recovery::Hold(a_captive);
         Engine::ApplyCaptiveFaction(a_captive);
         const bool factionReady = Engine::HasCaptiveFactionApplied(a_captive) || Engine::IsInCaptiveFaction(a_captive);
-        if (!timerHeld || !factionReady) {
+        if (!recoveryHeld || !factionReady) {
             REX::ERROR("[OSFDefeat] capture {:08X} failed to establish {}{}; rolling back",
-                a_captive->GetFormID(), timerHeld ? "" : "recovery hold", !factionReady ? " captive faction" : "");
+                a_captive->GetFormID(), recoveryHeld ? "" : "recovery hold", !factionReady ? " captive faction" : "");
             if (!hadOwnedFaction) {
                 Engine::RemoveCaptiveFaction(a_captive);
             }
             if (newlyDefeated) {
-                Defeat::RescueActor(a_captive, true);
+                Defeat::RecoverActor(a_captive, true);
             } else if (existingData) {
-                existingData->recoverAtDay = previousRecovery;
-                existingData->leaseDeadlineDay = previousLeaseDeadline;
-                existingData->SetLeaseOwner(std::move(previousLeaseOwner));
+                existingData->autoRecoverAtDay = previousAutoRecoverAtDay;
+                existingData->leaseExpiresAtDay = previousLeaseExpiresAtDay;
+                existingData->SetLeaseHolderId(std::move(previousLeaseHolderId));
             }
             return false;
         }
@@ -87,10 +87,10 @@ namespace OSFDefeat::Capture
         const FormID captiveId = a_captive->GetFormID();
         const FormID captorId = a_captor ? a_captor->GetFormID() : 0;
         {
-            std::unique_lock lock{ g_capturesLock };
-            const bool previouslyOwned = g_captives.contains(captiveId) && g_captives[captiveId].removeFactionOnRelease;
+            std::unique_lock lock{ g_captureRelationshipsLock };
+            const bool previouslyOwned = g_captureRelationships.contains(captiveId) && g_captureRelationships[captiveId].removeOwnedFactionOnRelease;
             const bool captureAddedFaction = !hadOwnedFaction && Engine::HasCaptiveFactionApplied(a_captive);
-            g_captives[captiveId] = CaptureRec{ captorId, NowDay(), previouslyOwned || captureAddedFaction };
+            g_captureRelationships[captiveId] = CaptureRelationshipData{ captorId, NowDay(), previouslyOwned || captureAddedFaction };
         }
         REX::INFO("[OSFDefeat] captured {:08X} (captor {:08X})", captiveId, captorId);
         return true;
@@ -98,31 +98,31 @@ namespace OSFDefeat::Capture
 
     bool ReleaseCaptive(RE::Actor* a_actor, bool a_recover)
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         if (!a_actor) {
             return false;
         }
 
-        std::optional<bool> removeFactionOnRelease;
+        std::optional<bool> removeOwnedFactionOnRelease;
         {
-            std::unique_lock lock{ g_capturesLock };
-            if (const auto it = g_captives.find(a_actor->GetFormID()); it != g_captives.end()) {
-                removeFactionOnRelease = it->second.removeFactionOnRelease;
+            std::unique_lock lock{ g_captureRelationshipsLock };
+            if (const auto it = g_captureRelationships.find(a_actor->GetFormID()); it != g_captureRelationships.end()) {
+                removeOwnedFactionOnRelease = it->second.removeOwnedFactionOnRelease;
             }
         }
-        if (!removeFactionOnRelease.has_value()) {
+        if (!removeOwnedFactionOnRelease.has_value()) {
             return false;
         }
 
         if (a_recover) {
-            // Rescue owns removal through NotifyRecovered. If recovery cannot commit, preserve the
-            // capture record so callers can retry instead of reporting a partial release.
-            if (!Defeat::RescueActor(a_actor, true)) {
+            // Recovery owns removal through NotifyRecovered. If recovery cannot commit, preserve the
+            // capture relationship so callers can retry instead of reporting a partial release.
+            if (!Defeat::RecoverActor(a_actor, true)) {
                 return false;
             }
         } else {
             NotifyRecovered(a_actor->GetFormID());
-            if (*removeFactionOnRelease) {
+            if (*removeOwnedFactionOnRelease) {
                 Engine::RemoveCaptiveFaction(a_actor);  // remove only membership capture introduced
             }
         }
@@ -132,13 +132,13 @@ namespace OSFDefeat::Capture
 
     bool TransferCaptive(RE::Actor* a_actor, RE::TESObjectREFR* a_target)
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         if (!a_actor || !a_target) {
             REX::WARN("[OSFDefeat] transfer captive: null {}", a_actor ? "target" : "actor");
             return false;
         }
         if (!IsCaptive(a_actor)) {
-            REX::WARN("[OSFDefeat] transfer captive {:08X}: not a claimed captive (CaptureActor first)",
+            REX::WARN("[OSFDefeat] transfer captive {:08X}: no capture relationship (CaptureActor first)",
                 a_actor->GetFormID());
             return false;
         }
@@ -193,8 +193,8 @@ namespace OSFDefeat::Capture
         if (!a_actor) {
             return false;
         }
-        std::unique_lock lock{ g_capturesLock };
-        return g_captives.contains(a_actor->GetFormID());
+        std::unique_lock lock{ g_captureRelationshipsLock };
+        return g_captureRelationships.contains(a_actor->GetFormID());
     }
 
     FormID GetCaptorID(RE::Actor* a_actor)
@@ -202,8 +202,8 @@ namespace OSFDefeat::Capture
         if (!a_actor) {
             return 0;
         }
-        std::unique_lock lock{ g_capturesLock };
-        if (const auto it = g_captives.find(a_actor->GetFormID()); it != g_captives.end()) {
+        std::unique_lock lock{ g_captureRelationshipsLock };
+        if (const auto it = g_captureRelationships.find(a_actor->GetFormID()); it != g_captureRelationships.end()) {
             return it->second.captor;
         }
         return 0;
@@ -215,10 +215,10 @@ namespace OSFDefeat::Capture
 
         std::vector<FormID> ids;
         {
-            std::unique_lock lock{ g_capturesLock };
-            ids.reserve(g_captives.size());
-            for (const auto& [captiveId, rec] : g_captives) {
-                if (captorFilter == 0 || rec.captor == captorFilter) {
+            std::unique_lock lock{ g_captureRelationshipsLock };
+            ids.reserve(g_captureRelationships.size());
+            for (const auto& [captiveId, relationship] : g_captureRelationships) {
+                if (captorFilter == 0 || relationship.captor == captorFilter) {
                     ids.push_back(captiveId);
                 }
             }
@@ -236,34 +236,35 @@ namespace OSFDefeat::Capture
 
     void NotifyRecovered(FormID a_captiveId)
     {
-        std::unique_lock lock{ g_capturesLock };
-        g_captives.erase(a_captiveId);
+        std::unique_lock lock{ g_captureRelationshipsLock };
+        g_captureRelationships.erase(a_captiveId);
     }
 
-    std::vector<std::tuple<FormID, FormID, float, bool>> Snapshot()
+    std::vector<CaptureRelationshipRecord> Snapshot()
     {
-        std::unique_lock lock{ g_capturesLock };
-        std::vector<std::tuple<FormID, FormID, float, bool>> out;
-        out.reserve(g_captives.size());
-        for (const auto& [captiveId, rec] : g_captives) {
-            out.emplace_back(captiveId, rec.captor, rec.capturedDay, rec.removeFactionOnRelease);
+        std::unique_lock lock{ g_captureRelationshipsLock };
+        std::vector<CaptureRelationshipRecord> out;
+        out.reserve(g_captureRelationships.size());
+        for (const auto& [captiveId, relationship] : g_captureRelationships) {
+            out.push_back({ captiveId, relationship.captor, relationship.capturedDay,
+                relationship.removeOwnedFactionOnRelease });
         }
         return out;
     }
 
-    void RestoreCapture(FormID a_captiveId, FormID a_captorId, float a_capturedDay, bool a_removeFactionOnRelease)
+    void RestoreCapture(FormID a_captiveId, FormID a_captorId, float a_capturedDay, bool a_removeOwnedFactionOnRelease)
     {
         if (!a_captiveId) {
             return;
         }
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
-        std::unique_lock lock{ g_capturesLock };
-        g_captives[a_captiveId] = CaptureRec{ a_captorId, a_capturedDay, a_removeFactionOnRelease };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+        std::unique_lock lock{ g_captureRelationshipsLock };
+        g_captureRelationships[a_captiveId] = CaptureRelationshipData{ a_captorId, a_capturedDay, a_removeOwnedFactionOnRelease };
     }
 
     void Clear()
     {
-        std::unique_lock lock{ g_capturesLock };
-        g_captives.clear();
+        std::unique_lock lock{ g_captureRelationshipsLock };
+        g_captureRelationships.clear();
     }
 }

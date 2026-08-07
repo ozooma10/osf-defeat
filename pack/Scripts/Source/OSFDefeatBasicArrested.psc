@@ -7,7 +7,7 @@ Scriptname OSFDefeatBasicArrested extends Quest
   (Faction.SendPlayerToJail), which handles bounty clearing, time served, and
   the release location - pure vanilla feel, zero new systems.
 
-  Started natively by OSF Defeat; down-state arrives held + auto-claimed, so
+  Started natively by OSF Defeat; down-state arrives held + automatically leased, so
   the M1 watchdog covers any failure here. }
 
 Float Property CustodySeconds = 4.0 Auto Const
@@ -29,7 +29,7 @@ Function RunConsequence()
     If kCrimeFaction == None
         ; No crime faction to arrest under (odd security NPC): fall back to a
         ; plain short recovery; the framework owns it from here.
-        OSFDefeat.SetRecoveryTimer(akPlayer, 8.0)
+        OSFDefeat.ScheduleAutomaticRecovery(akPlayer, 8.0)
         Self.Stop()
         Return
     EndIf
@@ -43,7 +43,7 @@ Function RunConsequence()
     If !OSFDefeatBasicRecovery.RequestRecoveryAndWait(akPlayer)
         ; Do not hand a still-downed player to the jail pipeline. Resume a short framework timer
         ; and let the watchdog remain the final safety net.
-        OSFDefeat.SetRecoveryTimer(akPlayer, 2.0)
+        OSFDefeat.ScheduleAutomaticRecovery(akPlayer, 2.0)
         Self.Stop()
         Return
     EndIf

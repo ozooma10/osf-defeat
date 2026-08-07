@@ -164,10 +164,10 @@ namespace OSFDefeat::Events
 
     void Install()
     {
-        // Light up the dormant Defeat observers so every defeat/rescue (player AND NPC) fans out to
-        // OnActorDefeated/OnActorRecovered callbacks. Fires on the game thread (DefeatActor/RescueActor).
+        // Light up the Defeat observers so every defeat/recovery (player AND NPC) fans out to
+        // OnActorDefeated/OnActorRecovered callbacks. Fires on the game thread (DefeatActor/RecoverActor).
         Defeat::SetOnDefeat([](FormID a_victim, FormID a_aggressor) { BroadcastActorDefeated(a_victim, a_aggressor); });
-        Defeat::SetOnRescue([](FormID a_victim, FormID a_aggressor) { BroadcastActorRecovered(a_victim, a_aggressor); });
+        Defeat::SetOnRecovery([](FormID a_victim, FormID a_aggressor) { BroadcastActorRecovered(a_victim, a_aggressor); });
     }
 
     void Clear()

@@ -1,12 +1,13 @@
 {
-  "version": 2,
-  "name": "Basic: Robbed and Left",
+  "version": 3,
+  "id": "osfdefeat.basic.robbed_and_left",
+  "displayName": "Basic: Robbed and Left",
   "priority": 10,
   "weight": 3,
-  "recoverySeconds": 30.0,
+  "autoRecoveryDelaySeconds": 30.0,
   "quest": "OSFDefeatBasicRobbedQuest",
-  "holdRecovery": true,
-  "maxHoldSeconds": 120.0,
+  "recoveryMode": "held",
+  "leaseTimeoutSeconds": 120.0,
   "cooldownSeconds": 300.0,
   "domain": "onfoot",
   "conditions": {

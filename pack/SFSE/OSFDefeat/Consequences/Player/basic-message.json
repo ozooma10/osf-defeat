@@ -1,12 +1,13 @@
 {
-  "version": 2,
-  "name": "Basic: Left as a Message",
+  "version": 3,
+  "id": "osfdefeat.basic.left_as_a_message",
+  "displayName": "Basic: Left as a Message",
   "priority": 12,
   "weight": 1,
-  "recoverySeconds": 25.0,
+  "autoRecoveryDelaySeconds": 25.0,
   "quest": "OSFDefeatBasicMessageQuest",
-  "holdRecovery": true,
-  "maxHoldSeconds": 90.0,
+  "recoveryMode": "held",
+  "leaseTimeoutSeconds": 90.0,
   "cooldownSeconds": 300.0,
   "domain": "onfoot",
 

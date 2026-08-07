@@ -6,11 +6,11 @@ namespace OSFDefeat
 {
 	using FormID = std::uint32_t;
 
-	enum class DefeatState
+	enum class DefeatPhase
 	{
-		Defeating,  // state is being applied
-		Defeated,   // fully down
-		Rescuing    // recovery in progress
+		kApplying,   // engine down state is being applied
+		kActive,     // the framework defeat is active
+		kRecovering  // recovery is in progress
 	};
 
 	// How the actor went down (persisted; Papyrus GetDefeatCause / GetLastPlayerDefeatCause).
@@ -37,41 +37,41 @@ namespace OSFDefeat
 		RE::ACTOR_LIFE_STATE lifeState{ RE::ACTOR_LIFE_STATE::kAlive };
 	};
 
-	// Per-victim record. Held by shared_ptr because it carries an atomic (so it is
+	// Per-defeated-actor record. Held by shared_ptr because it carries an atomic (so it is
 	// neither copyable nor movable) and callers may hold a handle across the lock.
-	struct VictimData
+	struct ActiveDefeat
 	{
-		VictimData() = default;
-		VictimData(float a_registeredDay, FormID a_aggressor, float a_recoverAtDay = 0.0f) :
-			registeredDay(a_registeredDay), aggressor(a_aggressor), recoverAtDay(a_recoverAtDay) {}
+		ActiveDefeat() = default;
+		ActiveDefeat(float a_registeredDay, FormID a_aggressor, float a_autoRecoverAtDay = 0.0f) :
+			registeredDay(a_registeredDay), aggressor(a_aggressor), autoRecoverAtDay(a_autoRecoverAtDay) {}
 
 		float                    registeredDay{ 0.0f };  // Calendar GetDaysPassedExact at defeat (persisted)
-		std::atomic<float>       recoverAtDay{ 0.0f };   // absolute game-day auto-recovery deadline; <=0 = held (persisted)
+		std::atomic<float>       autoRecoverAtDay{ 0.0f };  // absolute game-day auto-recovery deadline; <=0 = recovery held (persisted)
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
 		std::atomic<DefeatCause> cause{ DefeatCause::kNone };  // how they went down (persisted); write-once at defeat
-		std::atomic<DefeatState> state{ DefeatState::Defeating };
-		ActorStateSnapshot       priorState;  // game-thread only; Save is serialized by RuntimeState
+		std::atomic<DefeatPhase> phase{ DefeatPhase::kApplying };
+		ActorStateSnapshot       priorState;  // game-thread only; Save is serialized by RuntimeMutation
 
-		// Ownership lease (persisted). A held down-state (recoverAtDay <= 0) may be claimed by a
-		// content consumer: leaseOwner names it (consequence name or ClaimDefeat token) and
-		// leaseDeadlineDay is the absolute game-day watchdog deadline — if it lapses without an
-		// extension, the recovery tick force-rescues and logs the defaulting owner. <= 0 = no
+		// Defeat lease (persisted). A recovery hold (autoRecoverAtDay <= 0) may be leased by a
+		// content consumer: leaseHolderId identifies it and leaseExpiresAtDay is the absolute
+		// game-day watchdog deadline — if it lapses without an
+		// extension, the recovery tick force-recovers and logs the defaulting holder. <= 0 = no
 		// deadline armed (yet). The player's held entries are always auto-armed by the tick when
 		// the watchdog is enabled; NPC entries only when explicitly leased (a held NPC captive is
 		// a legitimate long-term state).
-		std::atomic<float> leaseDeadlineDay{ 0.0f };
-		std::string        leaseOwner;   // guarded by leaseLock: written on the game thread, but read
-		mutable std::mutex leaseLock;    // from the VM (GetClaimOwner) and save threads — a torn string read is a crash, unlike the benign float races
+		std::atomic<float> leaseExpiresAtDay{ 0.0f };
+		std::string        leaseHolderId;  // guarded by leaseLock: written on the game thread, but read
+		mutable std::mutex leaseLock;      // from the VM and save threads — a torn string read is a crash
 
-		[[nodiscard]] std::string CopyLeaseOwner() const
+		[[nodiscard]] std::string CopyLeaseHolderId() const
 		{
 			std::scoped_lock lock{ leaseLock };
-			return leaseOwner;
+			return leaseHolderId;
 		}
-		void SetLeaseOwner(std::string a_owner)
+		void SetLeaseHolderId(std::string a_holderId)
 		{
 			std::scoped_lock lock{ leaseLock };
-			leaseOwner = std::move(a_owner);
+			leaseHolderId = std::move(a_holderId);
 		}
 
 		// registeredDay/aggressor are immutable after publication. The timer fields and cause are
@@ -85,17 +85,17 @@ namespace OSFDefeat
 	class DefeatRegistry
 	{
 	public:
-		// Inserts a new victim. Returns the data, or nullptr if already present.
-		static std::shared_ptr<VictimData> Add(
-			FormID a_id, float a_registeredDay, FormID a_aggressor, float a_recoverAtDay = 0.0f);
-		static std::shared_ptr<VictimData> Get(FormID a_id);
+		// Inserts a new active defeat. Returns the data, or nullptr if already present.
+		static std::shared_ptr<ActiveDefeat> Add(
+			FormID a_id, float a_registeredDay, FormID a_aggressor, float a_autoRecoverAtDay = 0.0f);
+		static std::shared_ptr<ActiveDefeat> Get(FormID a_id);
 		static bool                         Contains(FormID a_id);
 		static bool                         Remove(FormID a_id);
 		static std::vector<FormID>          Snapshot();
 		static void                         Clear();
 
 	private:
-		static inline std::map<FormID, std::shared_ptr<VictimData>> _victims;
+		static inline std::map<FormID, std::shared_ptr<ActiveDefeat>> _activeDefeats;
 		static inline std::shared_mutex                             _m;
 	};
 }

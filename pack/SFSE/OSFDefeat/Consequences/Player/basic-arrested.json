@@ -1,12 +1,13 @@
 {
-  "version": 2,
-  "name": "Basic: Taken Into Custody",
+  "version": 3,
+  "id": "osfdefeat.basic.taken_into_custody",
+  "displayName": "Basic: Taken Into Custody",
   "priority": 20,
   "weight": 1,
-  "recoverySeconds": 30.0,
+  "autoRecoveryDelaySeconds": 30.0,
   "quest": "OSFDefeatBasicArrestedQuest",
-  "holdRecovery": true,
-  "maxHoldSeconds": 60.0,
+  "recoveryMode": "held",
+  "leaseTimeoutSeconds": 60.0,
   "domain": "onfoot",
 
   // Aggressor must be settlement security. Hex FormIDs (Starfield.esm):

@@ -4,9 +4,9 @@ Scriptname OSFDefeatBasicRobbed extends Quest
   The SFW default consequence that ships with the framework, and the reference
   consumer for the handoff API. This quest is NOT start-game-enabled: OSF
   Defeat starts it natively when the "Basic: Robbed and Left" consequence JSON
-  wins selection, with the down-state already held and auto-claimed under the
-  consequence's name (watchdog-protected - if this script dies, the framework
-  force-rescues the player; nothing can strand them).
+  wins selection, with the down-state already held and automatically leased under the
+  consequence's stable ID (watchdog-protected - if this script dies, the framework
+  force-recovers the player; nothing can strand them).
 
   The beat: your attackers take a cut of your credits and leave you for dead.
   The stolen credits go INTO the aggressor's inventory - hunt them down later
@@ -69,8 +69,8 @@ Function RunConsequence()
     EndIf
 
     ; --- The down beat, then hand the down-state back. -----------------------
-    ; The framework holds recovery for us (holdRecovery auto-claim). If this
-    ; wait outlives the consequence's maxHoldSeconds, the watchdog rescues the
+    ; The framework holds recovery for us (recoveryMode "held" auto-lease). If this
+    ; wait outlives the consequence's leaseTimeoutSeconds, the watchdog recovers the
     ; player anyway - by design.
     Utility.Wait(DownSeconds)
     OSFDefeatBasicRecovery.FinishAftermath(akPlayer)

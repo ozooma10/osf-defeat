@@ -2,12 +2,12 @@
 
 > **RESULTS (2026-07-22): green end-to-end except the watchdog (§4, deferred).** Verified in-game:
 > deploy/bind (7 consequences after EM removal), Health down + recovery + save/load, all 6 pack
-> outcomes incl. the first-ever positive `ActorTypeRobot`/`ActorTypeCreature` matches, cooldown
+> consequences incl. the first-ever positive `ActorTypeRobot`/`ActorTypeCreature` matches, cooldown
 > arbitration + fallback, the full capture loop (down/capture/transfer/persist/release), and the
 > `ForceRecoverAll` safe-uninstall + `DisableProcessing` passthrough. **Two bugs found + fixed:**
 > (1) camera not restored after the down-scene — OSF Animation `scene_orbit` teardown; (2)
 > `TransferCaptive` never moved the captive because `LookupByID(0x14)` returns null for the player
-> (now resolved via `PlayerCharacter::GetSingleton()`). **Deferred:** §4 watchdog force-rescue —
+> (now resolved via `PlayerCharacter::GetSingleton()`). **Deferred:** §4 watchdog force-recovery —
 > needs a staged never-releasing hold; the mechanism is unit-simple and the deadline path is covered
 > by the safe-uninstall test.
 
@@ -23,16 +23,16 @@ Everything below was **implemented and build-verified**; this was the single pla
 - [ ] Test harness: copy `test\OSFCaptureTest.pex` into `MO2\mods\OSF Defeat\Scripts\` (remove after).
 - [ ] MO2: enable both mods + `OSFDefeatBasic.esm` in the load order.
 - [ ] Boot to a save. **Confirm:** log shows `[OSFDefeat] Papyrus API bound` and `OSF persistence registered`.
-- [ ] Optional: set `explainDecisions: true` in `SFSE\OSFDefeat\Validation\default.json` to log the
+- [ ] Optional: set `explainDecisions: true` in `SFSE\OSFDefeat\Settings\default.json` to log the
       selection roll; `npcAutoDefeat: true` if you also want NPCs to auto-down (not required below).
 
-## 1. Core down/recover (the no-pacify build)
+## 1. Core down/recover (no global combat-AI gate)
 
 - [ ] Take a lethal **Health** hit in a fight. **Confirm:** you drop into the cower down-state instead
       of dying; log `registered defeated actor 00000014 (aggressor …)`. (Cause is Health; with
-      `explainDecisions` on it also shows the per-outcome filter roll.)
+      `explainDecisions` on it also shows the per-consequence filter roll.)
 - [ ] Wait out recovery. **Confirm:** you stand up; enemies resume attacking naturally (no freeze, no
-      `tcai` gate); log `rescued actor 00000014`.
+      `tcai` gate); log `recovered actor 00000014`.
 - [ ] Save while down, reload. **Confirm:** you are still down after load and recovery resumes (DFT0).
 
 > EM is gone (2026-07-21): the player has no EM/stun defeat path. Only Health and scripted downs exist.
@@ -55,7 +55,7 @@ a wait; **Robbed vs Picked Clean** share priority 10 so which fires is a weighte
 - [ ] **Mauled** — killed by a **creature**. **Confirm:** "loses interest and prowls off"; lacerations;
       long down; does not re-fire in the same cell. ***Positive `ActorTypeCreature` keyword test.***
 - [ ] With `explainDecisions` on, **confirm** the log shows the filter reasons + priority/weight roll.
-- [ ] **Wake-up destination** (new 2026-07-30, unverified): the five non-arrest outcomes now exit via
+- [ ] **Wake-up destination** (new 2026-07-30, unverified): the five non-arrest consequences now exit via
       `OSFDefeatBasicRecovery.FinishAftermath()`. With no tagged marker placed, **confirm** recovery is
       unchanged (same spot, no fade) and the log shows `no same-cell recovery marker found; using local
       recovery` — this is the zero-regression check. Then place a test XMarker carrying
@@ -67,7 +67,7 @@ a wait; **Robbed vs Picked Clean** share priority 10 so which fires is a weighte
 Run `cgf "OSFCaptureTest.Help"` first. Get into a fight for a live target.
 
 - [ ] `cgf "OSFCaptureTest.DownTarget"` — **confirm:** your combat target drops (log `registered
-      defeated actor`), scripted cause `3`.
+      defeated actor`), scripted cause `2`.
 - [ ] `cgf "OSFCaptureTest.CaptureTarget"` — **confirm:** log `captured XXXXXXXX (captor 00000014)`;
       the NPC stays down and stops being shot at (captive faction applied).
 - [ ] `cgf "OSFCaptureTest.ListCaptives"` — **confirm:** notification count ≥ 1; log lines show
@@ -77,13 +77,13 @@ Run `cgf "OSFCaptureTest.Help"` first. Get into a fight for a live target.
       no proven precedent — the `ObjectReference.MoveTo` VM-dispatch. If the captive does not move,
       the dispatch path needs revisiting (arg packing / handle type).***
 - [ ] Save mid-capture, reload, `ListCaptives` again — **confirm:** the roster survives (`OSFD`/`CAP0` in the `.osf` sidecar);
-      log `loaded ... / saved N capture record(s)`.
+      log `loaded ... / saved N capture relationship record(s)`.
 - [ ] `cgf "OSFCaptureTest.ReleaseAll"` — **confirm:** captives recover; `ListCaptives` now reports 0.
 
 ## 4. Trust / safety invariants
 
-- [ ] Watchdog: hold a consequence past its `maxHoldSeconds` (e.g. a scenario whose script you block).
-      **Confirm:** the tick force-rescues and logs the defaulting owner's name.
+- [ ] Watchdog: hold a consequence past its `leaseTimeoutSeconds` (e.g. a scenario whose script you block).
+      **Confirm:** the tick force-recovers and logs the defaulting lease-holder ID.
 - [ ] `cgf "OSFDefeat.ForceRecoverAll"` while defeated **and** holding captives. **Confirm:** everyone
       recovers, captive factions are stripped, and `ListCaptives` reports 0 (safe uninstall path).
 - [ ] After ForceRecoverAll, save then inspect — **confirm:** the `OSFD` client block is absent from the `.osf` sidecar.

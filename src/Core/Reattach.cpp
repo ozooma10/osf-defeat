@@ -4,7 +4,7 @@
 
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
-#include "Core/RuntimeState.h"
+#include "Core/RuntimeMutation.h"
 #include "Engine/Engine.h"
 
 #include "RE/N/NiAVObject.h"
@@ -35,16 +35,16 @@ namespace OSFDefeat::Reattach
             if (!tasks) {
                 return;
             }
-            const auto epoch = RuntimeState::CurrentEpoch();
+            const auto epoch = RuntimeMutation::CurrentEpoch();
             tasks->AddTask([a_id, epoch]() {
-                if (!RuntimeState::IsCurrent(epoch)) {
+                if (!RuntimeMutation::IsCurrent(epoch)) {
                     return;
                 }
                 auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id);
                 if (actor && Defeat::IsDefeated(actor)) {
-                    // Idempotent: VictimData already owns the prior-state snapshot, so this only
+                    // Idempotent: ActiveDefeat already owns the prior-state snapshot, so this only
                     // re-applies bleedout + ghost + combat suppression on the rebuilt actor.
-                    std::scoped_lock stateLock{ RuntimeState::Mutex() };
+                    std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
                     Engine::ApplyDownState(actor, DefeatRegistry::Get(actor->GetFormID()));
                 }
             });

@@ -1,7 +1,8 @@
 # SAF Surrender — Evaluation & Mapping onto OSF Defeat
 
-Catalog of SAF Surrender to understand exactly what it does and how it'd map onto
-OSF Defeat as a content mod.
+Historical catalog of SAF Surrender and how it maps onto OSF Defeat as a content mod. The API gaps
+identified in the original evaluation have since been implemented; the status section below uses
+the current OSF Defeat vocabulary. Terms such as "pacify" remain where they describe SAF itself.
 
 ## What SAF Surrender actually is
 
@@ -30,25 +31,25 @@ Its actual feature loop:
 | SAF Surrender does it via… | In an OSF-Defeat world, owned by… | Status |
 |---|---|---|
 | `OnHit` threshold detection | **OSF Defeat** (`ModActorValue` clamp) | ✅ You already do this, more robustly (native hook on Health) |
-| `tcai`/`tgm` pacify | **OSF Defeat** (faction pacify + target-list drop) | ✅ You already solved this |
+| `tcai`/`tgm` pacify | **OSF Defeat** (captive-faction non-hostility + target-list drop) | ✅ Implemented |
 | Down-state / god-mode / bleedout hold | **OSF Defeat** (`SetPlayerDownState`) | ✅ Done |
 | Recovery timer / restore | **OSF Defeat** (recovery worker) | ✅ Done |
 | "which consequence fires" selection | **OSF Defeat** (consequence JSON, weight/priority) | ✅ Scaffolded |
-| Handoff of aggressor + outcome to content | **OSF Defeat** (`DefeatContext` + `GetLastPlayerAggressor` etc.) | ✅ Exists |
+| Handoff of consequence ID, aggressor, and recent hostile attackers | **OSF Defeat** (`DefeatContext` getters) | ✅ Implemented |
 | **NAF animation scene** | **Content mod** | ⚠️ You pose via OSF Animation; content mod drives its own scenes |
 | **Stripping / robbery** | **Content mod** | ❌ You force `stripMode=0` — content mod's job |
 | **Capture / teleport / boss chest / dialogue** | **Content mod** | ❌ Not present |
 | **Ransom / arrest / bad-ends** | **Content mod** | ❌ Not present |
 | **Config (globals/terminals)** | **Content mod** (its own MCM/terminal) | ❌ Content mod's own |
 
-## What's missing in OSF Defeat's *API* to host such a content mod
+## Original API gaps — current status
 
-Your framework is ~80% ready to host this. The gaps are in the **handoff surface** — the content mod needs enough hooks to take over once you've downed the player:
+These were gaps when this evaluation was written. They are now the implemented handoff surface:
 
-1. **`quest` consequence field must actually start the quest.** This is the single biggest gap. SAF's entire flow is "defeat → start a quest that runs the scene." You parse/expose `quest` but never `Start()` it. Without this, a content mod has nothing to hang its scene on. *(You already flagged this as stubbed.)*
-2. **A "consumer took over / hold recovery" handshake.** SAF holds the player down for a whole multi-stage scene + capture. You need the content mod to be able to say "I own this down-state now, don't auto-recover on the timer" and later "I'm done, rescue now." Your `recoverAtDay <= 0` held-entry state + `RescueActor` verb is *most* of this — it needs to be reachable/documented as the intended handoff, plus a "extend/suspend recovery" call.
-3. **Pacify scope on demand.** SAF needs *base-wide* calm during capture (not just target-list drop). Your `factionPacify` does exactly this but is player-only, config-gated, and tied to defeat. A content mod wants to *request* faction-pacify explicitly (surrender to a whole base) and release it. Expose `factionPacify`/release as a Papyrus verb, not just an internal config toggle.
-4. **Aggressor/participant list.** SAF builds a member list (attacker, boss, all nearby hostiles) for its scene. You expose the single last aggressor; a scene mod wants "who else is nearby and was hostile." Consider a `GetDefeatParticipants`-style query.
+1. **Consequence quest handoff:** a resolving `quest` token is started before the consequence callback; `startQuest: false` opts out.
+2. **Recovery hold and defeat lease:** `recoveryMode: "held"`, `AcquireDefeatLease`, `ReleaseDefeatLease`, and `RecoverActor` provide an explicit, watchdog-bounded lifecycle.
+3. **Captive-faction non-hostility on demand:** `ApplyCaptiveFaction` and `RemoveCaptiveFaction` expose the base-wide non-hostility mechanism separately from AI suspension.
+4. **Recent hostile attackers:** `GetLastPlayerRecentHostileAttackers` exposes actual recent damage sources that remain live and hostile, filtered by `recentHostileAttackerRadius`.
 5. **Voluntary surrender input.** SAF triggers on health-threshold only, but a proper framework should let a content mod *initiate* defeat (surrender key). You have `DefeatActor(victim, aggressor)` as a Papyrus verb already — so a content mod can bind its own hotkey and call it. ✅ This one's actually covered; just document it.
 
 Everything else SAF does — NAF scenes, robbery, capture teleport, ransom, bad-ends, vibrator, config — is legitimately *content-mod* territory and should **not** go in the framework.
@@ -63,9 +64,9 @@ Everything else SAF does — NAF scenes, robbery, capture teleport, ransom, bad-
 
 The right first milestone is **not** "port SAF Surrender." It's **"make OSF Defeat's handoff API rich enough that a SAF-parity content mod is possible,"** then build a thin proof-of-concept consumer. Concretely, the framework work is items 1–4 above:
 
-1. Actually start the consequence `quest`.
-2. Recovery suspend/hold + explicit rescue handshake.
-3. `factionPacify`/release as Papyrus verbs (surrender-to-base).
-4. Participant/aggressor query.
+1. Start the consequence `quest`.
+2. Recovery hold, defeat lease, and explicit recovery handshake.
+3. Captive-faction apply/remove verbs for surrender-to-base.
+4. Aggressor and recent-hostile-attacker queries.
 
 That's a small, well-scoped set of framework changes — everything else lives in the content mod.

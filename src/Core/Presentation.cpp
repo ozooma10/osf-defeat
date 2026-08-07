@@ -23,7 +23,7 @@ namespace OSFDefeat::Presentation
 		// missing). The scene must stay missing for a few recovery ticks before we restart it, so a
 		// post-load re-start lands AFTER OSF Animation's TESLoadGameEvent backstop (late StopAll +
 		// camera recovery) instead of racing it, and so a content hand-back window (scene already
-		// stopped, RescueActor imminent) never triggers a spurious cower.
+		// stopped, RecoverActor imminent) never triggers a spurious cower.
 		constexpr std::chrono::milliseconds        kReassertDelay{ 1500 };
 		std::chrono::steady_clock::time_point      g_downSceneMissingSince{};
 

@@ -3,7 +3,7 @@
 #include "Engine/Engine.h"
 
 #include "Core/Config.h"
-#include "Core/RuntimeState.h"
+#include "Core/RuntimeMutation.h"
 
 #include "RE/B/BSPointerHandle.h"
 #include "RE/P/ProcessLists.h"
@@ -35,12 +35,12 @@ namespace OSFDefeat::Engine
             return static_cast<RE::ACTOR_LIFE_STATE>(state);
         }
 
-        void CapturePriorState(RE::Actor* a_actor, const std::shared_ptr<VictimData>& a_data)
+        void SnapshotPriorActorState(RE::Actor* a_actor, const std::shared_ptr<ActiveDefeat>& a_defeat)
         {
-            if (!a_actor || !a_data || a_data->priorState.valid) {
+            if (!a_actor || !a_defeat || a_defeat->priorState.valid) {
                 return;
             }
-            auto& prior = a_data->priorState;
+            auto& prior = a_defeat->priorState;
             prior.aiEnabled = a_actor->boolBits.all(RE::Actor::BOOL_BITS::kProcessMe);
             prior.noBleedoutRecovery = a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery);
             prior.canSpeakToEssentialDown = a_actor->boolFlags.all(RE::Actor::BOOL_FLAGS::kCanSpeakToEssentialDown);
@@ -189,11 +189,11 @@ namespace OSFDefeat::Engine
             lists->StopCombatAndAlarmOnActor(a_actor);
             REX::INFO("[OSFDefeat] player-down: dropped from combatant target lists (attackers keep fighting other hostiles)");
         }
-        // OPTIONAL full "surrender" calm (SAF Surrender style, `factionPacify`, default OFF): also add the
+        // OPTIONAL captive-faction neutrality (`applyCaptiveFactionOnPlayerDefeat`, default OFF): add the
         // player to a captive faction so attackers treat them as non-hostile. It disengages enemies from
         // EVERYONE — they stop fighting your allies too — which is why it's opt-in rather than the default.
         // ApplyCaptiveFaction carries the guards (once per down, never over a pre-existing membership).
-        if (Config::IsFactionPacifyEnabled()) {
+        if (Config::ShouldApplyCaptiveFactionOnPlayerDefeat()) {
             ApplyCaptiveFaction(a_actor);
         }
     }
@@ -210,7 +210,7 @@ namespace OSFDefeat::Engine
         // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
         // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
         // re-eval isn't required for recovery. Re-add only once 150640 is RE-proven for the live build.
-        // Undo any captive-faction pacify (from SetPlayerDownState or the ApplyCaptiveFaction verb):
+        // Remove any framework-owned captive-faction membership (from the player path or explicit verb):
         // remove exactly the faction we added (tracked by FormID so a config change mid-down can't
         // retarget the removal, and a pre-existing membership we didn't add is left untouched). Normal
         // AI re-hostiles the enemies on the next think; unghosting above lets their fire land again.
@@ -250,12 +250,12 @@ namespace OSFDefeat::Engine
         RemoveCaptiveFaction(a_actor);  // in case content applied the captive verb to this NPC
     }
 
-    void ApplyDownState(RE::Actor* a_actor, const std::shared_ptr<VictimData>& a_data)
+    void ApplyDownState(RE::Actor* a_actor, const std::shared_ptr<ActiveDefeat>& a_defeat)
     {
         if (!a_actor) {
             return;
         }
-        CapturePriorState(a_actor, a_data);
+        SnapshotPriorActorState(a_actor, a_defeat);
         if (a_actor->IsPlayerRef()) {
             SetPlayerDownState(a_actor);
         } else {
@@ -263,27 +263,27 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void RestoreState(RE::Actor* a_actor, const std::shared_ptr<VictimData>& a_data)
+    void RestoreState(RE::Actor* a_actor, const std::shared_ptr<ActiveDefeat>& a_defeat)
     {
         if (!a_actor) {
             return;
         }
         if (a_actor->IsPlayerRef()) {
-            RestorePlayerState(a_actor, a_data ? &a_data->priorState : nullptr);
+            RestorePlayerState(a_actor, a_defeat ? &a_defeat->priorState : nullptr);
         } else {
-            RestoreNpcState(a_actor, a_data ? &a_data->priorState : nullptr);
+            RestoreNpcState(a_actor, a_defeat ? &a_defeat->priorState : nullptr);
         }
     }
 
     bool ApplyCaptiveFaction(RE::Actor* a_actor)
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         if (!a_actor) {
             return false;
         }
         auto* const faction = CaptiveFaction();
         if (!faction) {
-            REX::WARN("[OSFDefeat] captive-faction pacify skipped: captiveFaction unresolved");
+            REX::WARN("[OSFDefeat] captive-faction application skipped: captiveFaction unresolved");
             return false;
         }
 
@@ -306,13 +306,13 @@ namespace OSFDefeat::Engine
             std::unique_lock lock{ g_captiveLock };
             g_captiveApplied[actorId] = faction->GetFormID();
         }
-        REX::INFO("[OSFDefeat] captive-faction pacify: {:08X} added to faction {:08X}", actorId, faction->GetFormID());
+        REX::INFO("[OSFDefeat] captive faction: {:08X} added to faction {:08X}", actorId, faction->GetFormID());
         return true;
     }
 
     bool RemoveCaptiveFaction(RE::Actor* a_actor)
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         if (!a_actor) {
             return false;
         }
@@ -330,7 +330,7 @@ namespace OSFDefeat::Engine
         }
         if (auto* const faction = RE::TESForm::LookupByID<RE::TESFaction>(applied)) {
             a_actor->RemoveFromFaction(faction);
-            REX::INFO("[OSFDefeat] captive-faction pacify: {:08X} removed from faction {:08X}", a_actor->GetFormID(), applied);
+            REX::INFO("[OSFDefeat] captive faction: {:08X} removed from faction {:08X}", a_actor->GetFormID(), applied);
         }
         return true;
     }
@@ -366,7 +366,7 @@ namespace OSFDefeat::Engine
         // Re-track only: the membership itself is already in the save. Restoring the record is what
         // lets the eventual recovery remove exactly the membership we created before the save.
         if (a_actorId && a_factionId) {
-            std::scoped_lock stateLock{ RuntimeState::Mutex() };
+            std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
             std::unique_lock lock{ g_captiveLock };
             g_captiveApplied[a_actorId] = a_factionId;
         }
@@ -380,7 +380,7 @@ namespace OSFDefeat::Engine
 
     void ResetRuntimeState()
     {
-        std::scoped_lock stateLock{ RuntimeState::Mutex() };
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         ClearCaptiveFactions();
     }
 }

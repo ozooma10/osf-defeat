@@ -12,10 +12,10 @@ namespace OSFDefeat::Consequence
     {
         using namespace std::string_view_literals;
 
-        std::vector<PlayerOutcome> g_playerOutcomes;
+        std::vector<PlayerConsequence> g_playerConsequences;
 
         // Arbitration state, session-scoped by design: a cooldown or a spent cell does not survive
-        // a game restart (documented). Keyed by outcome name; guarded by g_lock with the outcomes.
+        // a game restart (documented). Keyed by stable consequence ID; guarded by g_lock.
         struct FiredState
         {
             std::chrono::steady_clock::time_point lastFired{};
@@ -27,9 +27,11 @@ namespace OSFDefeat::Consequence
 
         // Author-facing typo guard: warn on unknown top-level keys. Keys starting with "//" are the
         // JSON-comment convention and stay silent (the parser also accepts real // comments).
-        constexpr std::array kKnownOutcomeKeys = {
-            "version"sv, "name"sv, "priority"sv, "weight"sv, "recoverySeconds"sv, "quest"sv,
-            "startQuest"sv, "holdRecovery"sv, "maxHoldSeconds"sv, "enabled"sv, "cooldownSeconds"sv,
+        constexpr std::array kKnownConsequenceKeys = {
+            "version"sv, "id"sv, "displayName"sv, "name"sv, "priority"sv, "weight"sv,
+            "autoRecoveryDelaySeconds"sv, "recoverySeconds"sv, "quest"sv,
+            "startQuest"sv, "recoveryMode"sv, "holdRecovery"sv, "leaseTimeoutSeconds"sv,
+            "maxHoldSeconds"sv, "enabled"sv, "cooldownSeconds"sv,
             "oncePerLocation"sv, "domain"sv, "conditions"sv
         };
 
@@ -39,68 +41,84 @@ namespace OSFDefeat::Consequence
                 if (key.starts_with("//")) {
                     continue;
                 }
-                if (std::find(kKnownOutcomeKeys.begin(), kKnownOutcomeKeys.end(), key) == kKnownOutcomeKeys.end()) {
+                if (std::find(kKnownConsequenceKeys.begin(), kKnownConsequenceKeys.end(), key) == kKnownConsequenceKeys.end()) {
                     REX::WARN("[OSFDefeat] consequence JSON {}: unknown field '{}' (typo?)", a_path.string(), key);
                 }
             }
         }
 
-        [[nodiscard]] std::optional<PlayerOutcome> ParseOutcome(const std::filesystem::path& a_path)
+        [[nodiscard]] std::optional<PlayerConsequence> ParseConsequence(const std::filesystem::path& a_path)
         {
             try {
                 std::ifstream input{ a_path };
                 const auto json = nlohmann::json::parse(input, nullptr, true, true);
                 const int version = json.value("version", 0);
-                if (version != 1 && version != 2) {
+                if (version != 1 && version != 2 && version != 3) {
                     REX::WARN("[OSFDefeat] consequence JSON {} has unsupported version {}", a_path.string(), version);
                     return std::nullopt;
                 }
                 WarnUnknownKeys(json, a_path);
 
                 const auto config = Config::Get();
-                PlayerOutcome outcome;
-                outcome.name = json.value("name", a_path.stem().string());
-                if (outcome.name.empty()) {
-                    REX::WARN("[OSFDefeat] consequence JSON {} has an empty name; file skipped", a_path.string());
+                PlayerConsequence consequence;
+                const auto legacyName = json.value("name", a_path.stem().string());
+                consequence.id = version >= 3 ? json.value("id", std::string{}) : legacyName;
+                consequence.displayName = version >= 3 ? json.value("displayName", legacyName) : legacyName;
+                if (consequence.id.empty()) {
+                    REX::WARN("[OSFDefeat] consequence JSON {} has no stable id; file skipped", a_path.string());
                     return std::nullopt;
                 }
-                outcome.priority = json.value("priority", 0);
-                outcome.weight = std::max(1, json.value("weight", 1));
-                const auto recoverySeconds = json.value("recoverySeconds", config.defaultRecoverySeconds);
-                if (!std::isfinite(recoverySeconds)) {
-                    throw std::runtime_error("recoverySeconds must be finite");
+                if (consequence.displayName.empty()) {
+                    consequence.displayName = consequence.id;
                 }
-                outcome.recoverySeconds = std::max(1.0f, recoverySeconds);
+                consequence.priority = json.value("priority", 0);
+                consequence.weight = std::max(1, json.value("weight", 1));
+                const auto autoRecoveryDelaySeconds = json.contains("autoRecoveryDelaySeconds")
+                    ? json.value("autoRecoveryDelaySeconds", config.defaultAutoRecoveryDelaySeconds)
+                    : json.value("recoverySeconds", config.defaultAutoRecoveryDelaySeconds);
+                if (!std::isfinite(autoRecoveryDelaySeconds)) {
+                    throw std::runtime_error("autoRecoveryDelaySeconds must be finite");
+                }
+                consequence.autoRecoveryDelaySeconds = std::max(1.0f, autoRecoveryDelaySeconds);
                 if (const auto it = json.find("quest"); it != json.end() && it->is_string() && !it->get<std::string>().empty()) {
-                    outcome.quest = it->get<std::string>();
+                    consequence.quest = it->get<std::string>();
                 }
-                outcome.startQuest = json.value("startQuest", true);
-                outcome.holdRecovery = json.value("holdRecovery", false);
-                outcome.maxHoldSeconds = json.value("maxHoldSeconds", 0.0f);
-                outcome.enabled = json.value("enabled", true);
-                outcome.cooldownSeconds = json.value("cooldownSeconds", 0.0f);
-                if (!std::isfinite(outcome.maxHoldSeconds) || !std::isfinite(outcome.cooldownSeconds)) {
-                    throw std::runtime_error("maxHoldSeconds and cooldownSeconds must be finite");
+                consequence.startQuest = json.value("startQuest", true);
+                if (const auto it = json.find("recoveryMode"); it != json.end()) {
+                    if (!it->is_string() || (it->get<std::string>() != "automatic" && it->get<std::string>() != "held")) {
+                        throw std::runtime_error("recoveryMode must be automatic or held");
+                    }
+                    consequence.recoveryMode = it->get<std::string>() == "held" ? RecoveryMode::kHeld : RecoveryMode::kAutomatic;
+                } else {
+                    consequence.recoveryMode = json.value("holdRecovery", false) ? RecoveryMode::kHeld : RecoveryMode::kAutomatic;
                 }
-                outcome.oncePerLocation = json.value("oncePerLocation", false);
+                consequence.leaseTimeoutSeconds = json.contains("leaseTimeoutSeconds")
+                    ? json.value("leaseTimeoutSeconds", 0.0f)
+                    : json.value("maxHoldSeconds", 0.0f);
+                consequence.enabled = json.value("enabled", true);
+                consequence.cooldownSeconds = json.value("cooldownSeconds", 0.0f);
+                if (!std::isfinite(consequence.leaseTimeoutSeconds) || !std::isfinite(consequence.cooldownSeconds)) {
+                    throw std::runtime_error("leaseTimeoutSeconds and cooldownSeconds must be finite");
+                }
+                consequence.oncePerLocation = json.value("oncePerLocation", false);
                 if (const auto it = json.find("domain"); it != json.end() && it->is_string()) {
                     const auto domain = it->get<std::string>();
                     if (domain == "onfoot") {
-                        outcome.domain = Domain::kOnFoot;
+                        consequence.domain = Domain::kOnFoot;
                     } else if (domain == "ship") {
-                        outcome.domain = Domain::kShip;
-                        REX::INFO("[OSFDefeat] consequence '{}' targets the reserved 'ship' domain; parked until ship defeat lands", outcome.name);
+                        consequence.domain = Domain::kShip;
+                        REX::INFO("[OSFDefeat] consequence '{}' targets the reserved 'ship' domain; parked until ship defeat lands", consequence.id);
                     } else {
                         // Unknown domain: park it rather than misfire it on foot — a newer pack's
                         // domain should never run in the wrong context on an older framework.
-                        outcome.domain = Domain::kShip;
-                        REX::WARN("[OSFDefeat] consequence '{}': unknown domain '{}'; outcome will not compete", outcome.name, domain);
+                        consequence.domain = Domain::kShip;
+                        REX::WARN("[OSFDefeat] consequence '{}': unknown domain '{}'; consequence will not compete", consequence.id, domain);
                     }
                 }
                 if (const auto it = json.find("conditions"); it != json.end()) {
-                    outcome.conditions = Conditions::Parse(*it, outcome.name);
+                    consequence.conditions = Conditions::Parse(*it, consequence.id);
                 }
-                return outcome;
+                return consequence;
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] consequence JSON {} failed: {}", a_path.string(), e.what());
                 return std::nullopt;
@@ -108,9 +126,9 @@ namespace OSFDefeat::Consequence
         }
 
         // Central user tuning (Acheron's Weights.yaml lesson): one file overrides enabled/weight/
-        // priority per consequence name, so users tune installed packs without editing pack files
+        // priority per stable consequence ID, so users tune installed packs without editing pack files
         // (which mod managers overwrite on update).
-        void ApplyOverrides(std::vector<PlayerOutcome>& a_outcomes)
+        void ApplyOverrides(std::vector<PlayerConsequence>& a_consequences)
         {
             const auto path = Config::RootPath() / "Overrides.json";
             if (!std::filesystem::exists(path)) {
@@ -120,7 +138,7 @@ namespace OSFDefeat::Consequence
                 std::ifstream input{ path };
                 const auto json = nlohmann::json::parse(input, nullptr, true, true);
                 const int version = json.value("version", 0);
-                if (version != 1) {
+                if (version != 1 && version != 2) {
                     REX::WARN("[OSFDefeat] Overrides.json has unsupported version {}", version);
                     return;
                 }
@@ -128,14 +146,16 @@ namespace OSFDefeat::Consequence
                 if (it == json.end() || !it->is_object()) {
                     return;
                 }
-                for (const auto& [name, entry] : it->items()) {
-                    if (name.starts_with("//") || !entry.is_object()) {
+                for (const auto& [key, entry] : it->items()) {
+                    if (key.starts_with("//") || !entry.is_object()) {
                         continue;
                     }
-                    const auto match = std::find_if(a_outcomes.begin(), a_outcomes.end(),
-                        [&](const PlayerOutcome& a_outcome) { return a_outcome.name == name; });
-                    if (match == a_outcomes.end()) {
-                        REX::INFO("[OSFDefeat] Overrides.json names unknown consequence '{}' (not installed, or renamed?)", name);
+                    const auto match = std::find_if(a_consequences.begin(), a_consequences.end(),
+                        [&](const PlayerConsequence& a_consequence) {
+                            return a_consequence.id == key || (version == 1 && a_consequence.displayName == key);
+                        });
+                    if (match == a_consequences.end()) {
+                        REX::INFO("[OSFDefeat] Overrides.json names unknown consequence '{}' (not installed, or ID changed?)", key);
                         continue;
                     }
                     if (entry.contains("enabled")) {
@@ -148,7 +168,7 @@ namespace OSFDefeat::Consequence
                         match->priority = entry.value("priority", match->priority);
                     }
                     REX::INFO("[OSFDefeat] Overrides.json: '{}' -> enabled={} weight={} priority={}",
-                        name, match->enabled, match->weight, match->priority);
+                        match->id, match->enabled, match->weight, match->priority);
                 }
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] Overrides.json failed: {}", e.what());
@@ -163,7 +183,7 @@ namespace OSFDefeat::Consequence
 
     void Load()
     {
-        std::vector<PlayerOutcome> next;
+        std::vector<PlayerConsequence> next;
         const auto root = Config::RootPath() / "Consequences" / "Player";
         try {
             if (std::filesystem::exists(root)) {
@@ -174,14 +194,14 @@ namespace OSFDefeat::Consequence
                     }
                 }
                 std::ranges::sort(files);
-                std::set<std::string, std::less<>> names;
+                std::set<std::string, std::less<>> ids;
                 for (const auto& path : files) {
-                    if (auto outcome = ParseOutcome(path)) {
-                        if (!names.insert(outcome->name).second) {
-                            REX::WARN("[OSFDefeat] duplicate consequence name '{}' in {}; later file skipped", outcome->name, path.string());
+                    if (auto consequence = ParseConsequence(path)) {
+                        if (!ids.insert(consequence->id).second) {
+                            REX::WARN("[OSFDefeat] duplicate consequence ID '{}' in {}; later file skipped", consequence->id, path.string());
                             continue;
                         }
-                        next.push_back(std::move(*outcome));
+                        next.push_back(std::move(*consequence));
                     }
                 }
             } else {
@@ -193,13 +213,13 @@ namespace OSFDefeat::Consequence
         ApplyOverrides(next);
 
         std::unique_lock lock{ g_lock };
-        g_playerOutcomes = std::move(next);
-        REX::INFO("[OSFDefeat] loaded {} player consequence(s)", g_playerOutcomes.size());
+        g_playerConsequences = std::move(next);
+        REX::INFO("[OSFDefeat] loaded {} player consequence(s)", g_playerConsequences.size());
     }
 
     void Reload() { Load(); }
 
-    PlayerOutcome SelectPlayerOutcome(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
+    PlayerConsequence SelectPlayerConsequence(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         const bool explain = Config::IsExplainEnabled();
         const FormID cell = CellOf(a_victim);
@@ -207,31 +227,31 @@ namespace OSFDefeat::Consequence
 
         std::shared_lock lock{ g_lock };
 
-        // Arbitration + condition gate first: only outcomes that survive every filter compete on
-        // priority/weight at all. Each filtered outcome logs its reason — defeats are rare and this
+        // Arbitration + condition gate first: only consequences that survive every filter compete on
+        // priority/weight at all. Each filtered consequence logs its reason — defeats are rare and this
         // line is how an author answers "why didn't my consequence fire".
-        std::vector<std::reference_wrapper<const PlayerOutcome>> eligible;
-        for (const auto& outcome : g_playerOutcomes) {
+        std::vector<std::reference_wrapper<const PlayerConsequence>> eligible;
+        for (const auto& consequence : g_playerConsequences) {
             std::string reason;
-            if (!outcome.enabled) {
+            if (!consequence.enabled) {
                 reason = "disabled (enabled: false, or Overrides.json)";
-            } else if (outcome.domain != Domain::kOnFoot) {
+            } else if (consequence.domain != Domain::kOnFoot) {
                 reason = "off-domain (ship domain is reserved)";
             } else {
-                const auto fired = g_fired.find(outcome.name);
+                const auto fired = g_fired.find(consequence.id);
                 if (fired != g_fired.end()) {
-                    if (outcome.cooldownSeconds > 0.0f && fired->second.lastFired.time_since_epoch().count() != 0) {
+                    if (consequence.cooldownSeconds > 0.0f && fired->second.lastFired.time_since_epoch().count() != 0) {
                         const auto since = std::chrono::duration_cast<std::chrono::seconds>(now - fired->second.lastFired).count();
-                        if (since < static_cast<long long>(outcome.cooldownSeconds)) {
-                            reason = std::format("cooling down ({}s of {:.0f}s elapsed)", since, outcome.cooldownSeconds);
+                        if (since < static_cast<long long>(consequence.cooldownSeconds)) {
+                            reason = std::format("cooling down ({}s of {:.0f}s elapsed)", since, consequence.cooldownSeconds);
                         }
                     }
-                    if (reason.empty() && outcome.oncePerLocation && cell != 0 && fired->second.firedCells.contains(cell)) {
+                    if (reason.empty() && consequence.oncePerLocation && cell != 0 && fired->second.firedCells.contains(cell)) {
                         reason = "already fired in this location (oncePerLocation)";
                     }
                 }
                 if (reason.empty()) {
-                    switch (Conditions::Explain(outcome.conditions, a_victim, a_aggressor, a_cause)) {
+                    switch (Conditions::Explain(consequence.conditions, a_victim, a_aggressor, a_cause)) {
                     case Conditions::EvalResult::kInvalid:
                         reason = "invalid or unsupported authored conditions";
                         break;
@@ -251,15 +271,17 @@ namespace OSFDefeat::Consequence
             }
 
             if (reason.empty()) {
-                eligible.emplace_back(outcome);
+                eligible.emplace_back(consequence);
             } else {
-                REX::INFO("[OSFDefeat] outcome '{}' filtered out: {}", outcome.name, reason);
+                REX::INFO("[OSFDefeat] consequence '{}' filtered out: {}", consequence.id, reason);
             }
         }
         if (eligible.empty()) {
-            REX::INFO("[OSFDefeat] no eligible outcome; using built-in down-then-recover fallback");
-            PlayerOutcome fallback;
-            fallback.recoverySeconds = Config::Get().defaultRecoverySeconds;
+            REX::INFO("[OSFDefeat] no eligible consequence; using built-in down-then-recover fallback");
+            PlayerConsequence fallback;
+            fallback.id = "osfdefeat.builtin.down_then_recover";
+            fallback.displayName = "Down Then Recover";
+            fallback.autoRecoveryDelaySeconds = Config::Get().defaultAutoRecoveryDelaySeconds;
             return fallback;
         }
 
@@ -268,13 +290,13 @@ namespace OSFDefeat::Consequence
         });
         const int bestPriority = best->get().priority;
 
-        std::vector<std::reference_wrapper<const PlayerOutcome>> pool;
+        std::vector<std::reference_wrapper<const PlayerConsequence>> pool;
         std::int64_t totalWeight = 0;
         for (const auto& entry : eligible) {
-            const auto& outcome = entry.get();
-            if (outcome.priority == bestPriority) {
-                pool.emplace_back(outcome);
-                totalWeight += std::max(1, outcome.weight);
+            const auto& consequence = entry.get();
+            if (consequence.priority == bestPriority) {
+                pool.emplace_back(consequence);
+                totalWeight += std::max(1, consequence.weight);
             }
         }
 
@@ -282,12 +304,12 @@ namespace OSFDefeat::Consequence
         std::uniform_int_distribution<std::int64_t> dist{ 1, std::max<std::int64_t>(1, totalWeight) };
         const auto roll = dist(rng);
         auto remaining = roll;
-        const PlayerOutcome* selected = &pool.front().get();
+        const PlayerConsequence* selected = &pool.front().get();
         for (const auto& entry : pool) {
-            const auto& outcome = entry.get();
-            remaining -= std::max(1, outcome.weight);
+            const auto& consequence = entry.get();
+            remaining -= std::max(1, consequence.weight);
             if (remaining <= 0) {
-                selected = &outcome;
+                selected = &consequence;
                 break;
             }
         }
@@ -298,24 +320,24 @@ namespace OSFDefeat::Consequence
                 if (!poolNames.empty()) {
                     poolNames += ", ";
                 }
-                poolNames += std::format("'{}'(w{})", entry.get().name, entry.get().weight);
+                poolNames += std::format("'{}'(w{})", entry.get().id, entry.get().weight);
             }
             REX::INFO("[OSFDefeat] selection pool (priority {}): [{}]; roll {}/{} -> '{}'",
-                bestPriority, poolNames, roll, totalWeight, selected->name);
+                bestPriority, poolNames, roll, totalWeight, selected->id);
         }
         return *selected;
     }
 
-    void MarkFired(const PlayerOutcome& a_outcome, RE::Actor* a_victim)
+    void MarkFired(const PlayerConsequence& a_consequence, RE::Actor* a_victim)
     {
-        if (a_outcome.cooldownSeconds <= 0.0f && !a_outcome.oncePerLocation) {
+        if (a_consequence.cooldownSeconds <= 0.0f && !a_consequence.oncePerLocation) {
             return;
         }
         const FormID cell = CellOf(a_victim);
         std::unique_lock lock{ g_lock };
-        auto& fired = g_fired[a_outcome.name];
+        auto& fired = g_fired[a_consequence.id];
         fired.lastFired = std::chrono::steady_clock::now();
-        if (a_outcome.oncePerLocation && cell != 0) {
+        if (a_consequence.oncePerLocation && cell != 0) {
             fired.firedCells.insert(cell);
         }
     }
