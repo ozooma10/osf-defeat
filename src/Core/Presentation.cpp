@@ -4,49 +4,20 @@
 
 #include "External/OSFSceneAPI.h"
 
-#include "RE/B/BSScriptUtil.h"
-#include "RE/G/GameVM.h"
-#include "RE/I/IVirtualMachine.h"
-
 namespace OSFDefeat::Presentation
 {
 	namespace
 	{
-		// Cached OSF Animation native scene API. Fetched once at kPostPostDataLoad (AcquireSceneApi),
-		// with a single lazy retry on the first ShowPlayerDown if OSF wasn't ready yet. nullptr means
-		// OSF Animation is absent / too old / not-ready: the scene presentation no-ops (the framework
-		// down-state still holds the player, they just won't be posed).
+		// Cached once at kPostPostDataLoad, after OSF Animation initializes its native scene API.
+		// nullptr means the API is unavailable: presentation no-ops while the framework down-state
+		// still holds the player, unposed.
 		OSF::API::IOSFSceneAPI* g_sceneApi = nullptr;
-		bool                    g_lazyRetried = false;
 
 		// ReassertPlayerDown debounce: when the down scene was first observed missing ({} = not
-		// missing). The scene must stay missing for a few recovery ticks before we restart it, so a
-		// post-load re-start lands AFTER OSF Animation's TESLoadGameEvent backstop (late StopAll +
-		// camera recovery) instead of racing it, and so a content hand-back window (scene already
-		// stopped, RecoverActor imminent) never triggers a spurious cower.
+		// missing). Require a sustained gap before restarting cower, allowing scene restoration or
+		// a content hand-back (scene stopped, RecoverActor imminent) time to finish.
 		constexpr std::chrono::milliseconds        kReassertDelay{ 1500 };
 		std::chrono::steady_clock::time_point      g_downSceneMissingSince{};
-
-		// Return the cached API, performing exactly one lazy RequestSceneAPI retry if AcquireSceneApi
-		// came up empty (OSF not yet ready at kPostPostDataLoad). After that single retry we stop
-		// poking the module/symbol lookup and just no-op.
-		[[nodiscard]] OSF::API::IOSFSceneAPI* EnsureSceneApi()
-		{
-			if (!g_sceneApi && !g_lazyRetried) {
-				g_lazyRetried = true;
-				g_sceneApi = OSF::API::RequestSceneAPI();
-				if (g_sceneApi) {
-					REX::INFO("[OSFDefeat] OSF Animation native scene API acquired on lazy retry");
-				}
-			}
-			return g_sceneApi;
-		}
-
-		[[nodiscard]] RE::BSScript::IVirtualMachine* VM()
-		{
-			auto* const game = RE::GameVM::GetSingleton();
-			return game ? game->GetVM() : nullptr;
-		}
 
 		[[nodiscard]] RE::Actor* Player()
 		{
@@ -63,25 +34,9 @@ namespace OSFDefeat::Presentation
 			REX::INFO("[OSFDefeat] OSF Animation native scene API acquired (iface {:#x}, plugin {}.{}.{})",
 				g_sceneApi->GetInterfaceVersion(), major, minor, patch);
 		} else {
-			REX::INFO("[OSFDefeat] OSF Animation native scene API not ready at kPostPostDataLoad "
-					  "(absent/older/not-ready) - will lazy-retry on first player-down");
+			REX::INFO("[OSFDefeat] OSF Animation native scene API unavailable at kPostPostDataLoad - "
+					  "scene presentation disabled");
 		}
-	}
-
-	void SetPlayerAIDriven(bool a_driven)
-	{
-		auto* const vm = VM();
-		if (!vm) {
-			return;
-		}
-		vm->DispatchStaticCall(
-			"Game", "SetPlayerAIDriven",
-			[a_driven](RE::BSScrapArray<RE::BSScript::Variable>& a_args) {
-				a_args.resize(1);
-				RE::BSScript::PackVariable(a_args[0], a_driven);
-				return true;
-			},
-			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>(), 0);
 	}
 
 	void ShowPlayerDown()
@@ -99,7 +54,7 @@ namespace OSFDefeat::Presentation
 			return;
 		}
 
-		auto* const api = EnsureSceneApi();
+		auto* const api = g_sceneApi;
 		if (!api) {
 			REX::WARN("[OSFDefeat] player-down: OSF Animation native API unavailable - "
 					  "player held by the framework down-state but not posed");
@@ -138,7 +93,6 @@ namespace OSFDefeat::Presentation
 		if (g_sceneApi) {
 			g_sceneApi->StopSceneForActor(player);
 		}
-		SetPlayerAIDriven(false);  // defensive: clear any stale AI-driven flag left on the player
 	}
 
 	void ReassertPlayerDown()
@@ -147,7 +101,7 @@ namespace OSFDefeat::Presentation
 		if (!player) {
 			return;
 		}
-		auto* const api = EnsureSceneApi();
+		auto* const api = g_sceneApi;
 		if (!api) {
 			return;  // OSF absent: ShowPlayerDown already warned at down time; nothing to heal
 		}

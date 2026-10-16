@@ -31,8 +31,8 @@ namespace
             OSFDefeat::Reattach::Install();
             OSFDefeat::Papyrus::Register();
         } else if (a_msg->type == SFSE::MessagingInterface::kPostPostDataLoad) {
-            // OSF Animation marks its native scene API ready at kPostDataLoad; fetch + cache it the
-            // phase after, to dodge the intra-phase race (a too-early fetch is a safe null + retry).
+            // OSF Animation marks its native scene API ready at kPostDataLoad; cache it once in
+            // the following phase, after its initialization phase completes.
             OSFDefeat::Presentation::AcquireSceneApi();
         }
     }
