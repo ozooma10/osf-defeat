@@ -14,7 +14,7 @@ namespace OSFDefeat::Eligibility
     void SetEnabled(bool a_enabled) { g_enabled.store(a_enabled); }
     bool IsEnabled() { return g_enabled.load(); }
 
-    Verdict Explain(RE::Actor* a_victim, RE::Actor* /*a_aggressor*/)
+    Verdict Explain(RE::Actor* a_victim)
     {
         if (!IsEnabled()) {
             return Verdict::kApiDisabled;
@@ -36,9 +36,9 @@ namespace OSFDefeat::Eligibility
         return Verdict::kOk;
     }
 
-    bool IsEligible(RE::Actor* a_victim, RE::Actor* a_aggressor)
+    bool IsEligible(RE::Actor* a_victim)
     {
-        return Explain(a_victim, a_aggressor) == Verdict::kOk;
+        return Explain(a_victim) == Verdict::kOk;
     }
 
     std::string_view VerdictName(Verdict a_verdict)
@@ -56,8 +56,6 @@ namespace OSFDefeat::Eligibility
             return "victim already dead";
         case Verdict::kInScene:
             return "victim in a scene (disableInScenes)";
-        case Verdict::kLocationExcluded:
-            return "location excluded (excludedLocations)";
         default:
             return "unknown";
         }

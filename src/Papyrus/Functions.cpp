@@ -66,7 +66,7 @@ namespace OSFDefeat::Papyrus
             return QueueGameTask([victimId, aggressorId]() {
                 auto* const victim = RE::TESForm::LookupByID<RE::Actor>(victimId);
                 auto* const aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
-                if (Eligibility::IsEligible(victim, aggressor)) {
+                if (Eligibility::IsEligible(victim)) {
                     Defeat::DefeatActor(victim, aggressor);
                 }
             });

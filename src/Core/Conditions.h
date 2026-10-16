@@ -34,8 +34,6 @@ namespace OSFDefeat::Conditions
         ActorBlock victim;     // defaults to matchAll = true ("all")
         std::vector<DefeatCause> causes;  // "cause": "health" | ["health","scripted"]; empty = any
         bool valid{ true };  // false = malformed, unknown, or currently unsupported authored gate
-
-        [[nodiscard]] bool Empty() const { return aggressor.Empty() && victim.Empty() && causes.empty(); }
     };
 
     // Parses the "conditions" object of a consequence JSON. a_consequenceId is

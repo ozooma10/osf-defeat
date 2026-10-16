@@ -5,6 +5,7 @@
 #include "Core/Config.h"
 #include "Core/Defeat.h"
 #include "Core/DefeatRegistry.h"
+#include "Core/GameTime.h"
 #include "Core/Presentation.h"
 #include "Core/RuntimeMutation.h"
 #include "REL/THook.h"
@@ -27,12 +28,6 @@ namespace OSFDefeat::Recovery
                 g_nextTick = now + kTickInterval;
                 Tick();
             }
-        }
-
-        [[nodiscard]] float NowDay()
-        {
-            const auto* const calendar = RE::Calendar::GetSingleton();
-            return calendar ? calendar->GetDaysPassedExact() : 0.0f;
         }
 
         [[nodiscard]] float TimeScale()
@@ -59,10 +54,7 @@ namespace OSFDefeat::Recovery
 
     float DeadlineForSeconds(float a_realSeconds)
     {
-        if (!std::isfinite(a_realSeconds)) {
-            a_realSeconds = 1.0f;
-        }
-        return NowDay() + ((std::max(1.0f, a_realSeconds) * TimeScale()) / 86400.0f);
+        return GameTime::NowDay() + ((std::max(1.0f, a_realSeconds) * TimeScale()) / 86400.0f);
     }
 
     bool ScheduleAutomatic(RE::Actor* a_actor, float a_delaySeconds)
@@ -114,10 +106,11 @@ namespace OSFDefeat::Recovery
         if (!activeDefeat) {
             return 0.0f;
         }
-        if (activeDefeat->autoRecoverAtDay <= 0.0f) {
+        const float autoRecoverAtDay = activeDefeat->autoRecoverAtDay.load();
+        if (autoRecoverAtDay <= 0.0f) {
             return -1.0f;
         }
-        return std::max(0.0f, (activeDefeat->autoRecoverAtDay - NowDay()) * 86400.0f / TimeScale());
+        return std::max(0.0f, (autoRecoverAtDay - GameTime::NowDay()) * 86400.0f / TimeScale());
     }
 
     bool AcquireLease(RE::Actor* a_actor, std::string_view a_holderId, float a_timeoutSeconds)
@@ -191,7 +184,7 @@ namespace OSFDefeat::Recovery
     void Tick()
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
-        const float now = NowDay();
+        const float now = GameTime::NowDay();
         const float watchdogSeconds = Config::WatchdogSeconds();
         for (const auto actorId : DefeatRegistry::Snapshot()) {
             const auto activeDefeat = DefeatRegistry::Get(actorId);

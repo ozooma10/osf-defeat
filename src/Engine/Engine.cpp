@@ -281,15 +281,10 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void ClearCaptiveFactions()
-    {
-        std::unique_lock lock{ g_captiveLock };
-        g_captiveApplied.clear();
-    }
-
     void ResetRuntimeState()
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
-        ClearCaptiveFactions();
+        std::unique_lock lock{ g_captiveLock };
+        g_captiveApplied.clear();
     }
 }

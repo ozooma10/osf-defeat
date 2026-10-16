@@ -6,7 +6,6 @@
 
 namespace OSFDefeat::Engine
 {
-	constexpr RE::ACTOR_LIFE_STATE kAlive = RE::ACTOR_LIFE_STATE::kAlive;
 	constexpr RE::ACTOR_LIFE_STATE kBleedOut = RE::ACTOR_LIFE_STATE::kBleedOut;
 
 	[[nodiscard]] RE::ActorValueInfo* HealthAV();
@@ -31,6 +30,5 @@ namespace OSFDefeat::Engine
 	// Co-save support for the captive tracking (so a save/load mid-captivity still removes exactly the membership we introduced).
 	[[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint32_t>> SnapshotCaptiveFactions();  // (actorID, factionID)
 	void RestoreCaptiveFaction(std::uint32_t a_actorId, std::uint32_t a_factionId);
-	void ClearCaptiveFactions();
 	void ResetRuntimeState();
 }

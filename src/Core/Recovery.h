@@ -4,6 +4,7 @@
 
 namespace OSFDefeat::Recovery
 {
+    // Callers supply finite seconds; the deadline retains a one-second minimum.
     [[nodiscard]] float DeadlineForSeconds(float a_realSeconds);
 
     bool ScheduleAutomatic(RE::Actor* a_actor, float a_delaySeconds);

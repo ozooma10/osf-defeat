@@ -221,10 +221,11 @@ namespace OSFDefeat::Consequence
 
         std::shared_lock lock{ g_lock };
 
-        // Arbitration + condition gate first: only consequences that survive every filter compete on
-        // priority/weight at all. Each filtered consequence logs its reason — defeats are rare and this
-        // line is how an author answers "why didn't my consequence fire".
-        std::vector<std::reference_wrapper<const PlayerConsequence>> eligible;
+        // Only consequences that pass every filter compete on priority and weight.
+        // Log each filtered consequence's reason so authors can see why it didn't fire.
+        std::vector<std::reference_wrapper<const PlayerConsequence>> pool;
+        int bestPriority = 0;
+        std::int64_t totalWeight = 0;
         for (const auto& consequence : g_playerConsequences) {
             std::string reason;
             if (!consequence.enabled) {
@@ -265,33 +266,26 @@ namespace OSFDefeat::Consequence
             }
 
             if (reason.empty()) {
-                eligible.emplace_back(consequence);
+                if (pool.empty() || consequence.priority > bestPriority) {
+                    pool.clear();
+                    bestPriority = consequence.priority;
+                    totalWeight = 0;
+                }
+                if (consequence.priority == bestPriority) {
+                    pool.emplace_back(consequence);
+                    totalWeight += consequence.weight;
+                }
             } else {
                 REX::INFO("[OSFDefeat] consequence '{}' filtered out: {}", consequence.id, reason);
             }
         }
-        if (eligible.empty()) {
+        if (pool.empty()) {
             REX::INFO("[OSFDefeat] no eligible consequence; using built-in down-then-recover fallback");
             PlayerConsequence fallback;
             fallback.id = "osfdefeat.builtin.down_then_recover";
             fallback.displayName = "Down Then Recover";
             fallback.autoRecoveryDelaySeconds = Config::DefaultAutoRecoveryDelaySeconds();
             return fallback;
-        }
-
-        const auto best = std::max_element(eligible.begin(), eligible.end(), [](const auto& a_lhs, const auto& a_rhs) {
-            return a_lhs.get().priority < a_rhs.get().priority;
-        });
-        const int bestPriority = best->get().priority;
-
-        std::vector<std::reference_wrapper<const PlayerConsequence>> pool;
-        std::int64_t totalWeight = 0;
-        for (const auto& entry : eligible) {
-            const auto& consequence = entry.get();
-            if (consequence.priority == bestPriority) {
-                pool.emplace_back(consequence);
-                totalWeight += consequence.weight;
-            }
         }
 
         static thread_local std::mt19937 rng{ std::random_device{}() };

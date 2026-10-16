@@ -4,6 +4,7 @@
 
 #include "Core/Capture.h"
 #include "Core/Events.h"
+#include "Core/GameTime.h"
 #include "Core/Presentation.h"
 #include "Core/RuntimeMutation.h"
 #include "Engine/Engine.h"
@@ -14,12 +15,6 @@ namespace OSFDefeat::Defeat
     {
         std::map<FormID, bool> g_aiSuspensions;  // actor ID -> AI-enabled state before OSF suspended it
         std::shared_mutex g_aiSuspensionsLock;
-
-        [[nodiscard]] float NowDay()
-        {
-            const auto* const cal = RE::Calendar::GetSingleton();
-            return cal ? cal->GetDaysPassedExact() : 0.0f;
-        }
     }
 
     bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
@@ -31,7 +26,7 @@ namespace OSFDefeat::Defeat
 
         const FormID id = a_victim->GetFormID();
         const FormID aggressorId = a_aggressor ? a_aggressor->GetFormID() : 0;
-        auto data = DefeatRegistry::Add(id, NowDay(), aggressorId);
+        auto data = DefeatRegistry::Add(id, GameTime::NowDay(), aggressorId);
         if (!data) {
             return false;
         }

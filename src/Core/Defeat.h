@@ -23,9 +23,10 @@ namespace OSFDefeat::Defeat
 	[[nodiscard]] bool IsDamageImmune(const RE::Actor* a_victim);
 	[[nodiscard]] std::vector<RE::Actor*> GetAllDefeated(bool a_loadedOnly);
 
+	// Persistence supplies the complete record, including a validated prior-state snapshot.
 	void RestoreFromSave(FormID a_id, float a_registeredDay, FormID a_aggressor, float a_autoRecoverAtDay,
-		float a_leaseExpiresAtDay = 0.0f, std::string a_leaseHolderId = {}, DefeatCause a_cause = DefeatCause::kNone,
-		ActorStateSnapshot a_priorState = {});
+		float a_leaseExpiresAtDay, std::string a_leaseHolderId, DefeatCause a_cause,
+		ActorStateSnapshot a_priorState);
 
 	void               SuspendAI(RE::Actor* a_actor);
 	void               ResumeAI(RE::Actor* a_actor);

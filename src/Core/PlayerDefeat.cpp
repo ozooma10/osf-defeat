@@ -295,7 +295,6 @@ namespace OSFDefeat::PlayerDefeat
                     auto* const player = PlayerActor();
                     const float current = a_owner->GetActorValue(a_info);
                     const bool  lethal = current + a_delta <= 0.0f;
-                    auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
                     if (Defeat::IsDamageImmune(player)) {
                         a_delta = 0.0f;
                     } else {
@@ -307,7 +306,7 @@ namespace OSFDefeat::PlayerDefeat
                                 }
                             }
                         } else {
-                            const auto verdict = Eligibility::Explain(player, aggressor);
+                            const auto verdict = Eligibility::Explain(player);
                             if (verdict != Eligibility::Verdict::kOk) {
                                 LogPlayerPassthrough(Eligibility::VerdictName(verdict));
                             } else if (ResistWindowActive(player->GetFormID())) {
@@ -334,9 +333,8 @@ namespace OSFDefeat::PlayerDefeat
                     } else if (victim && !victim->IsPlayerRef()) {
                         const float current = a_owner->GetActorValue(a_info);
                         const bool  lethal = current + a_delta <= 0.0f;
-                        auto* const aggressor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
                         if (lethal && !Defeat::IsDefeated(victim)) {
-                            const auto verdict = Eligibility::Explain(victim, aggressor);
+                            const auto verdict = Eligibility::Explain(victim);
                             if (verdict != Eligibility::Verdict::kOk) {
                                 if (Config::IsExplainEnabled()) {
                                     REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: {}",

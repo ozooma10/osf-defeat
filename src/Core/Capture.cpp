@@ -3,6 +3,7 @@
 #include "Core/Capture.h"
 
 #include "Core/Defeat.h"
+#include "Core/GameTime.h"
 #include "Core/Recovery.h"
 #include "Core/RuntimeMutation.h"
 #include "Engine/Engine.h"
@@ -26,12 +27,6 @@ namespace OSFDefeat::Capture
         // written on the game thread, read from the save thread (Snapshot) under the lock.
         std::map<FormID, CaptureRelationshipData> g_captureRelationships;
         std::mutex g_captureRelationshipsLock;
-
-        [[nodiscard]] float NowDay()
-        {
-            const auto* const cal = RE::Calendar::GetSingleton();
-            return cal ? cal->GetDaysPassedExact() : 0.0f;
-        }
     }
 
     bool CaptureActor(RE::Actor* a_captive, RE::Actor* a_captor)
@@ -85,7 +80,7 @@ namespace OSFDefeat::Capture
             std::unique_lock lock{ g_captureRelationshipsLock };
             const bool previouslyOwned = g_captureRelationships.contains(captiveId) && g_captureRelationships[captiveId].removeOwnedFactionOnRelease;
             const bool captureAddedFaction = !hadOwnedFaction && Engine::HasCaptiveFactionApplied(*a_captive);
-            g_captureRelationships[captiveId] = CaptureRelationshipData{ captorId, NowDay(), previouslyOwned || captureAddedFaction };
+            g_captureRelationships[captiveId] = CaptureRelationshipData{ captorId, GameTime::NowDay(), previouslyOwned || captureAddedFaction };
         }
         REX::INFO("[OSFDefeat] captured {:08X} (captor {:08X})", captiveId, captorId);
         return true;
