@@ -1,9 +1,8 @@
 # Core experience slice 0: persistence spike
 
-Status: [both profiles exercised in game on 2026-10-16](RESULTS-2026-10-16.md).
-Reload and captured-marker ship arrival passed; **cold-restart identity assertions and
-journal names failed, and planet departure/return remains unverified**. Correct the probe
-before using it to answer the persistence gate. This is a separate development plugin, never part of `pack/`
+Status: version 2 corrects the identity oracle, cell lookup, and alias text storage;
+fresh-profile runtime acceptance is pending. The [first run's findings](RESULTS-2026-10-16.md)
+remain historical evidence. This is a separate development plugin, never part of `pack/`
 or `dist/`. It does not register a consequence or require the Defeat DLL.
 
 The ordinary 42-case runtime suite uses a quiet cell. Its save/load passes cannot answer
@@ -99,6 +98,17 @@ An inert, ghosted Ecliptic and a small ammo container appear beside you. Neither
 The actor contains **23 credits**, the pack **137 credits**. Don't take either inventory
 until the persistence checks are complete.
 
+Version 2 gives each created reference a distinct random identity stamp in a private
+Actor Value. Only creation writes the stamp; inspection and loading never refresh it.
+The oracle checks both the original base and stamp. Baseline negative controls verify
+that new, unstamped and wrongly stamped instances of the same bases are rejected.
+Raw FormIDs remain in the logs for diagnostics and may change after a cold restart.
+The aliases remain the only lasting ObjectReference holders. The quest stores its
+origin and ship interior as typed Cell forms, which participate in save remapping;
+it no longer resolves a dynamic cell through `Game.GetForm(savedInteger)`.
+This is an alias-held reference test with saved Cell metadata, not proof that an
+entire unreferenced generated site survives. Use only fresh seeds with this version.
+
 Record screenshots of the subject's displayed name (**Persistence Subject**) and the
 quest journal. The first objective uses `<Alias=Subject>` and should show that name;
 both actor and pack should have working objective targets. These are visual observations,
@@ -120,13 +130,16 @@ loading: recreating the objects would invalidate the experiment.
 1. Travel normally to **a different planet and land there**. Do not use `coc`, `moveto`,
    or a freshly created landing site as a substitute for the departure/return.
 2. Run `cqf 04000800 MarkAway`. It requires a different non-null planet,
-   the original cell to be detached, and both test references to have unloaded 3D.
+   the saved Cell form to resolve and be detached, and both test references to have
+   unloaded 3D. It logs origin attachment/loading and each alias's cell/3D separately,
+   and checks the identity stamps away from the site too.
    A `BLOCKED` message is not a pass: retain it and investigate.
 3. Make another new manual save there. Reload it (or quit/restart and load it) so the
    aliases must survive a save made while the original site is unloaded.
 4. Return using the **original landing-site icon**, then walk back to the original pack.
 5. Run `cqf 04000800 CheckReturn`. This checks the original reference
-   IDs, cell, planet, live/enabled/loaded state, inventories, pack position, and objectives.
+   identity stamps, remapped cell, planet, live/enabled/loaded state, inventories,
+   pack position, and objectives. It logs elapsed universal hours since `MarkAway`.
    It refuses a return claim unless the departure was observed. It never respawns or
    moves missing references to manufacture a pass.
 6. Record names and quest markers again, then save the returned state in a new slot.
@@ -204,10 +217,10 @@ When both location runs answer the gate, implement **Minimal Shadows** next: one
 one title/buff/debuff/reward, weapon and credit transfer, blackout, hunt objective, and the
 post-recovery truce. Expand to five slots only after that complete loop works.
 
-`cqf 04000800 Cleanup` attempts to remove the probe's owned references and
-objectives, but its raw-ID ownership guard can skip references after cold-restart
-remapping. Until corrected, retain evidence and discard the test save instead of relying
-on cleanup. Switch back to the normal MO2 profile.
+`cqf 04000800 Cleanup` removes only references matching their original base and
+identity stamp, including after ID remapping; a mismatch is refused and logged.
+Retain evidence before cleanup, discard test saves afterward, and switch back to the
+normal MO2 profile.
 Keep the clean seeds unchanged for reruns.
 
 ## Offline setup checks

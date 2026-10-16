@@ -26,6 +26,9 @@ VirtualMachineAdapter:
     - MutagenObjectType: ScriptObjectProperty
       Name: OverrideTitle
       Object: 000802:OSFDefeatPersistenceSpike.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: IdentityStamp
+      Object: 000803:OSFDefeatPersistenceSpike.esm
   Versioning:
   - Break0
   ExtraBindDataVersion: 0
@@ -59,6 +62,7 @@ Aliases:
   Flags:
   - Optional
   - AllowDead
+  - StoresText
   ALFG: 0
   DisplayName: 000801:OSFDefeatPersistenceSpike.esm
   VoiceTypes: Null

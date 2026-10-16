@@ -1,0 +1,10 @@
+FormKey: 000803:OSFDefeatPersistenceSpike.esm
+EditorID: OSFDefeatSpikeIdentityStamp
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Persistence identity stamp
+DefaultValue: 0
+Flags:
+- DefaultToZero
+Type: Variable
