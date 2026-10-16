@@ -1,0 +1,82 @@
+# Slice 0 corrected probe results — 2026-10-16
+
+Runtime work is in progress. This report supersedes the identity and naming conclusions
+in the [version 1 report](RESULTS-2026-10-16.md), which remains historical evidence.
+The generated fixture has survived a normal planet round trip, an away-save reload,
+and another cold restart. Remaining acceptance checks are listed explicitly below.
+
+## Corrections and evidence
+
+- `99159ba`: replace raw dynamic-ID equality with a private per-instance Actor Value
+  stamp plus expected base. Four negative controls reject unstamped and wrongly stamped
+  instances of the same bases. Creation writes stamps once; inspection never refreshes
+  them. Add StoresText to the subject alias so journal substitution resolves its title.
+- `df62c7a`: observe alias cell-detach/attach events and unloaded reference 3D. Calling
+  natives on the saved origin Cell off-planet produced errors and default zero/false
+  values, so those values could not establish detachment.
+- `415f784`: stop retaining the generated origin Cell. After saving/reloading away,
+  its script handle stayed unbound even after walking back to both visible original
+  objects. Version 4 compares their live parent cells with the player's live cell.
+  Original-site evidence combines the recorded normal return route, original planet,
+  stamped references, and unchanged pack coordinates. It does not assert native Cell
+  object identity across unloading.
+
+The final build is `build/persistence-spike/20261016-221207-2383323318654d8980d008726625581e/build.json`.
+Papyrus compilation, Spriggit 0.40.1 round-trip correctness, and the binary inventory
+verifier passed (4 records, 3 aliases, 2 objectives). The earlier 17 preparation checks
+passed; preparation code did not change during these probe corrections.
+
+| Payload | SHA256 |
+| --- | --- |
+| ESM | `1F686975D357C20A11F814286962420EA4CA3D4D83C4288ED43C31A2976CEFC6` |
+| PEX | `FE6AC659AF9B7810009CAFDD7E47E512B0BFC6A7526ADC1380B3F2BF1A089CEF` |
+
+## Runtime checkpoints
+
+Local Starfield 1.16.244.0, MO2 + SFSE, private disposable profiles/saves. Counts are
+assertions within checkpoints, not completed scenarios. No fixture was respawned or
+restamped to manufacture a persistence pass.
+
+| Check | Authored | Generated |
+| --- | --- | --- |
+| Identity negative controls | 4/4, version 2 | 4/4, version 3 |
+| Baseline / same-process reload | 10/10 each, version 2 | 10/10 each, version 3 |
+| Cold restart | 10/10, version 2 | 10/10, version 3 |
+| Actor title and journal substitution | Persistence Subject, version 2 | Persistence Subject, including after normal return |
+| Observed departure | Version 4 pending | 3/3 in versions 3 and 4; both detached, both 3D unloaded |
+| Normal return after away-save reload | Pending | 10/10 under version 4; trip 1, 7.318182 UT hours |
+| Repeat after 48 local hours away | Pending | In progress |
+| Override request / reload | Pending | Actor and scanner objective retain Persistence Subject before/after reload |
+| Ship marker identity / MoveTo with final probe | Pending | Pending |
+
+Generated trip 1 used the original Jemison Landing Area [Explored] icon, followed by
+walking approximately 340 m back to the fixture. Version 3's diagnostic return passed
+9/10 checks: only the stale Cell comparison failed. The returned state was saved and
+cold-loaded under version 4; CheckReturn then passed all ten checks without Begin.
+This is a replay of the same version 3-created fixture, not a claim of a fresh version 4
+baseline. Both original identity stamps survived another ID remapping on that restart.
+
+The generated seed is the outdoor Ecological Consortium natural-feature area. This does
+not cover an enemy building/interior, promotion of an encounter's existing actor, actual
+cell reset, arbitrary ship layouts, or weapon instance modifications. The subject is
+an inert, ghosted, freshly created surrogate. The pack and subject are held only by
+quest aliases; the experiment does not prove persistence of an unreferenced whole site.
+
+## Local evidence index
+
+Runtime directories below are under `build/persistence-spike/runtime/` and remain local,
+including captures, input receipts, private-save paths in control.json, and user logs.
+Session receipt `passed` means the interactive session closed normally; it is not a
+blanket scenario pass. Build receipts deliberately retain `runtimeVerified: false`.
+
+| Session | Evidence |
+| --- | --- |
+| `20261016-205017-635-Persistence-authored` | Version 2 baseline, reload, corrected journal/scanner title |
+| `20261016-210251-505-Persistence-authored` | Version 2 cold restart, Gagarin departure diagnostics and native Cell errors |
+| `20261016-211909-738-Persistence-generated` | Version 3 baseline, planted save, reload |
+| `20261016-212300-114-Persistence-generated` | Version 3 cold restart, normal departure, away save/reload, original landing icon and walk back; native-return-cell-errors.log |
+| `20261016-221302-030-Persistence-generated` | Version 4 replay pass, return-name capture, override before/after reload, second departure and wait evidence |
+
+Final profile setup index: `build/persistence-spike/setup-v4-20261016-221241/profiles.json`.
+Original user seeds and their sidecars remain the authored Save4 and generated Save5
+identified in the first report. Final integrity audit is pending session completion.
