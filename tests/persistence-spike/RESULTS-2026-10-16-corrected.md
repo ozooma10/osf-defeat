@@ -2,8 +2,9 @@
 
 Runtime work is in progress. This report supersedes the identity and naming conclusions
 in the [version 1 report](RESULTS-2026-10-16.md), which remains historical evidence.
-The generated fixture has survived a normal planet round trip, an away-save reload,
-and another cold restart. Remaining acceptance checks are listed explicitly below.
+The generated fixture has survived two normal planet round trips, away-save reloads,
+a 48-local-hour wait, and another cold restart. Its landed-ship marker checks also
+pass before and after reload. The final authored-profile rerun is in progress.
 
 ## Corrections and evidence
 
@@ -45,9 +46,9 @@ restamped to manufacture a persistence pass.
 | Actor title and journal substitution | Persistence Subject, version 2 | Persistence Subject, including after normal return |
 | Observed departure | Version 4 pending | 3/3 in versions 3 and 4; both detached, both 3D unloaded |
 | Normal return after away-save reload | Pending | 10/10 under version 4; trip 1, 7.318182 UT hours |
-| Repeat after 48 local hours away | Pending | In progress |
+| Repeat after 48 local hours away | Pending | 10/10; trip 2, 33.212162 elapsed UT hours |
 | Override request / reload | Pending | Actor and scanner objective retain Persistence Subject before/after reload |
-| Ship marker identity / MoveTo with final probe | Pending | Pending |
+| Ship marker identity / MoveTo with final probe | Pending | 3/3 before and after reload; movement, camera, exit hatch work |
 
 Generated trip 1 used the original Jemison Landing Area [Explored] icon, followed by
 walking approximately 340 m back to the fixture. Version 3's diagnostic return passed
@@ -55,6 +56,17 @@ walking approximately 340 m back to the fixture. Version 3's diagnostic return p
 cold-loaded under version 4; CheckReturn then passed all ten checks without Begin.
 This is a replay of the same version 3-created fixture, not a claim of a fresh version 4
 baseline. Both original identity stamps survived another ID remapping on that restart.
+
+Trip 2 waited twice for 24 local hours on a Gagarin Landing bench, saved/reloaded
+there, and used the same Jemison landing icon again. Both objects reattached and
+passed all ten return assertions at 19:02:14. The actor and both scanner objective
+texts remained present. A separate marker was captured inside the landed Frontier
+before walking back to the fixture; this did not modify either site reference.
+Ship transfers passed at 19:03:25 and 19:09:43. The first post-reload attempt at
+19:06:59 retained a position failure: the console had paused the delayed check, and
+the operator walked 2.3 m before it resumed. The repeat closed the console and waited
+stationary for all three assertions before checking controls and the normal exit.
+The failure remains in the evidence; it is not counted as a passing attempt.
 
 The generated seed is the outdoor Ecological Consortium natural-feature area. This does
 not cover an enemy building/interior, promotion of an encounter's existing actor, actual
@@ -75,7 +87,7 @@ blanket scenario pass. Build receipts deliberately retain `runtimeVerified: fals
 | `20261016-210251-505-Persistence-authored` | Version 2 cold restart, Gagarin departure diagnostics and native Cell errors |
 | `20261016-211909-738-Persistence-generated` | Version 3 baseline, planted save, reload |
 | `20261016-212300-114-Persistence-generated` | Version 3 cold restart, normal departure, away save/reload, original landing icon and walk back; native-return-cell-errors.log |
-| `20261016-221302-030-Persistence-generated` | Version 4 replay pass, return-name capture, override before/after reload, second departure and wait evidence |
+| `20261016-221302-030-Persistence-generated` | Version 4 replay pass, name/override captures, two 24-hour waits, away reload, trip 2 pass, ship checks; generated-return48-markers.png, generated-ship-reload-stationary.png; closed normally |
 
 Final profile setup index: `build/persistence-spike/setup-v4-20261016-221241/profiles.json`.
 Original user seeds and their sidecars remain the authored Save4 and generated Save5
