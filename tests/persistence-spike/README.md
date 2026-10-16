@@ -1,6 +1,6 @@
 # Core experience slice 0: persistence spike
 
-Status: version 2 corrects the identity oracle, cell lookup, and alias text storage;
+Status: version 3 corrects the identity oracle, cell tracking, and alias text storage;
 fresh-profile runtime acceptance is pending. The [first run's findings](RESULTS-2026-10-16.md)
 remain historical evidence. This is a separate development plugin, never part of `pack/`
 or `dist/`. It does not register a consequence or require the Defeat DLL.
@@ -98,7 +98,7 @@ An inert, ghosted Ecliptic and a small ammo container appear beside you. Neither
 The actor contains **23 credits**, the pack **137 credits**. Don't take either inventory
 until the persistence checks are complete.
 
-Version 2 gives each created reference a distinct random identity stamp in a private
+The probe gives each created reference a distinct random identity stamp in a private
 Actor Value. Only creation writes the stamp; inspection and loading never refresh it.
 The oracle checks both the original base and stamp. Baseline negative controls verify
 that new, unstamped and wrongly stamped instances of the same bases are rejected.
@@ -106,6 +106,11 @@ Raw FormIDs remain in the logs for diagnostics and may change after a cold resta
 The aliases remain the only lasting ObjectReference holders. The quest stores its
 origin and ship interior as typed Cell forms, which participate in save remapping;
 it no longer resolves a dynamic cell through `Game.GetForm(savedInteger)`.
+Version 3 observes `OnCellDetach`/`OnCellAttach` on both aliases. Off-planet, a saved
+Cell script handle can remain non-null while its native object is unbound; querying
+that handle produced native errors and false zero/false results in version 2.
+Departure therefore requires both detach events and unloaded reference 3D, while
+the saved Cell identity is checked only after the original site is loaded again.
 This is an alias-held reference test with saved Cell metadata, not proof that an
 entire unreferenced generated site survives. Use only fresh seeds with this version.
 
@@ -130,9 +135,10 @@ loading: recreating the objects would invalidate the experiment.
 1. Travel normally to **a different planet and land there**. Do not use `coc`, `moveto`,
    or a freshly created landing site as a substitute for the departure/return.
 2. Run `cqf 04000800 MarkAway`. It requires a different non-null planet,
-   the saved Cell form to resolve and be detached, and both test references to have
-   unloaded 3D. It logs origin attachment/loading and each alias's cell/3D separately,
-   and checks the identity stamps away from the site too.
+   both aliases to have reported cell detachment without a subsequent attachment,
+   and both test references to have unloaded 3D. It logs these observations separately
+   and checks the identity stamps away from the site too. It does not query an
+   unbound off-planet Cell or require unloaded references to expose a parent Cell.
    A `BLOCKED` message is not a pass: retain it and investigate.
 3. Make another new manual save there. Reload it (or quit/restart and load it) so the
    aliases must survive a save made while the original site is unloaded.

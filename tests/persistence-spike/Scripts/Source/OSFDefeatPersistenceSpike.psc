@@ -28,6 +28,8 @@ Float packX
 Float packY
 Float packZ
 Bool observedAway
+Bool subjectDetached
+Bool packDetached
 Int trips
 Int shipId
 Cell shipCell
@@ -52,6 +54,29 @@ Function Block(String reason)
     Log("BLOCKED|" + reason)
     Debug.Notification("Persistence spike: " + reason)
 EndFunction
+
+; A saved Cell script handle can remain non-None while its native cell is
+; unbound off-planet. Observe detachment on the live aliases instead of calling
+; native Cell functions on that handle. Keep the Cell for comparison on return.
+Event ReferenceAlias.OnCellAttach(ReferenceAlias sender)
+    If sender == SubjectAlias
+        subjectDetached = False
+        Log("CELL-ATTACH|actor")
+    ElseIf sender == PackAlias
+        packDetached = False
+        Log("CELL-ATTACH|pack")
+    EndIf
+EndEvent
+
+Event ReferenceAlias.OnCellDetach(ReferenceAlias sender)
+    If sender == SubjectAlias
+        subjectDetached = True
+        Log("CELL-DETACH|actor")
+    ElseIf sender == PackAlias
+        packDetached = True
+        Log("CELL-DETACH|pack")
+    EndIf
+EndEvent
 
 Int Function IdOf(Form value)
     If value != None
@@ -101,6 +126,10 @@ Function Begin(String kind)
     EndIf
     initialized = True
     siteKind = kind
+    RegisterForRemoteEvent(SubjectAlias, "OnCellAttach")
+    RegisterForRemoteEvent(SubjectAlias, "OnCellDetach")
+    RegisterForRemoteEvent(PackAlias, "OnCellAttach")
+    RegisterForRemoteEvent(PackAlias, "OnCellDetach")
     originPlanet = player.GetCurrentPlanet()
     originCell = player.GetParentCell()
     initialCellId = IdOf(originCell)
@@ -141,7 +170,7 @@ Function Begin(String kind)
     packZ = pack.GetPositionZ()
     SetObjectiveDisplayed(10)
     SetObjectiveDisplayed(20)
-    Log("BEGIN|version=2|actor=" + subjectId + "|pack=" + packId + "|planet=" + IdOf(originPlanet) + "|cell=" + initialCellId + "|subject-stamp=" + subjectStamp + "|pack-stamp=" + packStamp)
+    Log("BEGIN|version=3|actor=" + subjectId + "|pack=" + packId + "|planet=" + IdOf(originPlanet) + "|cell=" + initialCellId + "|subject-stamp=" + subjectStamp + "|pack-stamp=" + packStamp)
     CheckIdentityControl(SubjectBase, subjectStamp, "actor")
     CheckIdentityControl(PackBase, packStamp, "pack")
     Inspect("baseline")
@@ -199,17 +228,11 @@ Function MarkAway()
         Check("aliases-present-away", False)
         Return
     EndIf
-    Cell subjectCell = subject.GetParentCell()
-    Cell packCell = pack.GetParentCell()
-    Log("AWAY-OBSERVATION|origin=" + IdOf(originCell) + "|attached=" + originCell.IsAttached() + "|loaded=" + originCell.IsLoaded() + "|actor-cell=" + IdOf(subjectCell) + "|pack-cell=" + IdOf(packCell) + "|actor-3d=" + subject.Is3DLoaded() + "|pack-3d=" + pack.Is3DLoaded())
+    Log("AWAY-OBSERVATION|actor-detached=" + subjectDetached + "|pack-detached=" + packDetached + "|actor-3d=" + subject.Is3DLoaded() + "|pack-3d=" + pack.Is3DLoaded())
     Bool ok = Check("actor-identity-away", Owns(subject, subjectStamp, SubjectBase))
     ok = Check("pack-identity-away", Owns(pack, packStamp, PackBase)) && ok
-    ok = Check("original-cell-away", subjectCell == originCell && packCell == originCell) && ok
+    ok = Check("both-cell-detach-events", subjectDetached && packDetached) && ok
     If !ok
-        Return
-    EndIf
-    If originCell.IsAttached()
-        Block("Saved origin Cell resolves but is still attached.")
         Return
     EndIf
     If subject.Is3DLoaded() || pack.Is3DLoaded()
@@ -218,7 +241,7 @@ Function MarkAway()
     EndIf
     observedAway = True
     awayDay = Utility.GetCurrentGameTime()
-    Log("AWAY|planet=" + IdOf(player.GetCurrentPlanet()) + "|origin-detached|actor-and-pack-unloaded")
+    Log("AWAY|planet=" + IdOf(player.GetCurrentPlanet()) + "|alias-cell-detach-observed|actor-and-pack-unloaded")
     Debug.Notification("Departure recorded. Return through the original landing site.")
 EndFunction
 
