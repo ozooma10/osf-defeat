@@ -34,6 +34,13 @@ Source content (including uncommitted test files) is fingerprinted before and af
 Bench invocations serialize on `build/tests.lock`; game runs also take the shared
 harness's `state/runner.lock`.
 
+The [core-experience persistence spike](persistence-spike/README.md) is a separate,
+interactive slice-0 test for authored/generated planetary sites, alias names, and landed
+ship interiors. `tools/build-persistence-spike.ps1` builds its development-only plugin;
+`tools/prepare-persistence-spike.ps1` copies an explicit seed into an isolated profile.
+Its offline build/setup checks do not count as planet persistence acceptance or change
+the ordinary smoke-suite case inventory.
+
 ## Native coverage
 
 Nine binaries run 75 named cases. Checks execute in both debug and releasedbg;

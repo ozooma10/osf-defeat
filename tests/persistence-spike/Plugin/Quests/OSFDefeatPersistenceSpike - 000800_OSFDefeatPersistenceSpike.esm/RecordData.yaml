@@ -1,0 +1,78 @@
+FormKey: 000800:OSFDefeatPersistenceSpike.esm
+EditorID: OSFDefeatPersistenceSpike
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatPersistenceSpike
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: SubjectAlias
+      Object: 000800:OSFDefeatPersistenceSpike.esm
+      Alias: 0
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PackAlias
+      Object: 000800:OSFDefeatPersistenceSpike.esm
+      Alias: 1
+    - MutagenObjectType: ScriptObjectProperty
+      Name: ShipMarkerAlias
+      Object: 000800:OSFDefeatPersistenceSpike.esm
+      Alias: 2
+    - MutagenObjectType: ScriptObjectProperty
+      Name: SubjectBase
+      Object: 1730D0:Starfield.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PackBase
+      Object: 17F54C:Starfield.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: OverrideTitle
+      Object: 000802:OSFDefeatPersistenceSpike.esm
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: OSF Defeat - Persistence Spike
+Data:
+  Flags: []
+  Priority: 55
+  Unused: 0x000000
+UnusedConditions: []
+Objectives:
+- Index: 10
+  DisplayText:
+    TargetLanguage: English
+    Value: Inspect <Alias=Subject> after returning to the original site
+  Targets:
+  - AliasID: 0
+- Index: 20
+  DisplayText:
+    TargetLanguage: English
+    Value: Inspect the test pack (137 credits)
+  Targets:
+  - AliasID: 1
+NextAliasID: 3
+Aliases:
+- MutagenObjectType: QuestReferenceAlias
+  Name: Subject
+  Flags:
+  - Optional
+  - AllowDead
+  ALFG: 0
+  DisplayName: 000801:OSFDefeatPersistenceSpike.esm
+  VoiceTypes: Null
+- MutagenObjectType: QuestReferenceAlias
+  ID: 1
+  Name: Pack
+  Flags:
+  - Optional
+  ALFG: 0
+  VoiceTypes: Null
+- MutagenObjectType: QuestReferenceAlias
+  ID: 2
+  Name: ShipMarker
+  Flags:
+  - Optional
+  ALFG: 0
+  VoiceTypes: Null
