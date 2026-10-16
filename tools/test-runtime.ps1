@@ -33,6 +33,9 @@ $compiler=Join-Path $script:Config.Game 'Tools/Papyrus Compiler/PapyrusCompiler.
 $imports=Join-Path (Split-Path $repo -Parent) 'PapyrusSource'
 $animationProject=Join-Path (Split-Path $repo -Parent) 'OSF Animation'
 $missing=@()
+if (-not (Get-Command Start-TestGame).Parameters.ContainsKey('AllowProductionSettings')) {
+    $missing+='OSF Test Harness launch options (pull the latest testing-automation master)'
+}
 foreach ($path in @($script:Config.FixtureSave,$compiler,(Join-Path $imports 'Starfield_Papyrus_Flags.flg'),(Join-Path $animationProject 'tools/BuildProduction.ps1'),(Join-Path $repo 'pack/OSFDefeatBasic.esm'),
     (Join-Path $script:ModRoot "$animationMod/SFSE/Plugins/OSF Animation.dll"),
     (Join-Path $script:ModRoot 'Auto Load'),
@@ -172,8 +175,8 @@ try {
     Set-IniValue (Join-Path $profile 'StarfieldCustom.ini') 'Archive' 'bInvalidateOlderFiles' '1'
     Set-IniValue (Join-Path $profile 'StarfieldCustom.ini') 'Archive' 'sResourceDataDirsFinal' ''
     foreach ($key in @('bSaveOnPause','bSaveOnTravel','bSaveOnWait','bSaveOnRest')) { Set-IniValue (Join-Path $profile 'StarfieldPrefs.ini') 'GamePlay' $key '0' }
-    $script:AnimationMode=$true # Enables only Prepare-AnimationMailbox in Start-TestGame.
-    $null=Start-TestGame; $started=$true; $script:AnimationMode=$false
+    $script:AnimationMode=$true # Enables Prepare-AnimationMailbox; payload requirements are explicit below.
+    $null=Start-TestGame -RequiredTestMods $mods -AllowProductionSettings; $started=$true; $script:AnimationMode=$false
     $identity=Get-ProcessIdentity (Get-OwnedGame)
     $snapshotPath=Join-Path $script:DefeatMailbox 'snapshot.json'
     $snapshot=Wait-Observed 'Defeat test-build handshake' {Read-JsonFile $snapshotPath} {param($s) $s -and $s.state -in @('ready','failed')} 20

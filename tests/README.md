@@ -65,7 +65,12 @@ duplicate, stale, wrong-process and partial results cannot count as a pass.
 
 ## Game smoke and local setup
 
-The sibling `OSF Test Harness` must contain its `scripts` helpers and built
+Pull `main` in Defeat, `dev` in Animation, and `master` in the sibling
+`OSF Test Harness` (`ozooma10/testing-automation`). Defeat preflight checks for the
+Harness launch options that let it require its own payloads and use installed Settings
+as a dependency. Older Harness revisions are reported as blocked before preparation.
+
+The Harness must contain its `scripts` helpers and built
 `build/bin/OSFTestHarness.dll` and `OSFTestInput.exe`. Its ignored `config.local.psd1`
 must identify an explicit disposable `FixtureSave`. The game, MO2 source profile,
 `Auto Load` mod, deployed Animation assets, the sibling `OSF Animation` source/build helper,
@@ -75,13 +80,13 @@ paths so another PC can be repaired without guessing or fetching private saves.
 If the Animation mod has another folder name, set `DefeatAnimationMod` in that local
 configuration. The default harness/source paths are resolved from the sibling checkout;
 Defeat contains no hardcoded workstation root. The runner builds Animation through its
-private production staging helper and overrides its DLL only in the test payload. Copy the
-companion `OSF Animation/src/Serialization/PersistenceHost.cpp` fix to the other PC: it
+private production staging helper and overrides its DLL only in the test payload. Pull
+Animation's `dev` branch on the other PC: the persistence host
 recognizes Starfield's dynamic `SLocalSavePath` setting so sidecars follow private saves.
 No live Animation deployment is changed. Test and pack PSC files are compiled privately.
 
 The runtime runner reuses the existing harness process ownership, input, capture,
-launch and report functions without editing that repository. It creates the owned
+launch and report functions. It creates the owned
 `OSF Defeat Testing` profile, separate test payload/output/harness/Auto Load mods,
 and a fresh `OSFDefeatTestingFixture/<run>` save directory. It copies the chosen save
 and matching sidecars, verifies their hashes and requires Auto Load to observe exactly
