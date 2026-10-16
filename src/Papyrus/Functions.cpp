@@ -20,6 +20,9 @@
 #include "Engine/Engine.h"
 
 #include <variant>
+#ifdef OSF_DEFEAT_TESTING
+#include "AcceptanceTests.h"
+#endif
 
 namespace OSFDefeat::Papyrus
 {
@@ -475,6 +478,9 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "GetCaptives", &GetCaptives, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReloadJSON", &ReloadJSON, std::nullopt, false);
 
+#ifdef OSF_DEFEAT_TESTING
+        RuntimeTests::Acceptance::Bind(*vm);
+#endif
         REX::INFO("[OSFDefeat] Papyrus API bound");
     }
 }

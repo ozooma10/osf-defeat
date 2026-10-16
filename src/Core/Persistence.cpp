@@ -18,6 +18,9 @@
 #include "REX/W32/KERNEL32.h"
 
 #include <type_traits>
+#ifdef OSF_DEFEAT_TESTING
+#include "AcceptanceTests.h"
+#endif
 
 namespace OSFDefeat::Persistence
 {
@@ -75,6 +78,9 @@ namespace OSFDefeat::Persistence
         };
 
         std::uint8_t         g_clientContext{};
+        std::optional<LoadedState> g_pendingLoad;
+        std::uint64_t g_pendingEpoch{};
+        bool g_pendingRevert{};
 
         // Save/Load validate the interface once at the callback boundary. These private helpers
         // check record contents and I/O results, using that already-validated reader/writer.
@@ -266,6 +272,9 @@ namespace OSFDefeat::Persistence
                 }
                 REX::INFO("[OSFDefeat] saved state: {} active defeats, {} owned captive-faction memberships, {} capture relationships, {} AI suspensions",
                     defeated.size(), ownedCaptiveFactions.size(), captureRelationships.size(), aiSuspensions.size());
+#ifdef OSF_DEFEAT_TESTING
+                RuntimeTests::Acceptance::Saved();
+#endif
                 return 1;
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] persistence save failed: {}", e.what());
@@ -464,6 +473,7 @@ namespace OSFDefeat::Persistence
                     REX::ERROR("[OSFDefeat] OSF persistence supplied an invalid reader");
                     return 0;
                 }
+                const auto epoch = RuntimeMutation::CurrentEpoch();
                 LoadedState state;
                 std::uint32_t type{}, version{}, length{};
                 while (a_reader->GetNextRecordInfo(a_reader, &type, &version, &length)) {
@@ -483,15 +493,15 @@ namespace OSFDefeat::Persistence
                         return 0;
                     }
                 }
-                auto* const tasks = RuntimeMutation::GetTaskQueue();
-                if (!tasks) {
-                    REX::ERROR("[OSFDefeat] native task queue unavailable; persistence load not applied");
+                // The engine disables BSService's queue during a real load. Keep
+                // only parsed data here; the normal Main update applies it after
+                // loading, before recovery and presentation resume.
+                std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+                if (!RuntimeMutation::IsCurrent(epoch)) {
                     return 0;
                 }
-                const auto epoch = RuntimeMutation::CurrentEpoch();
-                tasks->AddTask([state = std::move(state), epoch]() mutable {
-                    ApplyLoadedState(std::move(state), epoch);
-                });
+                g_pendingEpoch = epoch;
+                g_pendingLoad = std::move(state);
                 return 1;
             } catch (const std::exception& e) {
                 REX::ERROR("[OSFDefeat] persistence load failed: {}", e.what());
@@ -503,30 +513,40 @@ namespace OSFDefeat::Persistence
 
         void OSF_PERSISTENCE_CALL Revert(void*)
         {
-            const auto epoch = RuntimeMutation::AdvanceEpoch();
-            auto* const tasks = RuntimeMutation::GetTaskQueue();
-            if (!tasks) {
-                REX::ERROR("[OSFDefeat] native task queue unavailable; runtime revert could not be applied safely");
-                return;
-            }
-            tasks->AddTask([epoch]() {
-                if (!RuntimeMutation::IsCurrent(epoch)) {
-                    return;
-                }
-                std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
-                // Events owns VM smart pointers and must be cleared here, never from the persistence
-                // callback thread. The rest closes every session-scoped state seam before Load applies.
-                Events::Clear();
-                Defeat::ResetRuntimeState();
-                Engine::ResetRuntimeState();
-                Capture::Clear();
-                Consequence::ResetRuntimeState();
-                PlayerDefeat::ResetTransientState();
-                DefeatContext::ClearPlayerContext();
-                Presentation::ResetRuntimeState();
-                Eligibility::SetEnabled(true);
-                REX::INFO("[OSFDefeat] reverted all runtime defeat state (epoch {})", epoch);
-            });
+            std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+            g_pendingEpoch = RuntimeMutation::AdvanceEpoch();
+            g_pendingLoad.reset();
+            g_pendingRevert = true;
+        }
+    }
+
+    void ApplyPending()
+    {
+        std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+        if (!RuntimeMutation::IsCurrent(g_pendingEpoch)) {
+            g_pendingRevert = false;
+            g_pendingLoad.reset();
+            return;
+        }
+        if (g_pendingRevert) {
+            g_pendingRevert = false;
+            // Events owns VM smart pointers and must be cleared here, never from the persistence
+            // callback thread. The rest closes every session-scoped state seam before Load applies.
+            Events::Clear();
+            Defeat::ResetRuntimeState();
+            Engine::ResetRuntimeState();
+            Capture::Clear();
+            Consequence::ResetRuntimeState();
+            PlayerDefeat::ResetTransientState();
+            DefeatContext::ClearPlayerContext();
+            Presentation::ResetRuntimeState();
+            Eligibility::SetEnabled(true);
+            REX::INFO("[OSFDefeat] reverted all runtime defeat state (epoch {})", g_pendingEpoch);
+        }
+        if (g_pendingLoad) {
+            auto state = std::move(*g_pendingLoad);
+            g_pendingLoad.reset();
+            ApplyLoadedState(std::move(state), g_pendingEpoch);
         }
     }
 

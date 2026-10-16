@@ -1,5 +1,25 @@
 # OSF Defeat — One-Launch Verification Plan
 
+## Automated regression bench (2026-10-16)
+
+Use `pwsh -NoProfile -File tools/test-smoke.ps1` for the native/payload/build checks and
+add `-RunGame` for the isolated live smoke session. See [tests/README.md](tests/README.md)
+and [tests/coverage.json](tests/coverage.json) for exact coverage and exclusions.
+The runtime inventory now contains 42 assertions, including real `.sfs`/`.osf` saves and
+loads, captive ownership/faction/AI restoration, NPC 3D rebuilding and transfer/release,
+movement and looking controls, all six Papyrus callbacks, all six authored consequence
+definitions (arrest fallback only), and the tagged recovery-marker helper. Each run retains
+save pairs, sidecar CRC/record inspections, native and Papyrus observations, logs and WGC
+captures. Use the current run's `summary.json` and `runtime.json` as the pass/fail evidence;
+failed probe runs are retained as well. The tests exposed and fixed Defeat's restore failure
+while the engine task queue is disabled and Animation's dynamic save-path lookup.
+
+Remaining scenario gaps: cold restart, cancelled/failed load, nonpersistent world NPC
+streaming, cross-cell transfer, actual hostile NPC lethal combat, real jail/sentence handling,
+physical controllers, and subjective camera/pose quality. Keyword/faction pack gates use a
+disposable humanoid clone, so robot/creature skeletons are not certified. The manual steps
+below remain useful for those broader contexts and historical comparison.
+
 ## Current cleanup regression pass (2026-10-15)
 
 The simplification commits have native build verification only. Deployment is pending, and the

@@ -166,6 +166,21 @@ Function ReloadJSON() global native
 
 Registered receivers should implement `OnPlayerDefeated()`, `OnPlayerConsequenceStarted()`, and/or `OnPlayerRecovered()`. Consequence receivers should use the `GetLastPlayer*` functions to read the selected consequence context. Legacy rescue/pacify/claim/timer/context functions and v1/v2 JSON keys remain compatibility aliases; see [the vocabulary contract](docs/VOCABULARY.md) and `docs/papyrus-api.md`.
 
+## Automated tests
+
+```powershell
+pwsh -NoProfile -File tools/test-smoke.ps1          # Native tests, payload checks, production build
+pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame # Also run a fresh local game smoke session
+pwsh -NoProfile -File tools/test-smoke.ps1 -Plan    # Coverage and stage inventory
+```
+
+See [the testing guide](tests/README.md) for the nine native suites, isolated game setup,
+JSON reports, missing-dependency preflight and remaining acceptance boundaries. Test builds
+stay in private staging directories; game automation uses the sibling OSF Test Harness.
+The live suite includes real save/load and sidecar validation, NPC capture/transfer/release,
+Papyrus callbacks, input restoration and Basic Consequences effects. It privately builds
+the sibling Animation dependency; carry its dynamic save-path fix when moving PCs.
+
 ## Build
 
 ```bat

@@ -1,4 +1,7 @@
 #include "pch.h"
+#ifdef OSF_DEFEAT_TESTING
+#include "AcceptanceTests.h"
+#endif
 
 #include "Core/Reattach.h"
 
@@ -46,6 +49,9 @@ namespace OSFDefeat::Reattach
                     // Idempotent: ActiveDefeat already owns the prior-state snapshot, so this only
                     // re-applies bleedout + ghost + combat suppression on the rebuilt actor.
                     Engine::ApplyDownState(*actor, *defeat);
+#ifdef OSF_DEFEAT_TESTING
+                    RuntimeTests::Acceptance::Reattached(a_id);
+#endif
                 }
             });
         }

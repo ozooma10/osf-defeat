@@ -1,6 +1,17 @@
 -- include subprojects
 includes("lib/commonlibsf")
 
+-- CommonLib's default after-build action installs every default target, even when
+-- building a non-default test DLL. Scope installation to this production target.
+rule("commonlib.plugin")
+    after_build(function(target)
+        if target:name() == "OSF Defeat" then
+            import("core.project.task")
+            task.run("install", {target = target:name()})
+        end
+    end)
+rule_end()
+
 -- CommonLib's plugin rule automatically runs its install action after a rebuild. Apply this rule
 -- after commonlibsf.plugin so verification builds stage that mandatory install inside the repo.
 rule("osfdefeat.install_target")
@@ -21,6 +32,8 @@ add_rules("mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
 add_requires("nlohmann_json")
+
+includes("tests")
 
 target("OSF Defeat")
     add_rules("commonlibsf.plugin", {

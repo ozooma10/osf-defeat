@@ -7,8 +7,13 @@
 #include "Core/DefeatRegistry.h"
 #include "Core/GameTime.h"
 #include "Core/Presentation.h"
+#include "Core/Persistence.h"
 #include "Core/RuntimeMutation.h"
 #include "REL/THook.h"
+
+#ifdef OSF_DEFEAT_TESTING
+#include "DefeatRuntimeTests.h"
+#endif
 
 namespace OSFDefeat::Recovery
 {
@@ -26,7 +31,11 @@ namespace OSFDefeat::Recovery
             const auto now = std::chrono::steady_clock::now();
             if (now >= g_nextTick) {
                 g_nextTick = now + kTickInterval;
+                Persistence::ApplyPending();
                 Tick();
+#ifdef OSF_DEFEAT_TESTING
+                RuntimeTests::Tick();
+#endif
             }
         }
 

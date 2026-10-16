@@ -10,4 +10,6 @@
 namespace OSFDefeat::Persistence
 {
 	void Register();
+    // Called only from the verified normal Main update seam (never load callbacks).
+    void ApplyPending();
 }
