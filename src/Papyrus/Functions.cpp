@@ -41,6 +41,20 @@ namespace OSFDefeat::Papyrus
             return true;
         }
 
+        bool QueueActorOperation(RE::Actor* a_actor, auto a_operation)
+        {
+            if (!a_actor) {
+                return false;
+            }
+
+            const FormID actorId = a_actor->GetFormID();
+            return QueueGameTask([actorId, operation = std::move(a_operation)]() {
+                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
+                    operation(actor);
+                }
+            });
+        }
+
         bool DefeatActor(std::monostate, RE::Actor* a_victim, RE::Actor* a_aggressor)
         {
             if (!a_victim) {
@@ -60,78 +74,31 @@ namespace OSFDefeat::Papyrus
 
         bool RecoverActor(std::monostate, RE::Actor* a_actor, bool a_resumeAI)
         {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, a_resumeAI]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Defeat::RecoverActor(actor, a_resumeAI);
-                }
+            return QueueActorOperation(a_actor, [a_resumeAI](RE::Actor* a_resolvedActor) {
+                Defeat::RecoverActor(a_resolvedActor, a_resumeAI);
             });
-        }
-
-        bool RescueActor(std::monostate a_self, RE::Actor* a_victim, bool a_undoPacify)
-        {
-            return RecoverActor(a_self, a_victim, a_undoPacify);
         }
 
         bool SuspendActorAI(std::monostate, RE::Actor* a_actor)
         {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Defeat::SuspendAI(actor);
-                }
-            });
+            return QueueActorOperation(a_actor, &Defeat::SuspendAI);
         }
 
         bool ResumeActorAI(std::monostate, RE::Actor* a_actor)
         {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Defeat::ResumeAI(actor);
-                }
-            });
-        }
-
-        bool PacifyActor(std::monostate a_self, RE::Actor* a_actor) { return SuspendActorAI(a_self, a_actor); }
-        bool ReleaseActor(std::monostate a_self, RE::Actor* a_actor) { return ResumeActorAI(a_self, a_actor); }
-
-        bool QueueRecoveryOperation(RE::Actor* a_actor, auto a_operation)
-        {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, operation = std::move(a_operation)]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    operation(actor);
-                }
-            });
+            return QueueActorOperation(a_actor, &Defeat::ResumeAI);
         }
 
         bool ScheduleAutomaticRecovery(std::monostate, RE::Actor* a_actor, float a_delaySeconds)
         {
-            return QueueRecoveryOperation(a_actor, [a_delaySeconds](RE::Actor* a_resolvedActor) {
+            return QueueActorOperation(a_actor, [a_delaySeconds](RE::Actor* a_resolvedActor) {
                 Recovery::ScheduleAutomatic(a_resolvedActor, a_delaySeconds);
             });
         }
 
         bool HoldRecovery(std::monostate, RE::Actor* a_actor)
         {
-            return QueueRecoveryOperation(a_actor, [](RE::Actor* a_resolvedActor) { Recovery::Hold(a_resolvedActor); });
+            return QueueActorOperation(a_actor, &Recovery::Hold);
         }
 
         float GetAutomaticRecoverySecondsRemaining(std::monostate, RE::Actor* a_actor)
@@ -142,63 +109,33 @@ namespace OSFDefeat::Papyrus
         // Compatibility verb: positive seconds schedule automatic recovery; non-positive holds it.
         bool SetRecoveryTimer(std::monostate, RE::Actor* a_actor, float a_seconds)
         {
-            return QueueRecoveryOperation(a_actor, [a_seconds](RE::Actor* a_resolvedActor) {
+            return QueueActorOperation(a_actor, [a_seconds](RE::Actor* a_resolvedActor) {
                 Recovery::SetTimer(a_resolvedActor, a_seconds);
             });
-        }
-
-        float GetRecoverySecondsRemaining(std::monostate, RE::Actor* a_actor)
-        {
-            return GetAutomaticRecoverySecondsRemaining({}, a_actor);
         }
 
         // Defeat lease: a named, watchdog-protected recovery hold.
         bool AcquireDefeatLease(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_holderId, float a_timeoutSeconds)
         {
-            if (!a_actor || !a_holderId.c_str() || *a_holderId.c_str() == '\0') {
+            if (a_holderId.empty()) {
                 return false;
             }
 
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, holderId = std::string{ a_holderId.c_str() }, a_timeoutSeconds]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Recovery::AcquireLease(actor, holderId, a_timeoutSeconds);
-                }
+            return QueueActorOperation(a_actor, [holderId = std::string{ a_holderId.c_str() }, a_timeoutSeconds](RE::Actor* a_resolvedActor) {
+                Recovery::AcquireLease(a_resolvedActor, holderId, a_timeoutSeconds);
             });
         }
 
         bool ReleaseDefeatLease(std::monostate, RE::Actor* a_actor, RE::BSFixedString a_holderId)
         {
-            if (!a_actor || !a_holderId.c_str()) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, holderId = std::string{ a_holderId.c_str() }]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Recovery::ReleaseLease(actor, holderId);
-                }
+            return QueueActorOperation(a_actor, [holderId = std::string{ a_holderId.c_str() }](RE::Actor* a_resolvedActor) {
+                Recovery::ReleaseLease(a_resolvedActor, holderId);
             });
         }
 
         std::string GetDefeatLeaseHolder(std::monostate, RE::Actor* a_actor)
         {
             return Recovery::GetLeaseHolder(a_actor);
-        }
-
-        bool ClaimDefeat(std::monostate a_self, RE::Actor* a_actor, RE::BSFixedString a_owner, float a_maxHoldSeconds)
-        {
-            return AcquireDefeatLease(a_self, a_actor, a_owner, a_maxHoldSeconds);
-        }
-
-        bool ReleaseClaim(std::monostate a_self, RE::Actor* a_actor, RE::BSFixedString a_owner)
-        {
-            return ReleaseDefeatLease(a_self, a_actor, a_owner);
-        }
-
-        std::string GetClaimOwner(std::monostate a_self, RE::Actor* a_actor)
-        {
-            return GetDefeatLeaseHolder(a_self, a_actor);
         }
 
         // Emergency escape / safe uninstall. Console: cgf "OSFDefeat.ForceRecoverAll"
@@ -236,29 +173,15 @@ namespace OSFDefeat::Papyrus
         // player-defeat setting. Removal also happens automatically on recovery.
         bool ApplyCaptiveFaction(std::monostate, RE::Actor* a_actor)
         {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Engine::ApplyCaptiveFaction(*actor);
-                }
+            return QueueActorOperation(a_actor, [](RE::Actor* a_resolvedActor) {
+                Engine::ApplyCaptiveFaction(*a_resolvedActor);
             });
         }
 
         bool RemoveCaptiveFaction(std::monostate, RE::Actor* a_actor)
         {
-            if (!a_actor) {
-                return false;
-            }
-
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Engine::RemoveCaptiveFaction(*actor);
-                }
+            return QueueActorOperation(a_actor, [](RE::Actor* a_resolvedActor) {
+                Engine::RemoveCaptiveFaction(*a_resolvedActor);
             });
         }
 
@@ -287,14 +210,8 @@ namespace OSFDefeat::Papyrus
 
         bool ReleaseCaptive(std::monostate, RE::Actor* a_actor, bool a_recover)
         {
-            if (!a_actor) {
-                return false;
-            }
-            const FormID actorId = a_actor->GetFormID();
-            return QueueGameTask([actorId, a_recover]() {
-                if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Capture::ReleaseCaptive(actor, a_recover);
-                }
+            return QueueActorOperation(a_actor, [a_recover](RE::Actor* a_resolvedActor) {
+                Capture::ReleaseCaptive(a_resolvedActor, a_recover);
             });
         }
 
@@ -344,11 +261,6 @@ namespace OSFDefeat::Papyrus
         bool IsDefeated(std::monostate, RE::Actor* a_actor)
         {
             return Defeat::IsDefeated(a_actor);
-        }
-
-        bool IsPacified(std::monostate, RE::Actor* a_actor)
-        {
-            return Defeat::IsAISuspended(a_actor);
         }
 
         bool IsActorAISuspended(std::monostate, RE::Actor* a_actor) { return Defeat::IsAISuspended(a_actor); }
@@ -487,16 +399,10 @@ namespace OSFDefeat::Papyrus
             Config::Reload();
             Consequence::Reload();
         }
-
-        bool g_bound = false;
     }
 
     void Register()
     {
-        if (g_bound) {
-            return;
-        }
-
         const auto* const gameVM = RE::GameVM::GetSingleton();
         auto* const vm = gameVM ? gameVM->GetVM() : nullptr;
         if (!vm) {
@@ -507,13 +413,13 @@ namespace OSFDefeat::Papyrus
         constexpr std::string_view kClass = "OSFDefeat";
         vm->BindNativeMethod(kClass, "DefeatActor", &DefeatActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RecoverActor", &RecoverActor, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "RescueActor", &RescueActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RescueActor", &RecoverActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SuspendActorAI", &SuspendActorAI, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ResumeActorAI", &ResumeActorAI, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "PacifyActor", &PacifyActor, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "ReleaseActor", &ReleaseActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "PacifyActor", &SuspendActorAI, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ReleaseActor", &ResumeActorAI, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsDefeated", &IsDefeated, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "IsPacified", &IsPacified, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsPacified", &IsActorAISuspended, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsActorAISuspended", &IsActorAISuspended, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ClassifyActor", &ClassifyActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsNonFlesh", &IsNonFlesh, std::nullopt, false);
@@ -544,13 +450,13 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "HoldRecovery", &HoldRecovery, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetAutomaticRecoverySecondsRemaining", &GetAutomaticRecoverySecondsRemaining, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SetRecoveryTimer", &SetRecoveryTimer, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "GetRecoverySecondsRemaining", &GetRecoverySecondsRemaining, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetRecoverySecondsRemaining", &GetAutomaticRecoverySecondsRemaining, std::nullopt, false);
         vm->BindNativeMethod(kClass, "AcquireDefeatLease", &AcquireDefeatLease, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReleaseDefeatLease", &ReleaseDefeatLease, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetDefeatLeaseHolder", &GetDefeatLeaseHolder, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "ClaimDefeat", &ClaimDefeat, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "ReleaseClaim", &ReleaseClaim, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "GetClaimOwner", &GetClaimOwner, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ClaimDefeat", &AcquireDefeatLease, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "ReleaseClaim", &ReleaseDefeatLease, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetClaimOwner", &GetDefeatLeaseHolder, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ForceRecoverAll", &ForceRecoverAll, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetDefeatCause", &GetDefeatCause, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerDefeatCause", &GetLastPlayerDefeatCause, std::nullopt, false);
@@ -569,7 +475,6 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "GetCaptives", &GetCaptives, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ReloadJSON", &ReloadJSON, std::nullopt, false);
 
-        g_bound = true;
         REX::INFO("[OSFDefeat] Papyrus API bound");
     }
 }

@@ -26,7 +26,7 @@ namespace OSFDefeat::Config
     void Load();
     void Reload();
 
-    [[nodiscard]] FrameworkSettings Get();
+    [[nodiscard]] float DefaultAutoRecoveryDelaySeconds();
     [[nodiscard]] bool IsProcessingEnabled();
     [[nodiscard]] bool ShouldDisableInScenes();
     [[nodiscard]] bool IsNpcAutoDefeatEnabled();

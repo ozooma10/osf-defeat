@@ -88,12 +88,8 @@ namespace OSFDefeat::Config
                 // A bad value must not leave half of this file applied. Parse into a
                 // candidate and publish it only after the entire document succeeds.
                 auto candidate = a_config;
-                if (json.contains("processingEnabled")) {
-                    candidate.processingEnabled = json.value("processingEnabled", true);
-                }
-                if (json.contains("disableInScenes")) {
-                    candidate.disableInScenes = json.value("disableInScenes", false);
-                }
+                candidate.processingEnabled = json.value("processingEnabled", candidate.processingEnabled);
+                candidate.disableInScenes = json.value("disableInScenes", candidate.disableInScenes);
                 if (json.contains("defaultAutoRecoveryDelaySeconds") || json.contains("defaultRecoverySeconds")) {
                     const auto value = json.contains("defaultAutoRecoveryDelaySeconds")
                         ? json.value("defaultAutoRecoveryDelaySeconds", 8.0f)
@@ -103,12 +99,8 @@ namespace OSFDefeat::Config
                     }
                     candidate.defaultAutoRecoveryDelaySeconds = std::max(1.0f, value);
                 }
-                if (json.contains("npcAutoDefeat")) {
-                    candidate.npcAutoDefeat = json.value("npcAutoDefeat", false);
-                }
-                if (json.contains("npcAutoDefeatIncludeRobots")) {
-                    candidate.npcAutoDefeatIncludeRobots = json.value("npcAutoDefeatIncludeRobots", false);
-                }
+                candidate.npcAutoDefeat = json.value("npcAutoDefeat", candidate.npcAutoDefeat);
+                candidate.npcAutoDefeatIncludeRobots = json.value("npcAutoDefeatIncludeRobots", candidate.npcAutoDefeatIncludeRobots);
                 if (json.contains("applyCaptiveFactionOnPlayerDefeat")) {
                     candidate.applyCaptiveFactionOnPlayerDefeat = json.value("applyCaptiveFactionOnPlayerDefeat", false);
                 } else if (json.contains("factionPacify")) {
@@ -130,9 +122,7 @@ namespace OSFDefeat::Config
                     }
                     candidate.recentHostileAttackerRadius = value;
                 }
-                if (json.contains("explainDecisions")) {
-                    candidate.explainDecisions = json.value("explainDecisions", false);
-                }
+                candidate.explainDecisions = json.value("explainDecisions", candidate.explainDecisions);
                 if (json.contains("watchdogSeconds")) {
                     const auto value = json.value("watchdogSeconds", 600.0f);
                     if (!std::isfinite(value)) {
@@ -202,10 +192,10 @@ namespace OSFDefeat::Config
 
     void Reload() { Load(); }
 
-    FrameworkSettings Get()
+    float DefaultAutoRecoveryDelaySeconds()
     {
         std::shared_lock lock{ g_lock };
-        return g_config;
+        return g_config.defaultAutoRecoveryDelaySeconds;
     }
 
     bool IsProcessingEnabled()

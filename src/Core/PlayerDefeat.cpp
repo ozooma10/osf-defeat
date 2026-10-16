@@ -74,23 +74,19 @@ namespace OSFDefeat::PlayerDefeat
         // Defeat-time hostile-attacker snapshot: the aggressor plus every recent attacker that is still a
         // live hostile within a_radius (<= 0 = no radius filter). Game thread (LookupByID + engine
         // reads). Recorded attackers that resolve to non-actors (traps, hazards) drop out here.
-        [[nodiscard]] std::vector<RE::Actor*> CollectRecentHostileAttackers(RE::Actor* a_player, RE::Actor* a_aggressor, float a_radius)
+        [[nodiscard]] std::vector<RE::Actor*> CollectRecentHostileAttackers(RE::Actor& a_player, RE::Actor* a_aggressor, float a_radius)
         {
             std::vector<RE::Actor*> out;
-            if (!a_player) {
-                return out;
-            }
-
-            const auto origin = a_player->GetPosition();
+            const auto origin = a_player.GetPosition();
             const float radiusSq = a_radius > 0.0f ? a_radius * a_radius : 0.0f;
             const auto consider = [&](RE::Actor* a_actor, bool a_requireHostile) {
-                if (!a_actor || a_actor == a_player || a_actor->IsDead()) {
+                if (!a_actor || a_actor == &a_player || a_actor->IsDead()) {
                     return;
                 }
                 if (std::find(out.begin(), out.end(), a_actor) != out.end()) {
                     return;
                 }
-                if (a_requireHostile && !a_actor->IsHostileToActor(a_player)) {
+                if (a_requireHostile && !a_actor->IsHostileToActor(&a_player)) {
                     return;
                 }
                 if (radiusSq > 0.0f && (a_actor->GetPosition() - origin).SqrLength() > radiusSq) {
@@ -152,7 +148,7 @@ namespace OSFDefeat::PlayerDefeat
         [[nodiscard]] bool ShouldSignalImminent(RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info, float a_current, float a_delta)
         {
             const float fraction = Config::ImminentHealthFraction();
-            if (fraction <= 0.0f || &a_info != Engine::HealthAV()) {
+            if (fraction <= 0.0f) {
                 return false;
             }
             const float maxValue = a_owner->GetPermanentActorValue(a_info);
@@ -247,7 +243,7 @@ namespace OSFDefeat::PlayerDefeat
                 // the health floor without either vanilla death or an OSF down-state.
                 if (Defeat::DefeatActor(victim, aggressor, a_cause)) {
                     if (auto data = DefeatRegistry::Get(a_victimId)) {
-                        data->autoRecoverAtDay = Recovery::DeadlineForSeconds(Config::Get().defaultAutoRecoveryDelaySeconds);
+                        data->autoRecoverAtDay = Recovery::DeadlineForSeconds(Config::DefaultAutoRecoveryDelaySeconds());
                     }
                 }
             });
@@ -434,7 +430,7 @@ namespace OSFDefeat::PlayerDefeat
         // Snapshot recent hostile attackers BEFORE the engine down state applies: DefeatActor drops the player from
         // combatant target lists (and may apply captive-faction membership), which can clear the hostility the
         // recent-hostile-attacker filter keys on.
-        const auto recentHostileAttackers = CollectRecentHostileAttackers(player, a_aggressor, Config::RecentHostileAttackerRadius());
+        const auto recentHostileAttackers = CollectRecentHostileAttackers(*player, a_aggressor, Config::RecentHostileAttackerRadius());
         if (!Defeat::DefeatActor(player, a_aggressor, a_cause)) {
             return;
         }

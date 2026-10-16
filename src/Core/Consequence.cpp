@@ -59,7 +59,7 @@ namespace OSFDefeat::Consequence
                 }
                 WarnUnknownKeys(json, a_path);
 
-                const auto config = Config::Get();
+                const float defaultAutoRecoveryDelaySeconds = Config::DefaultAutoRecoveryDelaySeconds();
                 PlayerConsequence consequence;
                 const auto legacyName = json.value("name", a_path.stem().string());
                 consequence.id = version >= 3 ? json.value("id", std::string{}) : legacyName;
@@ -74,8 +74,8 @@ namespace OSFDefeat::Consequence
                 consequence.priority = json.value("priority", 0);
                 consequence.weight = std::max(1, json.value("weight", 1));
                 const auto autoRecoveryDelaySeconds = json.contains("autoRecoveryDelaySeconds")
-                    ? json.value("autoRecoveryDelaySeconds", config.defaultAutoRecoveryDelaySeconds)
-                    : json.value("recoverySeconds", config.defaultAutoRecoveryDelaySeconds);
+                    ? json.value("autoRecoveryDelaySeconds", defaultAutoRecoveryDelaySeconds)
+                    : json.value("recoverySeconds", defaultAutoRecoveryDelaySeconds);
                 if (!std::isfinite(autoRecoveryDelaySeconds)) {
                     throw std::runtime_error("autoRecoveryDelaySeconds must be finite");
                 }
@@ -158,15 +158,9 @@ namespace OSFDefeat::Consequence
                         REX::INFO("[OSFDefeat] Overrides.json names unknown consequence '{}' (not installed, or ID changed?)", key);
                         continue;
                     }
-                    if (entry.contains("enabled")) {
-                        match->enabled = entry.value("enabled", match->enabled);
-                    }
-                    if (entry.contains("weight")) {
-                        match->weight = std::max(1, entry.value("weight", match->weight));
-                    }
-                    if (entry.contains("priority")) {
-                        match->priority = entry.value("priority", match->priority);
-                    }
+                    match->enabled = entry.value("enabled", match->enabled);
+                    match->weight = std::max(1, entry.value("weight", match->weight));
+                    match->priority = entry.value("priority", match->priority);
                     REX::INFO("[OSFDefeat] Overrides.json: '{}' -> enabled={} weight={} priority={}",
                         match->id, match->enabled, match->weight, match->priority);
                 }
@@ -281,7 +275,7 @@ namespace OSFDefeat::Consequence
             PlayerConsequence fallback;
             fallback.id = "osfdefeat.builtin.down_then_recover";
             fallback.displayName = "Down Then Recover";
-            fallback.autoRecoveryDelaySeconds = Config::Get().defaultAutoRecoveryDelaySeconds;
+            fallback.autoRecoveryDelaySeconds = Config::DefaultAutoRecoveryDelaySeconds();
             return fallback;
         }
 

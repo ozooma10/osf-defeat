@@ -173,7 +173,7 @@ namespace OSFDefeat::Recovery
 
         activeDefeat->SetLeaseHolderId({});
         activeDefeat->leaseExpiresAtDay = 0.0f;
-        activeDefeat->autoRecoverAtDay = DeadlineForSeconds(Config::Get().defaultAutoRecoveryDelaySeconds);
+        activeDefeat->autoRecoverAtDay = DeadlineForSeconds(Config::DefaultAutoRecoveryDelaySeconds());
         REX::INFO("[OSFDefeat] '{}' released defeat lease on {:08X}; default recovery resumes",
             a_holderId, a_actor->GetFormID());
         return true;

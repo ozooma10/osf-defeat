@@ -183,11 +183,8 @@ namespace OSFDefeat::Engine
 
     void RestoreState(RE::Actor& a_actor, const ActiveDefeat& a_defeat)
     {
-        const bool isPlayer = a_actor.IsPlayerRef();
-        const ActorStateSnapshot legacyPrior{ .valid = true };
-        const auto& prior = a_defeat.priorState.valid ? a_defeat.priorState : legacyPrior;
         RestoreHealthToMax(a_actor);
-        RestoreOwnedState(a_actor, prior, isPlayer);
+        RestoreOwnedState(a_actor, a_defeat.priorState, a_actor.IsPlayerRef());
         // EvaluatePackage is intentionally NOT called: its AddressLib ID is unbound (0) in commonlibsf
         // (candidate 150640, never verified), so invoking it jumps to base+0 and crashes ("AddressLib
         // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
