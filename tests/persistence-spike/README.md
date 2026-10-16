@@ -1,6 +1,6 @@
 # Core experience slice 0: persistence spike
 
-Status: version 3 corrects the identity oracle, cell tracking, and alias text storage;
+Status: version 4 corrects the identity oracle, cell tracking, and alias text storage;
 fresh-profile runtime acceptance is pending. The [first run's findings](RESULTS-2026-10-16.md)
 remain historical evidence. This is a separate development plugin, never part of `pack/`
 or `dist/`. It does not register a consequence or require the Defeat DLL.
@@ -103,16 +103,21 @@ Actor Value. Only creation writes the stamp; inspection and loading never refres
 The oracle checks both the original base and stamp. Baseline negative controls verify
 that new, unstamped and wrongly stamped instances of the same bases are rejected.
 Raw FormIDs remain in the logs for diagnostics and may change after a cold restart.
-The aliases remain the only lasting ObjectReference holders. The quest stores its
-origin and ship interior as typed Cell forms, which participate in save remapping;
-it no longer resolves a dynamic cell through `Game.GetForm(savedInteger)`.
-Version 3 observes `OnCellDetach`/`OnCellAttach` on both aliases. Off-planet, a saved
+The aliases remain the only lasting ObjectReference holders. The quest stores the
+origin planet and the ship interior, but no generated origin Cell handle or integer lookup.
+Version 3 added `OnCellDetach`/`OnCellAttach` observations on both aliases. Off-planet, a saved
 Cell script handle can remain non-null while its native object is unbound; querying
 that handle produced native errors and false zero/false results in version 2.
-Departure therefore requires both detach events and unloaded reference 3D, while
-the saved Cell identity is checked only after the original site is loaded again.
-This is an alias-held reference test with saved Cell metadata, not proof that an
-entire unreferenced generated site survives. Use only fresh seeds with this version.
+Version 3 also proved that the saved Cell handle can stay unbound after returning
+from an away-save reload, even while both original objects are visible at their original
+coordinates. Version 4 therefore requires detach events and unloaded reference 3D on
+departure, then compares the live parent cells of the player and both references on return.
+Original-site evidence combines the original planet, unchanged stamped objects and pack
+position, and the recorded normal return through the same landing-site icon. It does not
+assert native Cell object identity across unloading. This is an alias-held reference test,
+not proof that an entire unreferenced generated site survives. Prefer fresh seeds; a
+version 3 fixture may be replayed under version 4 without Begin, respawning, or restamping
+to reproduce the away-save bug, but label that provenance in the evidence.
 
 Record screenshots of the subject's displayed name (**Persistence Subject**) and the
 quest journal. The first objective uses `<Alias=Subject>` and should show that name;
@@ -144,7 +149,7 @@ loading: recreating the objects would invalidate the experiment.
    aliases must survive a save made while the original site is unloaded.
 4. Return using the **original landing-site icon**, then walk back to the original pack.
 5. Run `cqf 04000800 CheckReturn`. This checks the original reference
-   identity stamps, remapped cell, planet, live/enabled/loaded state, inventories,
+   identity stamps, shared live cell, planet, live/enabled/loaded state, inventories,
    pack position, and objectives. It logs elapsed universal hours since `MarkAway`.
    It refuses a return claim unless the departure was observed. It never respawns or
    moves missing references to manufacture a pass.

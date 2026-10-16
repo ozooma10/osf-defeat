@@ -4,7 +4,8 @@ Scriptname OSFDefeatPersistenceSpike extends Quest
 ; The aliases are the only long-lived ObjectReference holders. Identity is a
 ; per-instance AV stamp written only when creating the fixture, never on load.
 ; Raw IDs are diagnostics: dynamic IDs remap across process restarts.
-; Cell/Planet forms use the save system's form remapping, not Game.GetForm(int).
+; Generated Cell handles can become permanently unbound after an away-save load.
+; Site evidence is the original planet, stamped objects, position, and normal route.
 ; PlaceAtMe deliberately does NOT force persistence.
 ReferenceAlias Property SubjectAlias Auto
 ReferenceAlias Property PackAlias Auto
@@ -22,7 +23,6 @@ Int markerStamp
 Int subjectId
 Int packId
 Planet originPlanet
-Cell originCell
 Int initialCellId
 Float packX
 Float packY
@@ -57,7 +57,7 @@ EndFunction
 
 ; A saved Cell script handle can remain non-None while its native cell is
 ; unbound off-planet. Observe detachment on the live aliases instead of calling
-; native Cell functions on that handle. Keep the Cell for comparison on return.
+; native Cell functions on that handle. On return, compare only live parent cells.
 Event ReferenceAlias.OnCellAttach(ReferenceAlias sender)
     If sender == SubjectAlias
         subjectDetached = False
@@ -131,8 +131,7 @@ Function Begin(String kind)
     RegisterForRemoteEvent(PackAlias, "OnCellAttach")
     RegisterForRemoteEvent(PackAlias, "OnCellDetach")
     originPlanet = player.GetCurrentPlanet()
-    originCell = player.GetParentCell()
-    initialCellId = IdOf(originCell)
+    initialCellId = IdOf(player.GetParentCell())
     ; All values remain exact integers in a 32-bit float, with disjoint role ranges.
     subjectStamp = Utility.RandomInt(1000000, 3999999)
     packStamp = subjectStamp + 4000000
@@ -170,7 +169,7 @@ Function Begin(String kind)
     packZ = pack.GetPositionZ()
     SetObjectiveDisplayed(10)
     SetObjectiveDisplayed(20)
-    Log("BEGIN|version=3|actor=" + subjectId + "|pack=" + packId + "|planet=" + IdOf(originPlanet) + "|cell=" + initialCellId + "|subject-stamp=" + subjectStamp + "|pack-stamp=" + packStamp)
+    Log("BEGIN|version=4|actor=" + subjectId + "|pack=" + packId + "|planet=" + IdOf(originPlanet) + "|cell=" + initialCellId + "|subject-stamp=" + subjectStamp + "|pack-stamp=" + packStamp)
     CheckIdentityControl(SubjectBase, subjectStamp, "actor")
     CheckIdentityControl(PackBase, packStamp, "pack")
     Inspect("baseline")
@@ -182,10 +181,10 @@ Bool Function Inspect(String checkpoint = "inspection")
         Block("No complete fixture. Run Begin at the test site.")
         Return False
     EndIf
-    Log("INSPECT|" + checkpoint + "|trips=" + trips)
+    Log("INSPECT|version=4|" + checkpoint + "|trips=" + trips)
     Actor subject = SubjectAlias.GetActorReference()
     ObjectReference pack = PackAlias.GetReference()
-    Log("IDS|actor-initial=" + subjectId + "|actor-now=" + IdOf(subject) + "|pack-initial=" + packId + "|pack-now=" + IdOf(pack) + "|cell-initial=" + initialCellId + "|cell-now=" + IdOf(originCell))
+    Log("IDS|actor-initial=" + subjectId + "|actor-now=" + IdOf(subject) + "|pack-initial=" + packId + "|pack-now=" + IdOf(pack) + "|cell-initial=" + initialCellId)
     Bool ok = Check("actor-identity", Owns(subject, subjectStamp, SubjectBase))
     ok = Check("pack-identity", Owns(pack, packStamp, PackBase)) && ok
     If subject == None || pack == None
@@ -193,7 +192,9 @@ Bool Function Inspect(String checkpoint = "inspection")
     EndIf
     ok = Check("actor-alive-enabled-loaded", !subject.IsDead() && !subject.IsDisabled() && !subject.IsDeleted() && subject.Is3DLoaded()) && ok
     ok = Check("pack-enabled-loaded", !pack.IsDisabled() && !pack.IsDeleted() && pack.Is3DLoaded()) && ok
-    ok = Check("original-cell", originCell != None && subject.GetParentCell() == originCell && pack.GetParentCell() == originCell) && ok
+    Cell liveCell = pack.GetParentCell()
+    Log("LIVE-CELLS|actor=" + IdOf(subject.GetParentCell()) + "|pack=" + IdOf(liveCell) + "|player=" + IdOf(Game.GetPlayer().GetParentCell()))
+    ok = Check("shared-loaded-cell", liveCell != None && subject.GetParentCell() == liveCell && Game.GetPlayer().GetParentCell() == liveCell) && ok
     ok = Check("original-planet", originPlanet != None && subject.GetCurrentPlanet() == originPlanet && pack.GetCurrentPlanet() == originPlanet) && ok
     ok = Check("actor-inventory", subject.GetItemCount(Game.GetCredits()) == 23) && ok
     ok = Check("pack-inventory", pack.GetItemCount(Game.GetCredits()) == 137) && ok
@@ -216,10 +217,6 @@ Function MarkAway()
     Actor player = Game.GetPlayer()
     If player.GetCurrentPlanet() == None || originPlanet == None || player.GetCurrentPlanet() == originPlanet || player.IsInSpace()
         Block("Land on a different planet before MarkAway.")
-        Return
-    EndIf
-    If originCell == None
-        Block("Saved origin Cell form is missing.")
         Return
     EndIf
     ObjectReference subject = SubjectAlias.GetReference()
@@ -252,8 +249,12 @@ Function CheckReturn()
     EndIf
     Actor player = Game.GetPlayer()
     ObjectReference pack = PackAlias.GetReference()
-    If player.GetCurrentPlanet() != originPlanet || originCell == None || player.GetParentCell() != originCell || pack == None
+    If player.GetCurrentPlanet() != originPlanet || pack == None
         Block("Return to the original test site before CheckReturn.")
+        Return
+    EndIf
+    If !pack.Is3DLoaded() || pack.GetParentCell() == None || player.GetParentCell() != pack.GetParentCell()
+        Block("Return to the loaded original pack's cell before CheckReturn.")
         Return
     EndIf
     If player.GetDistance(pack) > 20.0
