@@ -192,11 +192,6 @@ namespace OSFDefeat::Conditions
         return conditions;
     }
 
-    bool Evaluate(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
-    {
-        return Explain(a_conditions, a_victim, a_aggressor, a_cause) == EvalResult::kPass;
-    }
-
     EvalResult Explain(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         if (!a_conditions.valid) {

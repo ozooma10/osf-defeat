@@ -19,6 +19,9 @@ namespace OSFDefeat::Recovery
     bool ReleaseLease(RE::Actor* a_actor, std::string_view a_holderId);
     [[nodiscard]] std::string GetLeaseHolder(RE::Actor* a_actor);
 
-    // Game-thread recovery/deadline/watchdog pass.
+    // Install the post-Main-update hook, which calls Tick directly every 500 ms.
+    [[nodiscard]] bool Install();
+
+    // Gameplay-update recovery/deadline/watchdog pass.
     void Tick();
 }

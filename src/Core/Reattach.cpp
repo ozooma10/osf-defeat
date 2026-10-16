@@ -27,11 +27,10 @@ namespace OSFDefeat::Reattach
         constexpr std::size_t kStolenLength = kExpectedPrologue.size();
 
         Set3D_t* g_original = nullptr;
-        std::atomic_bool g_hooked{ false };
 
         void QueueReassert(FormID a_id)
         {
-            const auto* const tasks = SFSE::GetTaskInterface();
+            auto* const tasks = RuntimeMutation::GetTaskQueue();
             if (!tasks) {
                 return;
             }
@@ -40,65 +39,54 @@ namespace OSFDefeat::Reattach
                 if (!RuntimeMutation::IsCurrent(epoch)) {
                     return;
                 }
+                std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
                 auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id);
-                if (actor && Defeat::IsDefeated(actor)) {
+                const auto defeat = DefeatRegistry::Get(a_id);
+                if (actor && defeat) {
                     // Idempotent: ActiveDefeat already owns the prior-state snapshot, so this only
                     // re-applies bleedout + ghost + combat suppression on the rebuilt actor.
-                    std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
-                    Engine::ApplyDownState(actor, DefeatRegistry::Get(actor->GetFormID()));
+                    Engine::ApplyDownState(*actor, *defeat);
                 }
             });
         }
 
         void Set3DDetour(RE::Actor* a_actor, RE::NiAVObject* a_new3D, bool a_arg3, bool a_arg4)
         {
-            // Let the engine finish the (re)attach first, then re-assert onto the fresh 3D next
-            // frame. The thunk itself only reads the registry (shared lock) and queues — all actor
-            // mutation is deferred to the game thread, matching the ModActorValue clamp discipline.
-            if (g_original) {
-                g_original(a_actor, a_new3D, a_arg3, a_arg4);
-            }
+            // Finish the (re)attach before submitting the re-assert. The native queue can run
+            // inline on its drain owner, so submission must stay after the original call.
+            g_original(a_actor, a_new3D, a_arg3, a_arg4);
 
             if (a_new3D && a_actor && Defeat::IsDefeated(a_actor)) {
                 QueueReassert(a_actor->GetFormID());
             }
         }
-
-        [[nodiscard]] bool InstallHook()
-        {
-            const auto target = kSet3DID.address();
-            const auto* const bytes = reinterpret_cast<const std::uint8_t*>(target);
-            if (!std::equal(kExpectedPrologue.begin(), kExpectedPrologue.end(), bytes)) {
-                REX::ERROR("[OSFDefeat] Set3D prologue mismatch; 3D-reattach re-assert disabled");
-                return false;
-            }
-
-            auto& trampoline = REL::GetTrampoline();
-            auto* const gateway = static_cast<std::uint8_t*>(trampoline.allocate(kStolenLength + sizeof(REL::ASM::JMP14)));
-            std::memcpy(gateway, bytes, kStolenLength);
-            new (gateway + kStolenLength) REL::ASM::JMP14{ target + kStolenLength };
-            g_original = reinterpret_cast<Set3D_t*>(gateway);
-
-            const auto branch = trampoline.allocate_branch5(reinterpret_cast<std::uintptr_t>(&Set3DDetour));
-            const REL::ASM::JMP5 jmp{ target, branch };
-            if (!REL::WriteSafeData(target, jmp)) {
-                REX::ERROR("[OSFDefeat] failed to patch Set3D hook");
-                return false;
-            }
-            if constexpr (kStolenLength > sizeof(jmp)) {
-                (void)REL::WriteSafeFill(target + sizeof(jmp), 0x90, kStolenLength - sizeof(jmp));
-            }
-
-            REX::INFO("[OSFDefeat] installed 3D-reattach re-assert hook at {:X}", target);
-            return true;
-        }
     }
 
     void Install()
     {
-        if (g_hooked.exchange(true)) {
+        const auto target = kSet3DID.address();
+        const auto* const bytes = reinterpret_cast<const std::uint8_t*>(target);
+        if (!std::equal(kExpectedPrologue.begin(), kExpectedPrologue.end(), bytes)) {
+            REX::ERROR("[OSFDefeat] Set3D prologue mismatch; 3D-reattach re-assert disabled");
             return;
         }
-        g_hooked.store(InstallHook());
+
+        auto& trampoline = REL::GetTrampoline();
+        auto* const gateway = static_cast<std::uint8_t*>(trampoline.allocate(kStolenLength + sizeof(REL::ASM::JMP14)));
+        std::memcpy(gateway, bytes, kStolenLength);
+        new (gateway + kStolenLength) REL::ASM::JMP14{ target + kStolenLength };
+        g_original = reinterpret_cast<Set3D_t*>(gateway);
+
+        const auto branch = trampoline.allocate_branch5(reinterpret_cast<std::uintptr_t>(&Set3DDetour));
+        const REL::ASM::JMP5 jmp{ target, branch };
+        if (!REL::WriteSafeData(target, jmp)) {
+            REX::ERROR("[OSFDefeat] failed to patch Set3D hook");
+            return;
+        }
+        if constexpr (kStolenLength > sizeof(jmp)) {
+            (void)REL::WriteSafeFill(target + sizeof(jmp), 0x90, kStolenLength - sizeof(jmp));
+        }
+
+        REX::INFO("[OSFDefeat] installed 3D-reattach re-assert hook at {:X}", target);
     }
 }

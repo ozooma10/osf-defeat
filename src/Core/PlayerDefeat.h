@@ -6,6 +6,7 @@
 
 namespace OSFDefeat::PlayerDefeat
 {
+    // Called once at kPostDataLoad, after Decision::Initialize.
     void Install();
     void BeginPlayerDefeat(RE::Actor* a_aggressor = nullptr, DefeatCause a_cause = DefeatCause::kScripted);
     void ResetTransientState();

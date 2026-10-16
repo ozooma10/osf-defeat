@@ -6,13 +6,6 @@ namespace OSFDefeat
 {
 	using FormID = std::uint32_t;
 
-	enum class DefeatPhase
-	{
-		kApplying,   // engine down state is being applied
-		kActive,     // the framework defeat is active
-		kRecovering  // recovery is in progress
-	};
-
 	// How the actor went down (persisted; Papyrus GetDefeatCause / GetLastPlayerDefeatCause).
 	// kScripted = the DefeatActor verb (surrender keys, capture, content-driven defeats), which
 	// content can route distinctly from a Health-down. Values are API-stable.
@@ -49,7 +42,6 @@ namespace OSFDefeat
 		std::atomic<float>       autoRecoverAtDay{ 0.0f };  // absolute game-day auto-recovery deadline; <=0 = recovery held (persisted)
 		FormID                   aggressor{ 0 };         // who downed this actor, or 0
 		std::atomic<DefeatCause> cause{ DefeatCause::kNone };  // how they went down (persisted); write-once at defeat
-		std::atomic<DefeatPhase> phase{ DefeatPhase::kApplying };
 		ActorStateSnapshot       priorState;  // game-thread only; Save is serialized by RuntimeMutation
 
 		// Defeat lease (persisted). A recovery hold (autoRecoverAtDay <= 0) may be leased by a

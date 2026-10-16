@@ -30,10 +30,7 @@ namespace OSFDefeat::PlayerDefeat
         constexpr float kLethalHealthFloor = 5.0f;
 
         ModActorValue_t* g_original = nullptr;
-        std::atomic_bool g_hooked{ false };
         std::atomic_bool g_pendingDefeat{ false };
-        std::atomic_bool g_workerStarted{ false };
-        std::atomic_bool g_tickQueued{ false };
 
         // --- Recent hostile-attacker recording -----------------------------------------------------
         // Who damaged the player recently, fed passively by the hook below. This is the recent-attacker
@@ -139,39 +136,35 @@ namespace OSFDefeat::PlayerDefeat
         // consumes via a queued broadcast.
         std::atomic_bool g_imminentSignaled{ false };
 
-        void QueueImminentBroadcast()
+        void QueueImminentBroadcast(RE::BSService::TaskQueue& a_tasks, std::uint64_t a_epoch)
         {
-            if (const auto* const tasks = SFSE::GetTaskInterface()) {
-                const auto epoch = RuntimeMutation::CurrentEpoch();
-                tasks->AddTask([epoch]() {
-                    if (!RuntimeMutation::IsCurrent(epoch)) {
-                        return;
-                    }
-                    auto* const player = static_cast<RE::Actor*>(RE::PlayerCharacter::GetSingleton());
-                    if (player && !Defeat::IsDefeated(player)) {
-                        Events::BroadcastPlayerDefeatImminent();
-                    }
-                });
-            }
+            a_tasks.AddTask([a_epoch]() {
+                if (!RuntimeMutation::IsCurrent(a_epoch)) {
+                    return;
+                }
+                auto* const player = static_cast<RE::Actor*>(RE::PlayerCharacter::GetSingleton());
+                if (player && !Defeat::IsDefeated(player)) {
+                    Events::BroadcastPlayerDefeatImminent();
+                }
+            });
         }
 
-        void MaybeSignalImminent(RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info, float a_current, float a_delta)
+        [[nodiscard]] bool ShouldSignalImminent(RE::ActorValueOwner* a_owner, const RE::ActorValueInfo& a_info, float a_current, float a_delta)
         {
             const float fraction = Config::ImminentHealthFraction();
             if (fraction <= 0.0f || &a_info != Engine::HealthAV()) {
-                return;
+                return false;
             }
             const float maxValue = a_owner->GetPermanentActorValue(a_info);
             if (maxValue <= 0.0f) {
-                return;
+                return false;
             }
             if (a_current + a_delta <= maxValue * fraction) {
-                if (!g_imminentSignaled.exchange(true)) {
-                    QueueImminentBroadcast();
-                }
+                return !g_imminentSignaled.exchange(true);
             } else {
                 g_imminentSignaled.store(false);  // back above the threshold: re-arm
             }
+            return false;
         }
 
         [[nodiscard]] RE::Actor* PlayerActor()
@@ -182,28 +175,18 @@ namespace OSFDefeat::PlayerDefeat
         [[nodiscard]] bool IsPlayerAVOwner(RE::ActorValueOwner* a_owner)
         {
             auto* const player = PlayerActor();
-            return player && a_owner == Engine::AVOwnerOf(player);
+            return player && a_owner == &Engine::AVOwnerOf(*player);
         }
 
-        [[nodiscard]] bool QueueBegin(RE::TESObjectREFR* a_ref, DefeatCause a_cause)
+        void QueueBegin(RE::BSService::TaskQueue& a_tasks, FormID a_aggressorId, DefeatCause a_cause, std::uint64_t a_epoch)
         {
-            const auto* const tasks = SFSE::GetTaskInterface();
-            if (!tasks) {
-                return false;
-            }
-            bool expected = false;
-            if (!g_pendingDefeat.compare_exchange_strong(expected, true)) {
-                return true;  // a previously accepted lethal hit already committed the defeat
-            }
-
-            const FormID aggressorId = a_ref ? a_ref->GetFormID() : 0;
-            const auto epoch = RuntimeMutation::CurrentEpoch();
-            tasks->AddTask([aggressorId, a_cause, epoch]() {
-                    if (!RuntimeMutation::IsCurrent(epoch)) {
-                        g_pendingDefeat.store(false);
+            a_tasks.AddTask([a_aggressorId, a_cause, a_epoch]() {
+                    if (!RuntimeMutation::IsCurrent(a_epoch)) {
+                        // Revert owns resetting the latch. An old callback must not clear a
+                        // newly accepted defeat in the next save.
                         return;
                     }
-                    auto* aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
+                    auto* aggressor = a_aggressorId ? RE::TESForm::LookupByID<RE::Actor>(a_aggressorId) : nullptr;
                     // The slot-7 wrapper (Papyrus/console DamageValue) passes a_ref=null, so there is
                     // no direct dealer. Fall back to who the player was fighting (currentCombatTarget),
                     // resolved here on the game thread. NOT myKiller — that is only written once a kill
@@ -214,7 +197,6 @@ namespace OSFDefeat::PlayerDefeat
                     BeginPlayerDefeat(aggressor, a_cause);
                     g_pendingDefeat.store(false);
                 });
-            return true;
         }
 
         // Health reaches a terminal state (death) through the ModActorValue primitive: we clamp the
@@ -246,15 +228,10 @@ namespace OSFDefeat::PlayerDefeat
             return refr->As<RE::Actor>();
         }
 
-        [[nodiscard]] bool QueueNpcDefeat(FormID a_victimId, FormID a_aggressorId, DefeatCause a_cause)
+        void QueueNpcDefeat(RE::BSService::TaskQueue& a_tasks, FormID a_victimId, FormID a_aggressorId, DefeatCause a_cause, std::uint64_t a_epoch)
         {
-            const auto* const tasks = SFSE::GetTaskInterface();
-            if (!tasks) {
-                return false;
-            }
-            const auto epoch = RuntimeMutation::CurrentEpoch();
-            tasks->AddTask([a_victimId, a_aggressorId, a_cause, epoch]() {
-                if (!RuntimeMutation::IsCurrent(epoch)) {
+            a_tasks.AddTask([a_victimId, a_aggressorId, a_cause, a_epoch]() {
+                if (!RuntimeMutation::IsCurrent(a_epoch)) {
                     return;
                 }
                 auto* const victim = a_victimId ? RE::TESForm::LookupByID<RE::Actor>(a_victimId) : nullptr;
@@ -274,7 +251,6 @@ namespace OSFDefeat::PlayerDefeat
                     }
                 }
             });
-            return true;
         }
 
         // Worker-thread classification: auto-defeat hostile NPCs (flesh, or robots when configured).
@@ -309,8 +285,15 @@ namespace OSFDefeat::PlayerDefeat
             float a_delta,
             RE::TESObjectREFR* a_ref)
         {
-            if (g_original && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
-                const auto cause = DefeatCause::kHealth;
+            // Remember only this call's post-write action. Nothing is submitted until the
+            // original returns: native AddTask may execute inline on its drain owner.
+            enum class AfterDamage { kNone, kImminent, kPlayerDefeat, kNpcDefeat };
+            auto action = AfterDamage::kNone;
+            RE::BSService::TaskQueue* tasks = nullptr;
+            FormID victimId = 0;
+            const auto epoch = RuntimeMutation::CurrentEpoch();
+
+            if (a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
                 if (IsPlayerAVOwner(a_owner)) {
                     RecordAttacker(a_ref);  // recent-hostile-attacker snapshot source (POD-only on this thread)
                     auto* const player = PlayerActor();
@@ -321,7 +304,12 @@ namespace OSFDefeat::PlayerDefeat
                         a_delta = 0.0f;
                     } else {
                         if (!lethal) {
-                            MaybeSignalImminent(a_owner, a_info, current, a_delta);
+                            if (ShouldSignalImminent(a_owner, a_info, current, a_delta)) {
+                                tasks = RuntimeMutation::GetTaskQueue();
+                                if (tasks) {
+                                    action = AfterDamage::kImminent;
+                                }
+                            }
                         } else {
                             const auto verdict = Eligibility::Explain(player, aggressor);
                             if (verdict != Eligibility::Verdict::kOk) {
@@ -329,10 +317,16 @@ namespace OSFDefeat::PlayerDefeat
                             } else if (ResistWindowActive(player->GetFormID())) {
                                 LogPlayerPassthrough("resist window active (ResistDefeat) - vanilla lethality");
                             } else {
-                                if (QueueBegin(a_ref, cause)) {
+                                tasks = RuntimeMutation::GetTaskQueue();
+                                if (tasks) {
+                                    // Reserve before the health write so another lethal hit
+                                    // clamps too without scheduling a duplicate defeat.
+                                    if (!g_pendingDefeat.exchange(true)) {
+                                        action = AfterDamage::kPlayerDefeat;
+                                    }
                                     a_delta = std::max(a_delta, kLethalHealthFloor - current);
                                 } else {
-                                    LogPlayerPassthrough("game-thread task interface unavailable");
+                                    LogPlayerPassthrough("native task queue unavailable");
                                 }
                             }
                         }
@@ -362,10 +356,13 @@ namespace OSFDefeat::PlayerDefeat
                                     REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: resist window active", victim->GetFormID());
                                 }
                             } else {
-                                if (QueueNpcDefeat(victim->GetFormID(), a_ref ? a_ref->GetFormID() : 0, cause)) {
+                                tasks = RuntimeMutation::GetTaskQueue();
+                                if (tasks) {
+                                    victimId = victim->GetFormID();
+                                    action = AfterDamage::kNpcDefeat;
                                     a_delta = std::max(a_delta, kLethalHealthFloor - current);
                                 } else if (Config::IsExplainEnabled()) {
-                                    REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: game-thread task interface unavailable",
+                                    REX::INFO("[OSFDefeat] lethal NPC hit on {:08X} passed through: native task queue unavailable",
                                         victim->GetFormID());
                                 }
                             }
@@ -374,61 +371,23 @@ namespace OSFDefeat::PlayerDefeat
                 }
             }
 
-            if (g_original) {
-                g_original(a_owner, a_modifier, a_info, a_delta, a_ref);
+            // Capture IDs before the engine call; never carry a raw actor/reference into a task.
+            const FormID aggressorId = action != AfterDamage::kNone && a_ref ? a_ref->GetFormID() : 0;
+            g_original(a_owner, a_modifier, a_info, a_delta, a_ref);
+
+            switch (action) {
+            case AfterDamage::kPlayerDefeat:
+                QueueBegin(*tasks, aggressorId, DefeatCause::kHealth, epoch);
+                break;
+            case AfterDamage::kNpcDefeat:
+                QueueNpcDefeat(*tasks, victimId, aggressorId, DefeatCause::kHealth, epoch);
+                break;
+            case AfterDamage::kImminent:
+                QueueImminentBroadcast(*tasks, epoch);
+                break;
+            case AfterDamage::kNone:
+                break;
             }
-        }
-
-        [[nodiscard]] bool InstallHook()
-        {
-            const auto target = kModActorValueID.address();
-            const auto* const bytes = reinterpret_cast<const std::uint8_t*>(target);
-            if (!std::equal(kExpectedPrologue.begin(), kExpectedPrologue.end(), bytes)) {
-                REX::ERROR("[OSFDefeat] ModActorValue prologue mismatch; player lethal hook disabled");
-                return false;
-            }
-
-            auto& trampoline = REL::GetTrampoline();
-            auto* const gateway = static_cast<std::uint8_t*>(trampoline.allocate(kStolenLength + sizeof(REL::ASM::JMP14)));
-            std::memcpy(gateway, bytes, kStolenLength);
-            new (gateway + kStolenLength) REL::ASM::JMP14{ target + kStolenLength };
-            g_original = reinterpret_cast<ModActorValue_t*>(gateway);
-
-            const auto branch = trampoline.allocate_branch5(reinterpret_cast<std::uintptr_t>(&ModActorValueDetour));
-            const REL::ASM::JMP5 jmp{ target, branch };
-            if (!REL::WriteSafeData(target, jmp)) {
-                REX::ERROR("[OSFDefeat] failed to patch ModActorValue hook");
-                return false;
-            }
-            if constexpr (kStolenLength > sizeof(jmp)) {
-                (void)REL::WriteSafeFill(target + sizeof(jmp), 0x90, kStolenLength - sizeof(jmp));
-            }
-
-            REX::INFO("[OSFDefeat] installed player lethal damage hook at {:X}", target);
-            return true;
-        }
-
-        void StartRecoveryWorker()
-        {
-            bool expected = false;
-            if (!g_workerStarted.compare_exchange_strong(expected, true)) {
-                return;
-            }
-
-            std::thread([]() {
-                for (;;) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                    if (const auto* const tasks = SFSE::GetTaskInterface(); tasks && !g_tickQueued.exchange(true)) {
-                        const auto epoch = RuntimeMutation::CurrentEpoch();
-                        tasks->AddTask([epoch]() {
-                            g_tickQueued.store(false);
-                            if (RuntimeMutation::IsCurrent(epoch)) {
-                                Recovery::Tick();
-                            }
-                        });
-                    }
-                }
-            }).detach();
         }
     }
 
@@ -465,7 +424,7 @@ namespace OSFDefeat::PlayerDefeat
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         auto* const player = PlayerActor();
-        // QueueBegin is the eligibility/commit boundary for Health defeats. Do not re-evaluate
+        // The damage hook is the eligibility/commit boundary for Health defeats. Do not re-evaluate
         // mutable config after the hook has already clamped lethal damage.
         if (!player || player->IsDead() || Defeat::IsDefeated(player)) {
             return;
@@ -508,7 +467,7 @@ namespace OSFDefeat::PlayerDefeat
         // consumers such as OSF Surrender. Context-before-quest so a quest's
         // OnQuestInit can already read the payload. We are on the game thread here,
         // so the VM dispatches are safe.
-        DefeatContext::SetPlayerContext(player, a_aggressor, consequence, recentHostileAttackers, a_cause);
+        DefeatContext::SetPlayerContext(a_aggressor, consequence, recentHostileAttackers, a_cause);
         if (consequence.quest && consequence.startQuest) {
             QuestHandoff::TryStartQuestToken(*consequence.quest);
         }
@@ -517,18 +476,36 @@ namespace OSFDefeat::PlayerDefeat
 
     void Install()
     {
-        if (g_hooked.exchange(true)) {
+        const auto target = kModActorValueID.address();
+        const auto* const bytes = reinterpret_cast<const std::uint8_t*>(target);
+        if (!std::equal(kExpectedPrologue.begin(), kExpectedPrologue.end(), bytes)) {
+            REX::ERROR("[OSFDefeat] ModActorValue prologue mismatch; player lethal hook disabled");
             return;
         }
-        g_hooked.store(InstallHook());
-        StartRecoveryWorker();
+
+        auto& trampoline = REL::GetTrampoline();
+        auto* const gateway = static_cast<std::uint8_t*>(trampoline.allocate(kStolenLength + sizeof(REL::ASM::JMP14)));
+        std::memcpy(gateway, bytes, kStolenLength);
+        new (gateway + kStolenLength) REL::ASM::JMP14{ target + kStolenLength };
+        g_original = reinterpret_cast<ModActorValue_t*>(gateway);
+
+        const auto branch = trampoline.allocate_branch5(reinterpret_cast<std::uintptr_t>(&ModActorValueDetour));
+        const REL::ASM::JMP5 jmp{ target, branch };
+        if (!REL::WriteSafeData(target, jmp)) {
+            REX::ERROR("[OSFDefeat] failed to patch ModActorValue hook");
+            return;
+        }
+        if constexpr (kStolenLength > sizeof(jmp)) {
+            (void)REL::WriteSafeFill(target + sizeof(jmp), 0x90, kStolenLength - sizeof(jmp));
+        }
+
+        REX::INFO("[OSFDefeat] installed player lethal damage hook at {:X}", target);
     }
 
     void ResetTransientState()
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         g_pendingDefeat.store(false);
-        g_tickQueued.store(false);
         g_imminentSignaled.store(false);
         {
             std::unique_lock lock{ g_recentAttackersLock };

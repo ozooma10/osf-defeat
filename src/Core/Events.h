@@ -39,7 +39,5 @@ namespace OSFDefeat::Events
     void BroadcastActorDefeated(FormID a_victim, FormID a_aggressor);
     void BroadcastActorRecovered(FormID a_victim, FormID a_aggressor);
 
-    // Wires the dormant Defeat observers to the actor broadcasts. Call once at init.
-    void Install();
     void Clear();
 }

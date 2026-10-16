@@ -40,7 +40,7 @@ When an actor would take a lethal Health hit, OSF Defeat clamps the damage befor
 | Layer | Purpose |
 |---|---|
 | `Core/PlayerDefeat` | ModActorValue clamp (player + opt-in NPC), attribution, and player consequence orchestration. |
-| `Core/Recovery` | Automatic recovery timers, recovery holds, defeat leases, and watchdog tick. |
+| `Core/Recovery` | Automatic recovery timers, recovery holds, defeat leases, and a direct post-Main-update watchdog tick every 500 ms. |
 | `Core/Decision` | Robot/turret classification + hostility, for NPC routing and the auto-defeat gate. |
 | `Core/Reattach` | `Actor::Set3D` hook that re-asserts down-state on 3D reload. |
 | `Core/Consequence` | Loads and selects player consequence JSON. |
@@ -50,14 +50,22 @@ When an actor would take a lethal Health hit, OSF Defeat clamps the damage befor
 | `Core/Defeat` | Defeat/recovery and AI-suspension verbs. |
 | `Core/Capture` | Persistent captor-to-captive relationships layered over defeat. |
 | `Core/Persistence` | OSF Animation persistence client (`OSFD`), including automatic-recovery and lease deadlines. |
-| `Core/RuntimeMutation` | Serializes runtime mutations and invalidates stale deferred work. |
+| `Core/RuntimeMutation` | Coordinates mutations with persistence snapshots, exposes the engine task queue, and invalidates work from a prior save. |
 | `Core/Events` | Player defeated/recovered/consequence Papyrus event registration. |
 | `Engine/Engine` | Starfield primitives for player and NPC down/recovery state. |
 | `Papyrus/Functions` | Native bindings for `OSFDefeat.psc`. |
 
+Worker/VM callbacks submit actor mutations through `RE::BSService::TaskQueue::AddTask`.
+This is the engine's queue; Defeat has no command buffer or polling thread. The queue can execute
+inline on its drain owner, so damage hooks submit defeat only **after the original health write
+returns**, and the 3D hook submits re-assertion after the original attach. Early-boot submissions
+are rejected while native queueing is disabled. Recovery runs directly after Main update.
+
 ## JSON
 
 Default files ship in `dist/SFSE/OSFDefeat` and deploy to `SFSE/OSFDefeat`.
+At runtime, settings, consequences, and overrides use `<Starfield.exe directory>/Data/SFSE/OSFDefeat`.
+MO2 supplies installed mod content through that game's virtual `Data` directory.
 
 Framework settings example (`Settings/default.json`, v3). The shipped file comments these keys out
 so legacy user settings survive an upgrade; remove the `// ` prefix from keys you want to set:
@@ -111,8 +119,9 @@ non-empty authored gates are warned and parked; they never call the known-unmapp
 
 The declarations live in `dist/Scripts/Source/OSFDefeat.psc`, with compiled output in `dist/Scripts/OSFDefeat.pex`.
 
-Mutating `Bool` natives return request acceptance because their engine work is queued. Confirm the
-eventual state with the corresponding query/callback before a dependent action.
+Mutating `Bool` natives return request acceptance, not the operation's result. Work uses the native
+engine queue and may execute inline on its drain owner. Confirm the eventual state with the
+corresponding query/callback before a dependent action.
 
 ```papyrus
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native

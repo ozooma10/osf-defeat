@@ -1,9 +1,10 @@
 # Lethal-handling design — native hooks & defeat recipes
 
 How OSF Defeat intercepts would-be-lethal Health writes and holds an actor in a framework-owned
-defeat state, adapted to Starfield (not a blind Skyrim/Acheron port). Every AddrLib ID below is
-proven against **1.16.244** (`versionlib-1-16-244-0.bin`); the canonical RE store is OSF RE's
-`gameplay.defeat_damage_hook` module (Responses 2026-06-24 … 2026-06-26).
+defeat state, adapted to Starfield (not a blind Skyrim/Acheron port). Damage/reattach evidence for
+**1.16.244** (`versionlib-1-16-244-0.bin`) lives in OSF RE's `gameplay.defeat_damage_hook` module
+(Responses 2026-06-24 … 2026-06-26). Queue semantics come from `engine.main_thread_task_queue`;
+the recovery update seam is reused from OSF Animation's `Maintenance/FrameMaintenance.cpp`.
 
 > History: an earlier draft of this file described an NPC-only `HookTrigger` + `PollTrigger` +
 > `Pipeline` split under `src/Trigger/`. That design was never the shipped code. This document
@@ -15,12 +16,17 @@ proven against **1.16.244** (`versionlib-1-16-244-0.bin`); the canonical RE stor
 |---|---|---|---|
 | Lethal-write clamp | `ActorValueOwner::ModActorValue` slot-6 | **101587** (`0x1419774f0`) | entry detour, 5-byte steal `48 89 5C 24 08`, 9-byte verify gate; slot-7 wrapper (101588) tail-calls it |
 | 3D-reload re-assert | `Actor::Set3D` (vtable slot 0xA8) | **101138** (`0x141948610`) | entry detour, 5-byte steal `48 89 5C 24 10` |
+| Recovery maintenance | post-`Main` update call | **99488 + 0x2D6** (native callee **99406**) | call hook shared with OSF Animation; chains the installed target, then calls recovery directly every 500 ms |
 | NPC combat removal | `ProcessLists::StopCombatAndAlarmOnActor` | **103285** | per-actor disengage (others drop the victim) |
 | Aggressor resolve | `BSPointerHandle::GetSmartPointer` | **35638** | resolves `currentCombatTarget` (Actor+0x298) |
 | Down/recover lifeState | `Actor::SetLifeState` (slot 0x16F) | 100787 | `kBleedOut=8` / `kAlive=0` |
 
-All actor mutation runs on the **game thread**; the detours do arithmetic + a deferred SFSE task
-only (no process-list walks, no worker-thread object mutation).
+Plugin actor mutations run through the **native engine task queue**, or directly after `Main`
+update for recovery. The damage detour classifies and clamps on the calling thread, lets the
+engine finish the original write, then submits its action (no process-list walks).
+`BSService::TaskQueue::AddTask` can run inline on the drain owner, so submission is not a
+promise of next-frame execution. `RuntimeMutation::GetTaskQueue` rejects the early-boot state
+(queue-enabled byte **810305** is zero), where AddTask would run inline on an arbitrary caller.
 
 ## Player path — clamp, don't divert
 
@@ -30,13 +36,23 @@ The `ModActorValue` detour ([src/Core/PlayerDefeat.cpp](src/Core/PlayerDefeat.cp
 a small floor — the engine's terminal path never reads `<= 0`. Not a negate, not a lifeState reroute;
 the only lever is the clamped delta, and the actor is left genuinely alive at the floor (no death race).
 
-A clamp always yields a defeat: it only fires when `Eligibility::CanProcess() && IsEligible(...) &&
-!IsDefeated(player)`, then queues `BeginPlayerDefeat` to the game thread.
+An accepted lethal hit follows this order:
+
+1. Check eligibility, resist state, and native queue availability; reserve the pending player
+   defeat so repeat hits do not dispatch it twice.
+2. Clamp the delta and call the original `ModActorValue` with that delta.
+3. Only after the original returns, submit `BeginPlayerDefeat` through the native queue.
+
+The NPC path uses the same write-before-submit ordering. The queued callback keeps the accepted
+decision rather than rechecking mutable settings, resolves actor IDs, and rejects a stale save epoch.
+This ordering also covers inline execution: applying down-state (including the player's heal)
+before the original write would let that write overwrite the defeat setup. The imminent signal
+is likewise submitted after the nonlethal health write.
 
 Down state ([Engine::SetPlayerDownState](src/Engine/Engine.cpp)): base+instance **Essential** + heal to
 max + `kNoBleedoutRecovery` + `kCanSpeakToEssentialDown` + `SetGhost(true)` +
 `SetLifeState(kBleedOut)` + `StopCombat` + `StopCombatAndAlarmOnActor`. Player AI is deliberately left
-enabled so camera/look remain usable; the presentation scene owns input lock. `RestorePlayerState`
+enabled so camera/look remain usable; the presentation scene owns input lock. `RestoreState`
 restores the exact pre-defeat AI/flag/ghost/life-state/essential snapshot.
 
 ### Aggressor attribution
@@ -63,7 +79,7 @@ by editorID; the true-on-robot positive is the one low-risk runtime item left.
 Down state ([Engine::SetNpcDownState](src/Engine/Engine.cpp)): `kNoBleedoutRecovery` + `SetGhost(true)`
 (invulnerable, so the defeat sticks) + `SetLifeState(kBleedOut)` + `StopCombat` +
 `StopCombatAndAlarmOnActor` (others disengage). **No** essential flip and no global combat-AI gate.
-`RestoreNpcState` heals and restores the exact pre-defeat AI/flag/ghost/life
+`RestoreState` heals and restores the exact pre-defeat AI/flag/ghost/life
 state. `SuspendAI`/`ResumeAI` toggle per-actor AI (`SetAIEnabled`, the `tai`/kProcessMe primitive) —
 never the player — and persist the prior AI value so recovery cannot blindly enable it.
 
@@ -75,11 +91,12 @@ restore, 3D re-assert) routes to the right recipe and ownership snapshot.
 `SetLifeState`/`SetGhost`/`kNoBleedoutRecovery` are silently stripped when an actor's 3D rebuilds (cell
 change / save load / `coc`). The `Actor::Set3D` entry hook ([src/Core/Reattach.cpp](src/Core/Reattach.cpp))
 detects an **attach** (`a_new3D != null`) of a still-defeated actor, lets the engine finish, then queues an
-idempotent `ApplyDownState` re-assert for the next frame — replacing a lifeState poll.
+idempotent `ApplyDownState` re-assert through the native queue, after the original attach returns.
 
 ## Recovery & persistence
 
-A 500 ms worker queues `TickRecovery` on the game thread, which recovers any defeated actor past its
+The post-`Main`-update hook calls `Recovery::Tick` directly every 500 ms of steady-clock time;
+there is no worker, queued tick, or catch-up loop. It recovers any defeated actor past its
 `autoRecoverAtDay` deadline. Held entries (`autoRecoverAtDay <= 0`, e.g. an NPC awaiting explicit content
 recovery) wait for `RecoverActor`. State persists through OSF Animation's `.osf` sidecar (`OSFD` client,
 backward-compatible `DFT0` v2 plus capture-relationship, AI-suspension, and faction-ownership records) and is re-applied on the game
@@ -104,18 +121,24 @@ in the newly loaded state.
 
 ## In-game validation
 
+The native-queue/direct-update integration still needs a fresh in-game run of these cases.
+
 Log: `Documents\My Games\Starfield\SFSE\Logs\OSFDefeat.log`.
 
-1. **Install** — expect `installed player lethal damage hook at {X}` and `installed 3D-reattach re-assert
-   hook at {X}`. A `prologue mismatch` line means the seam drifted on a game update; that hook
-   self-disables cleanly and the rest is unaffected.
+1. **Install** — expect `installed direct recovery update at 99488+0x2D6`, `installed player lethal
+   damage hook at {X}`, and `installed 3D-reattach re-assert hook at {X}`. A `prologue mismatch`
+   disables the affected damage/reattach hook; a failed recovery hook stops framework initialization.
 2. **Player Health** — take a lethal hit → defeat (bleedout, ghost, disengage), recover after the timer.
 3. **Attribution** — a console `damageav health 9999` while fighting an NPC attributes that NPC (via
-   `currentCombatTarget`); a non-combat `damageav` stays `00000000`.
+   `currentCombatTarget`); a non-combat `damageav` stays `00000000`. Exercise both console/native-drain
+   damage and combat-worker damage: defeat must see the completed clamped write in both paths.
+4. **Save transition** — save/load while defeated and load another save with a pending defeat;
+   restoration must persist, while the prior save's callbacks must not affect the new state.
 5. **NPC defeat** — with `npcAutoDefeat` enabled, a would-be-lethal hit on a hostile NPC drops it into
    bleedout+ghost and others disengage; it recovers on the timer (or via a content `OSFDefeat.RecoverActor`).
 6. **3D re-assert** — defeat, then `coc` round-trip → state holds.
 
 ### Fallback
-Each hook is independently prologue-gated and self-disables on drift. To hard-disable a path, drop its
-`Install()` call in [src/main.cpp](src/main.cpp).
+Damage/reattach hooks are independently prologue-gated. The recovery hook accepts a call instruction
+and chains its current target, so it can coexist with OSF Animation at the same update seam.
+Recovery must install before any defeat entry points are enabled.

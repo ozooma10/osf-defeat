@@ -2,6 +2,8 @@
 
 #include "Core/Config.h"
 
+#include "REX/FModule.h"
+
 #include <nlohmann/json.hpp>
 
 namespace OSFDefeat::Config
@@ -9,7 +11,6 @@ namespace OSFDefeat::Config
     namespace
     {
         FrameworkSettings g_config;
-        std::filesystem::path g_root;
         std::shared_mutex g_lock;
 
         [[nodiscard]] std::optional<FormID> ParseFormID(const nlohmann::json& a_value)
@@ -54,33 +55,6 @@ namespace OSFDefeat::Config
                     throw std::runtime_error(std::format("{} entry is not a numeric formID", a_key));
                 }
             }
-        }
-
-        [[nodiscard]] std::vector<std::filesystem::path> CandidateRoots()
-        {
-            std::vector<std::filesystem::path> roots;
-            const auto cwd = std::filesystem::current_path();
-            roots.push_back(cwd / "Data" / "SFSE" / "OSFDefeat");
-            roots.push_back(cwd / "SFSE" / "OSFDefeat");
-            roots.push_back(cwd / "dist" / "SFSE" / "OSFDefeat");
-
-            if (const char* const gameRoot = std::getenv("XSE_SF_GAME_PATH"); gameRoot && *gameRoot) {
-                roots.emplace_back(std::filesystem::path{ gameRoot } / "Data" / "SFSE" / "OSFDefeat");
-            }
-            if (const char* const modsRoot = std::getenv("XSE_SF_MODS_PATH"); modsRoot && *modsRoot) {
-                roots.emplace_back(std::filesystem::path{ modsRoot } / "OSF Defeat" / "SFSE" / "OSFDefeat");
-            }
-            return roots;
-        }
-
-        [[nodiscard]] std::filesystem::path ResolveRoot()
-        {
-            for (const auto& root : CandidateRoots()) {
-                if (std::filesystem::exists(root)) {
-                    return root;
-                }
-            }
-            return std::filesystem::current_path() / "Data" / "SFSE" / "OSFDefeat";
         }
 
         void LoadFile(const std::filesystem::path& a_path, FrameworkSettings& a_config)
@@ -192,9 +166,8 @@ namespace OSFDefeat::Config
     void Load()
     {
         FrameworkSettings next;
-        auto root = std::filesystem::path{};
         try {
-            root = ResolveRoot();
+            const auto& root = RootPath();
             const auto legacyRoot = root / "Validation";
             const auto settingsRoot = root / "Settings";
             if (std::filesystem::exists(legacyRoot)) {
@@ -220,13 +193,11 @@ namespace OSFDefeat::Config
                 REX::INFO("[OSFDefeat] no settings directory at {}; using defaults", settingsRoot.string());
             }
         } catch (const std::exception& e) {
-            REX::ERROR("[OSFDefeat] settings directory discovery failed: {}; using defaults", e.what());
-            root.clear();
+            REX::ERROR("[OSFDefeat] settings directory read failed: {}", e.what());
         }
 
         std::unique_lock lock{ g_lock };
         g_config = std::move(next);
-        g_root = root;
     }
 
     void Reload() { Load(); }
@@ -241,21 +212,6 @@ namespace OSFDefeat::Config
     {
         std::shared_lock lock{ g_lock };
         return g_config.processingEnabled;
-    }
-
-    bool IsLocationExcluded(RE::BGSLocation* a_location)
-    {
-        if (!a_location) {
-            return false;
-        }
-        std::shared_lock lock{ g_lock };
-        return g_config.excludedLocations.contains(a_location->GetFormID());
-    }
-
-    bool HasExcludedLocations()
-    {
-        std::shared_lock lock{ g_lock };
-        return !g_config.excludedLocations.empty();
     }
 
     bool ShouldDisableInScenes()
@@ -312,9 +268,10 @@ namespace OSFDefeat::Config
         return g_config.imminentHealthFraction;
     }
 
-    std::filesystem::path RootPath()
+    const std::filesystem::path& RootPath()
     {
-        std::shared_lock lock{ g_lock };
-        return g_root.empty() ? ResolveRoot() : g_root;
+        static const auto root = std::filesystem::path{ REX::FModule::GetExecutingModule().GetFileName() }.parent_path()
+            / "Data" / "SFSE" / "OSFDefeat";
+        return root;
     }
 }

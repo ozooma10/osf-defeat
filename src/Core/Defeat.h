@@ -6,11 +6,6 @@
 
 namespace OSFDefeat::Defeat
 {
-	using Observer = std::function<void(FormID a_victim, FormID a_aggressor)>;
-
-	void SetOnDefeat(Observer a_observer);
-	void SetOnRecovery(Observer a_observer);
-
 	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause = DefeatCause::kScripted);
 	bool RecoverActor(RE::Actor* a_actor, bool a_resumeAI);
 

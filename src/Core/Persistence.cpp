@@ -74,29 +74,27 @@ namespace OSFDefeat::Persistence
             std::vector<AISuspensionRecord> aiSuspensions;
         };
 
-        std::atomic_uint64_t g_loadGeneration{ 0 };
         std::uint8_t         g_clientContext{};
-        std::atomic_bool     g_registered{ false };
 
+        // Save/Load validate the interface once at the callback boundary. These private helpers
+        // check record contents and I/O results, using that already-validated reader/writer.
         template <class T>
         bool WriteValue(OSFRecordWriterV1* a_writer, const T& a_value)
         {
             static_assert(std::is_trivially_copyable_v<T>);
-            return a_writer && a_writer->WriteRecordData &&
-                   a_writer->WriteRecordData(a_writer, &a_value, static_cast<std::uint32_t>(sizeof(T))) != 0;
+            return a_writer->WriteRecordData(a_writer, &a_value, static_cast<std::uint32_t>(sizeof(T))) != 0;
         }
 
         bool WriteBytes(OSFRecordWriterV1* a_writer, const void* a_data, std::uint32_t a_length)
         {
-            return a_length == 0 || (a_writer && a_writer->WriteRecordData &&
-                   a_writer->WriteRecordData(a_writer, a_data, a_length) != 0);
+            return a_length == 0 || a_writer->WriteRecordData(a_writer, a_data, a_length) != 0;
         }
 
         template <class T>
         bool ReadValue(OSFRecordReaderV1* a_reader, std::uint32_t& a_remaining, T& a_value)
         {
             static_assert(std::is_trivially_copyable_v<T>);
-            if (!a_reader || !a_reader->ReadRecordData || a_remaining < sizeof(T)) {
+            if (a_remaining < sizeof(T)) {
                 return false;
             }
             if (a_reader->ReadRecordData(a_reader, &a_value, static_cast<std::uint32_t>(sizeof(T))) != sizeof(T)) {
@@ -108,7 +106,7 @@ namespace OSFDefeat::Persistence
 
         bool ReadBytes(OSFRecordReaderV1* a_reader, std::uint32_t& a_remaining, void* a_data, std::uint32_t a_length)
         {
-            if (!a_reader || !a_reader->ReadRecordData || a_length > a_remaining) {
+            if (a_length > a_remaining) {
                 return false;
             }
             if (a_length > 0 && a_reader->ReadRecordData(a_reader, a_data, a_length) != a_length) {
@@ -120,14 +118,13 @@ namespace OSFDefeat::Persistence
 
         bool ResolveRequired(OSFRecordReaderV1* a_reader, FormID a_saved, FormID& a_resolved)
         {
-            return a_saved != 0 && a_reader && a_reader->ResolveFormID &&
-                   a_reader->ResolveFormID(a_reader, a_saved, &a_resolved) != 0;
+            return a_saved != 0 && a_reader->ResolveFormID(a_reader, a_saved, &a_resolved) != 0;
         }
 
         FormID ResolveOptional(OSFRecordReaderV1* a_reader, FormID a_saved)
         {
             FormID resolved{};
-            return a_saved != 0 && ResolveRequired(a_reader, a_saved, resolved) ? resolved : 0;
+            return ResolveRequired(a_reader, a_saved, resolved) ? resolved : 0;
         }
 
         std::vector<DefeatedRecord> SnapshotDefeated()
@@ -432,9 +429,9 @@ namespace OSFDefeat::Persistence
             return a_length == 0;
         }
 
-        void ApplyLoadedState(LoadedState a_state, std::uint64_t a_generation, std::uint64_t a_epoch)
+        void ApplyLoadedState(LoadedState a_state, std::uint64_t a_epoch)
         {
-            if (g_loadGeneration.load(std::memory_order_acquire) != a_generation || !RuntimeMutation::IsCurrent(a_epoch)) {
+            if (!RuntimeMutation::IsCurrent(a_epoch)) {
                 REX::WARN("[OSFDefeat] discarded stale deferred persistence load");
                 return;
             }
@@ -486,15 +483,14 @@ namespace OSFDefeat::Persistence
                         return 0;
                     }
                 }
-                const auto* const tasks = SFSE::GetTaskInterface();
+                auto* const tasks = RuntimeMutation::GetTaskQueue();
                 if (!tasks) {
-                    REX::ERROR("[OSFDefeat] task interface unavailable; persistence load not applied");
+                    REX::ERROR("[OSFDefeat] native task queue unavailable; persistence load not applied");
                     return 0;
                 }
-                const auto generation = g_loadGeneration.load(std::memory_order_acquire);
                 const auto epoch = RuntimeMutation::CurrentEpoch();
-                tasks->AddTask([state = std::move(state), generation, epoch]() mutable {
-                    ApplyLoadedState(std::move(state), generation, epoch);
+                tasks->AddTask([state = std::move(state), epoch]() mutable {
+                    ApplyLoadedState(std::move(state), epoch);
                 });
                 return 1;
             } catch (const std::exception& e) {
@@ -507,11 +503,10 @@ namespace OSFDefeat::Persistence
 
         void OSF_PERSISTENCE_CALL Revert(void*)
         {
-            g_loadGeneration.fetch_add(1, std::memory_order_acq_rel);
             const auto epoch = RuntimeMutation::AdvanceEpoch();
-            const auto* const tasks = SFSE::GetTaskInterface();
+            auto* const tasks = RuntimeMutation::GetTaskQueue();
             if (!tasks) {
-                REX::ERROR("[OSFDefeat] task interface unavailable; runtime revert could not be applied safely");
+                REX::ERROR("[OSFDefeat] native task queue unavailable; runtime revert could not be applied safely");
                 return;
             }
             tasks->AddTask([epoch]() {
@@ -537,9 +532,6 @@ namespace OSFDefeat::Persistence
 
     void Register()
     {
-        if (g_registered.load(std::memory_order_acquire)) {
-            return;
-        }
         const auto module = REX::W32::GetModuleHandleW(L"OSF Animation.dll");
         if (!module) {
             REX::ERROR("[OSFDefeat] OSF Animation module unavailable; persistence disabled");
@@ -569,7 +561,6 @@ namespace OSFDefeat::Persistence
             REX::ERROR("[OSFDefeat] failed to register OSFD persistence client");
             return;
         }
-        g_registered.store(true, std::memory_order_release);
         std::uint32_t major{}, minor{}, patch{};
         api->GetPluginVersion(api, &major, &minor, &patch);
         REX::INFO("[OSFDefeat] OSF persistence registered (ABI {:#x}, OSF Animation {}.{}.{})",

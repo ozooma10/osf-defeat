@@ -1,6 +1,6 @@
 # OSF Defeat Papyrus API
 
-`OSFDefeat.psc` is the public alpha API. Calls that mutate game state are marshaled to the game thread by the native plugin. Their `Bool` return value means the request was accepted for dispatch, not that the deferred operation succeeded. Confirm state with the matching query/callback before starting a dependent transition (for example, wait until `IsDefeated(actor)` is false before handing the player to another quest pipeline).
+`OSFDefeat.psc` is the public alpha API. Calls that mutate game state use the native engine task queue. They may execute inline when already on its drain owner; otherwise they run in a later drain. Their `Bool` return value means the request was accepted for dispatch, not that the operation succeeded. Confirm state with the matching query/callback before starting a dependent transition (for example, wait until `IsDefeated(actor)` is false before handing the player to another quest pipeline).
 
 ## Verbs
 

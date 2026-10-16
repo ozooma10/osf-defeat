@@ -12,8 +12,6 @@ namespace OSFDefeat::Defeat
 {
     namespace
     {
-        Observer g_onDefeat;
-        Observer g_onRecovery;
         std::map<FormID, bool> g_aiSuspensions;  // actor ID -> AI-enabled state before OSF suspended it
         std::shared_mutex g_aiSuspensionsLock;
 
@@ -23,9 +21,6 @@ namespace OSFDefeat::Defeat
             return cal ? cal->GetDaysPassedExact() : 0.0f;
         }
     }
-
-    void SetOnDefeat(Observer a_observer) { g_onDefeat = std::move(a_observer); }
-    void SetOnRecovery(Observer a_observer) { g_onRecovery = std::move(a_observer); }
 
     bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
@@ -42,17 +37,14 @@ namespace OSFDefeat::Defeat
         }
 
         data->cause = a_cause;
-        data->phase.store(DefeatPhase::kActive);
-        Engine::ApplyDownState(a_victim, data);
+        Engine::ApplyDownState(*a_victim, *data);
         REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
 
         if (a_victim->IsPlayerRef()) {
             Presentation::ShowPlayerDown();
             Events::BroadcastPlayerDefeated();
         }
-        if (g_onDefeat) {
-            g_onDefeat(id, aggressorId);
-        }
+        Events::BroadcastActorDefeated(id, aggressorId);
         return true;
     }
 
@@ -69,14 +61,11 @@ namespace OSFDefeat::Defeat
             return false;
         }
 
-        auto expected = DefeatPhase::kActive;
-        if (!data->phase.compare_exchange_strong(expected, DefeatPhase::kRecovering)) {
-            return false;
-        }
-
         const FormID aggressorId = data->aggressor;
+        // Remove under the mutation lock before engine calls or notifications can re-enter.
+        // Repeated recovery then finds no active record and has nothing to restore twice.
         DefeatRegistry::Remove(id);
-        Engine::RestoreState(a_actor, data);
+        Engine::RestoreState(*a_actor, *data);
         if (a_actor->IsPlayerRef()) {
             Presentation::ClearPlayerDown();  // stop the cower + release the lock + restore camera
         }
@@ -90,9 +79,7 @@ namespace OSFDefeat::Defeat
         if (a_actor->IsPlayerRef()) {
             Events::BroadcastPlayerRecovered();
         }
-        if (g_onRecovery) {
-            g_onRecovery(id, aggressorId);
-        }
+        Events::BroadcastActorRecovered(id, aggressorId);
         return true;
     }
 
@@ -132,7 +119,7 @@ namespace OSFDefeat::Defeat
         // entry so a later load can still clean the membership.
         for (const auto& [actorId, factionId] : Engine::SnapshotCaptiveFactions()) {
             if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                Engine::RemoveCaptiveFaction(actor);
+                Engine::RemoveCaptiveFaction(*actor);
             }
         }
 
@@ -193,11 +180,10 @@ namespace OSFDefeat::Defeat
             data->SetLeaseHolderId(std::move(a_leaseHolderId));
             data->cause = a_cause;
             data->priorState = a_priorState;
-            data->phase.store(DefeatPhase::kActive);
             // Re-apply down-state on load. The flag writes are safe on an unloaded actor; the Set3D
             // hook re-asserts again once its 3D (re)builds, so this covers both loaded and unloaded.
             if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(a_id)) {
-                Engine::ApplyDownState(actor, data);
+                Engine::ApplyDownState(*actor, *data);
             }
         }
     }

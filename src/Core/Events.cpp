@@ -2,8 +2,6 @@
 
 #include "Core/Events.h"
 
-#include "Core/Defeat.h"
-
 #include "RE/B/BSScriptUtil.h"
 #include "RE/G/GameVM.h"
 #include "RE/I/IVirtualMachine.h"
@@ -161,14 +159,6 @@ namespace OSFDefeat::Events
     void BroadcastPlayerDefeatImminent() { g_playerDefeatImminent.Dispatch(&NoArgs); }
     void BroadcastActorDefeated(FormID a_victim, FormID a_aggressor) { g_actorDefeated.Dispatch(ActorArgs(a_victim, a_aggressor)); }
     void BroadcastActorRecovered(FormID a_victim, FormID a_aggressor) { g_actorRecovered.Dispatch(ActorArgs(a_victim, a_aggressor)); }
-
-    void Install()
-    {
-        // Light up the Defeat observers so every defeat/recovery (player AND NPC) fans out to
-        // OnActorDefeated/OnActorRecovered callbacks. Fires on the game thread (DefeatActor/RecoverActor).
-        Defeat::SetOnDefeat([](FormID a_victim, FormID a_aggressor) { BroadcastActorDefeated(a_victim, a_aggressor); });
-        Defeat::SetOnRecovery([](FormID a_victim, FormID a_aggressor) { BroadcastActorRecovered(a_victim, a_aggressor); });
-    }
 
     void Clear()
     {

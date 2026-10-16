@@ -8,35 +8,30 @@ namespace OSFDefeat::Decision
 {
     namespace
     {
-        // ActorTypeRobot/ActorTypeTurret are pure ESM content (no engine default object, no exe
-        // string), so resolve by editorID. Cache the first non-null hit — the lookup can return null
-        // before forms finish loading, so retry until it resolves.
-        RE::BGSKeyword* RobotKeyword()
-        {
-            static RE::BGSKeyword* cached = nullptr;
-            if (!cached) {
-                cached = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ActorTypeRobot");
-            }
-            return cached;
-        }
+        // Set once after data load, before damage hooks and Papyrus bindings can classify actors.
+        RE::BGSKeyword* g_robotKeyword = nullptr;
+        RE::BGSKeyword* g_turretKeyword = nullptr;
+    }
 
-        RE::BGSKeyword* TurretKeyword()
-        {
-            static RE::BGSKeyword* cached = nullptr;
-            if (!cached) {
-                cached = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ActorTypeTurret");
-            }
-            return cached;
+    void Initialize()
+    {
+        g_robotKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ActorTypeRobot");
+        g_turretKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ActorTypeTurret");
+        if (!g_robotKeyword) {
+            REX::WARN("[OSFDefeat] ActorTypeRobot keyword unavailable; robot classification disabled");
+        }
+        if (!g_turretKeyword) {
+            REX::WARN("[OSFDefeat] ActorTypeTurret keyword unavailable; turret classification disabled");
         }
     }
 
     ActorClass Classify(RE::Actor* a_actor)
     {
         if (a_actor) {
-            if (auto* const turret = TurretKeyword(); turret && a_actor->HasKeyword(turret)) {
+            if (g_turretKeyword && a_actor->HasKeyword(g_turretKeyword)) {
                 return ActorClass::Turret;
             }
-            if (auto* const robot = RobotKeyword(); robot && a_actor->HasKeyword(robot)) {
+            if (g_robotKeyword && a_actor->HasKeyword(g_robotKeyword)) {
                 return ActorClass::Robot;
             }
         }

@@ -7,11 +7,28 @@
 #include "Core/DefeatRegistry.h"
 #include "Core/Presentation.h"
 #include "Core/RuntimeMutation.h"
+#include "REL/THook.h"
 
 namespace OSFDefeat::Recovery
 {
     namespace
     {
+        constexpr REL::ID kMainLoopID{ 99488 };
+        constexpr std::ptrdiff_t kMainUpdateCallOffset = 0x2D6;
+        constexpr auto kTickInterval = std::chrono::milliseconds{ 500 };
+        std::optional<REL::THook<void()>> g_updateHook;
+        std::chrono::steady_clock::time_point g_nextTick;
+
+        void Update()
+        {
+            (*g_updateHook)();
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= g_nextTick) {
+                g_nextTick = now + kTickInterval;
+                Tick();
+            }
+        }
+
         [[nodiscard]] float NowDay()
         {
             const auto* const calendar = RE::Calendar::GetSingleton();
@@ -23,6 +40,21 @@ namespace OSFDefeat::Recovery
             const auto* const calendar = RE::Calendar::GetSingleton();
             return calendar ? std::max(1.0f, calendar->GetTimeScale()) : 20.0f;
         }
+    }
+
+    bool Install()
+    {
+        // Same post-Main-update seam used by OSF Animation (native callee 99406).
+        // THook chains the installed target, including another plugin's existing hook.
+        g_updateHook.emplace("[OSFDefeat] Recovery::MainUpdate", kMainLoopID, kMainUpdateCallOffset, &Update);
+        const auto type = g_updateHook->GetType();
+        if ((type != REL::EHookType::CALL5 && type != REL::EHookType::CALL6) ||
+            !g_updateHook->Init() || !g_updateHook->Enable()) {
+            REX::ERROR("[OSFDefeat] recovery update hook could not be installed at 99488+0x{:X}", kMainUpdateCallOffset);
+            return false;
+        }
+        REX::INFO("[OSFDefeat] installed direct recovery update at 99488+0x{:X} (500 ms cadence)", kMainUpdateCallOffset);
+        return true;
     }
 
     float DeadlineForSeconds(float a_realSeconds)

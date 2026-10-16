@@ -296,18 +296,19 @@ namespace OSFDefeat::Consequence
             const auto& consequence = entry.get();
             if (consequence.priority == bestPriority) {
                 pool.emplace_back(consequence);
-                totalWeight += std::max(1, consequence.weight);
+                totalWeight += consequence.weight;
             }
         }
 
         static thread_local std::mt19937 rng{ std::random_device{}() };
-        std::uniform_int_distribution<std::int64_t> dist{ 1, std::max<std::int64_t>(1, totalWeight) };
+        // The pool is nonempty and both JSON loaders normalize every weight to at least one.
+        std::uniform_int_distribution<std::int64_t> dist{ 1, totalWeight };
         const auto roll = dist(rng);
         auto remaining = roll;
         const PlayerConsequence* selected = &pool.front().get();
         for (const auto& entry : pool) {
             const auto& consequence = entry.get();
-            remaining -= std::max(1, consequence.weight);
+            remaining -= consequence.weight;
             if (remaining <= 0) {
                 selected = &consequence;
                 break;

@@ -28,7 +28,7 @@ namespace OSFDefeat::Papyrus
         template <class Fn>
         bool QueueGameTask(Fn a_fn)
         {
-            const auto* const tasks = SFSE::GetTaskInterface();
+            auto* const tasks = RuntimeMutation::GetTaskQueue();
             if (!tasks) {
                 return false;
             }
@@ -52,7 +52,7 @@ namespace OSFDefeat::Papyrus
             return QueueGameTask([victimId, aggressorId]() {
                 auto* const victim = RE::TESForm::LookupByID<RE::Actor>(victimId);
                 auto* const aggressor = aggressorId ? RE::TESForm::LookupByID<RE::Actor>(aggressorId) : nullptr;
-                if (Eligibility::CanProcess() && Eligibility::IsEligible(victim, aggressor)) {
+                if (Eligibility::IsEligible(victim, aggressor)) {
                     Defeat::DefeatActor(victim, aggressor);
                 }
             });
@@ -243,7 +243,7 @@ namespace OSFDefeat::Papyrus
             const FormID actorId = a_actor->GetFormID();
             return QueueGameTask([actorId]() {
                 if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Engine::ApplyCaptiveFaction(actor);
+                    Engine::ApplyCaptiveFaction(*actor);
                 }
             });
         }
@@ -257,14 +257,14 @@ namespace OSFDefeat::Papyrus
             const FormID actorId = a_actor->GetFormID();
             return QueueGameTask([actorId]() {
                 if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(actorId)) {
-                    Engine::RemoveCaptiveFaction(actor);
+                    Engine::RemoveCaptiveFaction(*actor);
                 }
             });
         }
 
         bool IsCaptiveFactionApplied(std::monostate, RE::Actor* a_actor)
         {
-            return Engine::HasCaptiveFactionApplied(a_actor);
+            return a_actor && Engine::HasCaptiveFactionApplied(*a_actor);
         }
 
         // Capture hooks (M4): register a defeated NPC as a captor's prisoner. CaptureActor defeats,
@@ -298,8 +298,8 @@ namespace OSFDefeat::Papyrus
             });
         }
 
-        // Move a captive to a marker/ref (brig, ship, cell). Queued so the MoveTo VM-dispatch runs
-        // outside the current native frame.
+        // Move a captive to a marker/ref (brig, ship, cell). Dispatch the MoveTo VM request
+        // through the engine queue; it may run inline when already on the drain owner.
         bool TransferCaptive(std::monostate, RE::Actor* a_actor, RE::TESObjectREFR* a_target)
         {
             if (!a_actor || !a_target) {
@@ -467,11 +467,6 @@ namespace OSFDefeat::Papyrus
             return DefeatContext::GetLastPlayerConsequenceQuest();
         }
 
-        float GetLastPlayerRecoverySeconds(std::monostate)
-        {
-            return DefeatContext::GetLastPlayerRecoverySeconds();
-        }
-
         float GetLastPlayerAutoRecoveryDelaySeconds(std::monostate)
         {
             return DefeatContext::GetLastPlayerAutoRecoveryDelaySeconds();
@@ -480,11 +475,6 @@ namespace OSFDefeat::Papyrus
         bool IsLastPlayerRecoveryHeld(std::monostate)
         {
             return DefeatContext::IsLastPlayerRecoveryHeld();
-        }
-
-        std::vector<RE::Actor*> GetLastPlayerParticipants(std::monostate)
-        {
-            return DefeatContext::GetLastPlayerParticipants();
         }
 
         std::vector<RE::Actor*> GetLastPlayerRecentHostileAttackers(std::monostate)
@@ -545,10 +535,10 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceId", &GetLastPlayerConsequenceId, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceName", &GetLastPlayerConsequenceName, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerConsequenceQuest", &GetLastPlayerConsequenceQuest, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "GetLastPlayerRecoverySeconds", &GetLastPlayerRecoverySeconds, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerRecoverySeconds", &GetLastPlayerAutoRecoveryDelaySeconds, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerAutoRecoveryDelaySeconds", &GetLastPlayerAutoRecoveryDelaySeconds, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsLastPlayerRecoveryHeld", &IsLastPlayerRecoveryHeld, std::nullopt, false);
-        vm->BindNativeMethod(kClass, "GetLastPlayerParticipants", &GetLastPlayerParticipants, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerParticipants", &GetLastPlayerRecentHostileAttackers, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerRecentHostileAttackers", &GetLastPlayerRecentHostileAttackers, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ScheduleAutomaticRecovery", &ScheduleAutomaticRecovery, std::nullopt, false);
         vm->BindNativeMethod(kClass, "HoldRecovery", &HoldRecovery, std::nullopt, false);

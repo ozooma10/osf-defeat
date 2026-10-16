@@ -13,7 +13,6 @@ namespace OSFDefeat::Eligibility
 
     void SetEnabled(bool a_enabled) { g_enabled.store(a_enabled); }
     bool IsEnabled() { return g_enabled.load(); }
-    bool CanProcess() { return IsEnabled() && Config::IsProcessingEnabled(); }
 
     Verdict Explain(RE::Actor* a_victim, RE::Actor* /*a_aggressor*/)
     {

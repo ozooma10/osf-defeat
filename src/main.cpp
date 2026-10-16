@@ -2,11 +2,12 @@
 
 #include "Core/Config.h"
 #include "Core/Consequence.h"
-#include "Core/Events.h"
+#include "Core/Decision.h"
 #include "Core/Persistence.h"
 #include "Core/PlayerDefeat.h"
 #include "Core/Presentation.h"
 #include "Core/Reattach.h"
+#include "Core/Recovery.h"
 #include "Papyrus/Functions.h"
 
 namespace
@@ -18,10 +19,14 @@ namespace
         }
 
         if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
+            OSFDefeat::Decision::Initialize();
+            if (!OSFDefeat::Recovery::Install()) {
+                REX::ERROR("[OSFDefeat] initialization stopped: recovery update is required before enabling defeat");
+                return;
+            }
             OSFDefeat::Persistence::Register();
             OSFDefeat::Config::Load();
             OSFDefeat::Consequence::Load();
-            OSFDefeat::Events::Install();
             OSFDefeat::PlayerDefeat::Install();
             OSFDefeat::Reattach::Install();
             OSFDefeat::Papyrus::Register();

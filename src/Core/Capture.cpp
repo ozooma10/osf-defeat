@@ -45,38 +45,33 @@ namespace OSFDefeat::Capture
         }
 
         // Put the captive down if it isn't already; a capture without a down-state is meaningless.
-        const bool newlyDefeated = !Defeat::IsDefeated(a_captive);
-        std::shared_ptr<ActiveDefeat> existingData;
+        const auto existingData = DefeatRegistry::Get(a_captive->GetFormID());
+        const bool newlyDefeated = !existingData;
         float previousAutoRecoverAtDay = 0.0f;
         float previousLeaseExpiresAtDay = 0.0f;
         std::string previousLeaseHolderId;
-        if (!newlyDefeated) {
-            existingData = DefeatRegistry::Get(a_captive->GetFormID());
-            if (existingData) {
-                previousAutoRecoverAtDay = existingData->autoRecoverAtDay.load(std::memory_order_relaxed);
-                previousLeaseExpiresAtDay = existingData->leaseExpiresAtDay.load(std::memory_order_relaxed);
-                previousLeaseHolderId = existingData->CopyLeaseHolderId();
-            }
-        } else {
-            if (!Defeat::DefeatActor(a_captive, a_captor, DefeatCause::kScripted)) {
-                return false;  // dead / un-defeatable
-            }
+        if (existingData) {
+            previousAutoRecoverAtDay = existingData->autoRecoverAtDay.load(std::memory_order_relaxed);
+            previousLeaseExpiresAtDay = existingData->leaseExpiresAtDay.load(std::memory_order_relaxed);
+            previousLeaseHolderId = existingData->CopyLeaseHolderId();
+        } else if (!Defeat::DefeatActor(a_captive, a_captor, DefeatCause::kScripted)) {
+            return false;  // dead / un-defeatable
         }
 
         // Hold it indefinitely (content ends the capture), suspend its AI, and apply non-hostility.
-        const bool hadOwnedFaction = Engine::HasCaptiveFactionApplied(a_captive);
+        const bool hadOwnedFaction = Engine::HasCaptiveFactionApplied(*a_captive);
         const bool recoveryHeld = Recovery::Hold(a_captive);
-        Engine::ApplyCaptiveFaction(a_captive);
-        const bool factionReady = Engine::HasCaptiveFactionApplied(a_captive) || Engine::IsInCaptiveFaction(a_captive);
+        Engine::ApplyCaptiveFaction(*a_captive);
+        const bool factionReady = Engine::HasCaptiveFactionApplied(*a_captive) || Engine::IsInCaptiveFaction(*a_captive);
         if (!recoveryHeld || !factionReady) {
             REX::ERROR("[OSFDefeat] capture {:08X} failed to establish {}{}; rolling back",
                 a_captive->GetFormID(), recoveryHeld ? "" : "recovery hold", !factionReady ? " captive faction" : "");
             if (!hadOwnedFaction) {
-                Engine::RemoveCaptiveFaction(a_captive);
+                Engine::RemoveCaptiveFaction(*a_captive);
             }
             if (newlyDefeated) {
                 Defeat::RecoverActor(a_captive, true);
-            } else if (existingData) {
+            } else {
                 existingData->autoRecoverAtDay = previousAutoRecoverAtDay;
                 existingData->leaseExpiresAtDay = previousLeaseExpiresAtDay;
                 existingData->SetLeaseHolderId(std::move(previousLeaseHolderId));
@@ -89,7 +84,7 @@ namespace OSFDefeat::Capture
         {
             std::unique_lock lock{ g_captureRelationshipsLock };
             const bool previouslyOwned = g_captureRelationships.contains(captiveId) && g_captureRelationships[captiveId].removeOwnedFactionOnRelease;
-            const bool captureAddedFaction = !hadOwnedFaction && Engine::HasCaptiveFactionApplied(a_captive);
+            const bool captureAddedFaction = !hadOwnedFaction && Engine::HasCaptiveFactionApplied(*a_captive);
             g_captureRelationships[captiveId] = CaptureRelationshipData{ captorId, NowDay(), previouslyOwned || captureAddedFaction };
         }
         REX::INFO("[OSFDefeat] captured {:08X} (captor {:08X})", captiveId, captorId);
@@ -123,7 +118,7 @@ namespace OSFDefeat::Capture
         } else {
             NotifyRecovered(a_actor->GetFormID());
             if (*removeOwnedFactionOnRelease) {
-                Engine::RemoveCaptiveFaction(a_actor);  // remove only membership capture introduced
+                Engine::RemoveCaptiveFaction(*a_actor);  // remove only membership capture introduced
             }
         }
         REX::INFO("[OSFDefeat] released captive {:08X} (recover={})", a_actor->GetFormID(), a_recover);

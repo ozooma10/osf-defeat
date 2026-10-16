@@ -42,15 +42,7 @@ namespace OSFDefeat::Conditions
     // used for warnings about unsupported or unknown fields.
     [[nodiscard]] ConsequenceConditions Parse(const nlohmann::json& a_json, std::string_view a_consequenceId);
 
-    // Evaluates on the game thread (HasKeyword / GetFactionRank engine reads).
-    // A non-empty aggressor block demands an aggressor: null aggressor fails it.
-    // Unresolvable form tokens count as non-matches (and warn once per token).
-    // a_cause gates the "cause" list (a defeat property, not an actor test); pass
-    // kNone for contexts with no cause — a non-empty cause list then fails.
-    [[nodiscard]] bool Evaluate(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
-        DefeatCause a_cause = DefeatCause::kNone);
-
-    // Evaluate, but say which block failed — the selection explain log names it.
+    // Names the failed block for the consequence-selection explain log.
     enum class EvalResult
     {
         kPass,
@@ -59,6 +51,12 @@ namespace OSFDefeat::Conditions
         kVictimFailed,
         kCauseFailed
     };
+
+    // Evaluates on the game thread (HasKeyword / GetFactionRank engine reads).
+    // A non-empty aggressor block demands an aggressor: null aggressor fails it.
+    // Unresolvable form tokens count as non-matches (and warn once per token).
+    // a_cause gates the "cause" list (a defeat property, not an actor test); pass
+    // kNone for contexts with no cause — a non-empty cause list then fails.
     [[nodiscard]] EvalResult Explain(const ConsequenceConditions& a_conditions, RE::Actor* a_victim, RE::Actor* a_aggressor,
         DefeatCause a_cause = DefeatCause::kNone);
 }
