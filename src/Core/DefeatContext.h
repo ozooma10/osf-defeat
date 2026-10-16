@@ -7,6 +7,7 @@
 
 namespace OSFDefeat::DefeatContext
 {
+    // Recent attackers are the non-null actors collected by PlayerDefeat on the game thread.
     void SetPlayerContext(RE::Actor* a_aggressor, const Consequence::PlayerConsequence& a_consequence, const std::vector<RE::Actor*>& a_recentHostileAttackers = {}, DefeatCause a_cause = DefeatCause::kNone);
     void ClearPlayerContext();
 

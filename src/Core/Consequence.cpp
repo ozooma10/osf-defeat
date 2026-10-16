@@ -235,7 +235,7 @@ namespace OSFDefeat::Consequence
             } else {
                 const auto fired = g_fired.find(consequence.id);
                 if (fired != g_fired.end()) {
-                    if (consequence.cooldownSeconds > 0.0f && fired->second.lastFired.time_since_epoch().count() != 0) {
+                    if (consequence.cooldownSeconds > 0.0f) {
                         const auto since = std::chrono::duration_cast<std::chrono::seconds>(now - fired->second.lastFired).count();
                         if (since < static_cast<long long>(consequence.cooldownSeconds)) {
                             reason = std::format("cooling down ({}s of {:.0f}s elapsed)", since, consequence.cooldownSeconds);

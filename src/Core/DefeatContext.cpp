@@ -33,9 +33,7 @@ namespace OSFDefeat::DefeatContext
         next.cause = a_cause;
         next.recentHostileAttackerIds.reserve(a_recentHostileAttackers.size());
         for (auto* const attacker : a_recentHostileAttackers) {
-            if (attacker) {
-                next.recentHostileAttackerIds.push_back(attacker->GetFormID());
-            }
+            next.recentHostileAttackerIds.push_back(attacker->GetFormID());
         }
 
         std::unique_lock lock{ g_lock };

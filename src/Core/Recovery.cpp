@@ -91,10 +91,10 @@ namespace OSFDefeat::Recovery
 
     bool SetTimer(RE::Actor* a_actor, float a_seconds)
     {
-        if (!std::isfinite(a_seconds)) {
-            return false;
+        if (a_seconds > 0.0f) {
+            return ScheduleAutomatic(a_actor, a_seconds);
         }
-        return a_seconds > 0.0f ? ScheduleAutomatic(a_actor, a_seconds) : Hold(a_actor);
+        return std::isfinite(a_seconds) && Hold(a_actor);
     }
 
     float SecondsRemaining(RE::Actor* a_actor)

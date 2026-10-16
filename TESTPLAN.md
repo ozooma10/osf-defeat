@@ -1,5 +1,81 @@
 # OSF Defeat — One-Launch Verification Plan
 
+## Current cleanup regression pass (2026-10-15)
+
+The simplification commits have native build verification only. Deployment is pending, and the
+historical results below do **not** validate these revisions.
+
+Before testing, close Starfield and install the newly built DLL/PDB from
+`build/windows/x64/releasedbg/` into the enabled mod's `SFSE/Plugins/` folder. Use a separate test
+save and launch through the usual MO2/SFSE setup. Keep the game focused and close the console
+between steps: queued operations and recovery need gameplay to advance. A native mutator returning
+`True` means the request was accepted; check the resulting state before the next dependent action.
+
+1. **Player lethal damage and normal recovery.** Let an enemy land a lethal Health hit
+   with god/immortal mode off. Expect one down-state, no death/reload, then recovery according to
+   the selected consequence (8 seconds for the bundled plain down/recover consequence; packs can
+   hold longer). Movement, combat controls, and camera should return, and cower should stay stopped
+   for several seconds after recovery. Repeat to check for duplicate defeat/recovery work.
+   While down, these console queries inspect the handoff context:
+
+   ```text
+   cgf "OSFDefeat.GetLastPlayerDefeatCause"
+   cgf "OSFDefeat.GetLastPlayerConsequenceId"
+   cgf "OSFDefeat.GetLastPlayerAggressor"
+   ```
+
+   Expect cause `1`, the chosen consequence ID, and the attacking actor for an ordinary enemy hit.
+   A scripted `DefeatActor` call does not exercise lethal clamping or player consequence selection.
+
+2. **Selection and cooldowns.** Enable `explainDecisions` in a test settings override and call
+   `cgf "OSFDefeat.ReloadJSON"`. With a cooldown-bearing consequence installed, repeat a defeat
+   before its cooldown expires: the log should filter it as `cooling down`. After the configured
+   interval it may compete again. The logged selection pool must contain only the highest eligible
+   priority, in its original order; tied choices remain weighted. A few rolls do not prove the
+   statistical distribution. Do not reload a save between these cooldown checks: reversion clears
+   session arbitration state.
+
+3. **Save/load while down.** Save during a sufficiently long down-state, reload, then let recovery
+   finish. Expect the player to remain defeated after load, the scene to return, and recovery to
+   restore controls/camera. Also load an earlier healthy save while defeated and confirm no old
+   queued defeat or scene reassertion affects the healthy player.
+
+4. **NPC capture and persistence.** The existing `test/OSFCaptureTest.pex` helper supplies these
+   console commands (install it in the test mod's `Scripts/` folder if missing). Start in a fight,
+   then run each step separately, returning to gameplay before the next:
+
+   ```text
+   cgf "OSFCaptureTest.DownTarget"
+   cgf "OSFCaptureTest.CaptureTarget"
+   cgf "OSFCaptureTest.ListCaptives"
+   ```
+
+   Expect a downed NPC and at least one captive. Save/reload and run `ListCaptives` again; the roster
+   must survive. Then run `cgf "OSFCaptureTest.ReleaseAll"`, allow gameplay to advance, and confirm
+   recovery and a zero captive count. Capture does not itself verify opt-in NPC lethal interception;
+   test that separately with `npcAutoDefeat` enabled and a hostile NPC taking a lethal hit.
+
+5. **Emergency cleanup.** While defeated and/or holding a captive, run
+   `cgf "OSFDefeat.ForceRecoverAll"`. After gameplay advances, expect recovery, restored controls,
+   and no captives. Wait several seconds to ensure the cower scene does not restart.
+
+6. **Focused API checks, using a registered content/test script.** The console capture helper does
+   not exercise event subscriptions or the legacy timer wrapper. On a defeated actor with no
+   competing recovery consumer, call `SetRecoveryTimer(actor, 0.0)` and then `-1.0`: each should
+   hold recovery (`GetAutomaticRecoverySecondsRemaining` returns `-1`). Calling it with `5.0`
+   should start a countdown and recover after about five seconds of unpaused gameplay. For watchdog
+   coverage, acquire a short lease with `AcquireDefeatLease(actor, "cleanup-test", 10.0)`, confirm
+   the holder, and leave it unreleased: expect force-recovery and a watchdog log. Register actual
+   defeated/recovered callbacks and verify delivery, then unregister and verify delivery stops;
+   a consequence quest starting by itself does not prove callback delivery.
+
+Native evidence is in `OSF Defeat.log` under the Windows Documents folder's
+`My Games/Starfield/SFSE/Logs/`. Look for the recovery-hook install, Papyrus binding, persistence
+registration, `registered defeated actor`, `recovered actor`, and consequence filter/selection
+messages. Record which steps were actually run and any failing log lines.
+
+## Historical verification and broader pack checklist
+
 > **RESULTS (2026-07-22): green end-to-end except the watchdog (§4, deferred).** Verified in-game:
 > deploy/bind (7 consequences after EM removal), Health down + recovery + save/load, all 6 pack
 > consequences incl. the first-ever positive `ActorTypeRobot`/`ActorTypeCreature` matches, cooldown

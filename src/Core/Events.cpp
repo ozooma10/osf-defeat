@@ -65,7 +65,7 @@ namespace OSFDefeat::Events
                 {
                     std::unique_lock lock{ _lock };
                     for (const auto& entry : _slots) {
-                        if (entry.generation != 0 && entry.receiver.get()) {
+                        if (entry.generation != 0) {
                             targets.push_back(entry);
                         }
                     }
