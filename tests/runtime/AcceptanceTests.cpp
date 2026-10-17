@@ -52,6 +52,11 @@ namespace {
     std::size_t packIndex{};
     bool packDefeatObserved{};
     WeaponMods weaponBaseline;
+    std::atomic<int> heldBlackout{};
+    int blackoutCheckpoint=1;
+    const char* CheckpointName() { return blackoutCheckpoint==2 ? "theft" : "time"; }
+    std::string ColdCasePrefix() { return blackoutCheckpoint==1 ? "shadows-blackout" : std::string("shadows-blackout-")+CheckpointName(); }
+    bool HoldBlackout(VM&,std::uint32_t,std::monostate,int checkpoint) { return heldBlackout==checkpoint; }
     std::size_t attackIndex{};
     constexpr const char* attackKinds[]{"unarmed","ranged","grenade"};
     using GraphSink=std::uint32_t (*)(void*,const void*,void*);
@@ -230,12 +235,21 @@ namespace {
     }
 }
 void Bind(VM& vm) {
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","HoldBlackout",&HoldBlackout,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyWeapon",&VerifyWeapon,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyDroppedWeapon",&VerifyDroppedWeapon,std::nullopt,false);
 }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
+void Configure(const Json& config) {
+    blackoutCheckpoint=config.value("blackoutCheckpoint",1);
+    if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
+        heldBlackout=blackoutCheckpoint;
+        weaponBaseline=config.at("weaponBaseline").get<WeaponMods>();
+        if(weaponBaseline.empty() || weaponBaseline.size()>128) throw std::runtime_error("Cold blackout weapon baseline missing or oversized");
+    }
+}
 bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::filesystem::path& directory,bool shadowsOnly,bool blackoutColdStart) {
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
@@ -251,18 +265,20 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
             // The saved consumer holds the pre-blackout credits/time. A fresh
             // object or process-local baseline cannot certify cold recovery.
-            Papyrus("InspectLoadedBlackout",{},true); Next(); break;
+            if(blackoutCheckpoint==1) Papyrus("InspectLoadedBlackout",{},true);
+            else Papyrus("InspectLoadedCheckpoint",CheckpointName(),true);
+            Next(); break;
         case 1:
-            if(Wait(Saw("shadows-blackout-loaded") && !Defeat::IsDefeated(player),30)) break;
+            if(Wait(Saw(blackoutCheckpoint==1 ? "shadows-blackout-loaded" : ColdCasePrefix()+"-loaded") && !Defeat::IsDefeated(player),30)) break;
             out["blackoutReloadInputLayers"]=InputLayers();
             // Startup's load predates this observer. The runner separately
             // verifies Auto Load's exact seed and the fresh process identity.
-            Check(out,"shadows-blackout-cold-restart",Loaded(player) && scenes->GetSceneForActor(player)==0);
+            Check(out,ColdCasePrefix()+"-cold-restart",Loaded(player) && scenes->GetSceneForActor(player)==0);
             std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
             Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); Next(); break;
         case 2:
             if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player) && scenes->GetSceneForActor(player)==0,60)) break;
-            Check(out,"shadows-blackout-cold-cleanup",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty() &&
+            Check(out,ColdCasePrefix()+"-cold-cleanup",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty() &&
                 DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
             return true;
         }
@@ -521,8 +537,8 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 48:
         if(Wait(Saw("shadows-blackout-loaded"))) break;
         Check(out,"shadows-blackout-save-load",Saw("shadows-blackout-loaded"));
-        std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
-        Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); phase=37; phaseAt=Now(); break;
+        blackoutCheckpoint=2; heldBlackout=2;
+        beforeRecords=Sequence(); Papyrus("PrepareCheckpoint"); phase=55; phaseAt=Now(); break;
     case 49:
         if(Wait(Saw("shadows-miss-kind-ready",beforeRecords))) break;
         ObserveNextAttack(*player);
@@ -555,6 +571,35 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         if(Wait(Saw("shadows-blackout-promoted-interrupted") && !Defeat::IsDefeated(player))) break;
         Check(out,"shadows-blackout-post-promotion-interrupted",Saw("shadows-blackout-promoted-interrupted"));
         beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42; phaseAt=Now(); break;
+    case 55:
+        if(Wait(Saw("shadows-ready",beforeRecords) && Loaded(npc),30)) break;
+        Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
+        Papyrus("ObserveCheckpoint",CheckpointName()); Next(); break;
+    case 56:
+        if(Wait(Saw(std::string("shadows-blackout-")+CheckpointName()+"-ready",beforeRecords))) break;
+        Check(out,std::string("shadows-blackout-")+CheckpointName()+"-checkpoint",Defeat::IsDefeated(player));
+        { const auto name=std::string("osfdefeat")+CheckpointName();
+          { std::scoped_lock lock(observationsLock); out["blackoutBaselines"][name]=weaponBaseline; }
+          Request(out,"save",name); }
+        Next(); break;
+    case 57:
+        if(Wait(Acknowledged(out,directory),60)) break;
+        // Keep the gate closed: the load callback must invalidate the saved
+        // production stack, not a test release advancing it to completion.
+        Request(out,"load",std::string("osfdefeat")+CheckpointName()); Next(); break;
+    case 58:
+        if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
+        beforeRecords=Sequence(); Papyrus("InspectLoadedCheckpoint",CheckpointName(),true); Next(); break;
+    case 59:
+        if(Wait(Saw(std::string("shadows-blackout-")+CheckpointName()+"-loaded",beforeRecords),30)) break;
+        Check(out,std::string("shadows-blackout-")+CheckpointName()+"-save-load",scenes->GetSceneForActor(player)==0);
+        if(blackoutCheckpoint==2) {
+            blackoutCheckpoint=3; heldBlackout=3;
+            beforeRecords=Sequence(); Papyrus("PrepareCheckpoint"); phase=55; phaseAt=Now(); break;
+        }
+        heldBlackout=0;
+        std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
+        Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); phase=37; phaseAt=Now(); break;
     }
     return false;
 }

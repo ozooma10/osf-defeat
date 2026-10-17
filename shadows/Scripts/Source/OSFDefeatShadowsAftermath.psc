@@ -69,10 +69,10 @@ Function RunAftermath()
         Return
     EndIf
     Bool promoted = Hunt.Promote(aggressor, lostWeapon)
+    Phase = 2
     If !IsCurrent(run)
         Return
     EndIf
-    Phase = 2
     Float wakeDay = Utility.GetCurrentGameTime() + (BlackoutHours / 24.0)
     Game.PassTime(BlackoutHours)
     If !IsCurrent(run)
@@ -83,10 +83,10 @@ Function RunAftermath()
     If Utility.GetCurrentGameTime() < wakeDay
         Game.PassTime(1)
     EndIf
+    Phase = 3
     If !IsCurrent(run)
         Return
     EndIf
-    Phase = 3
     OSFDefeat.RecoverActorWithTruce(player, TruceSeconds)
     Int tries = 0
     While IsCurrent(run) && OSFDefeat.IsDefeated(player) && tries < 50

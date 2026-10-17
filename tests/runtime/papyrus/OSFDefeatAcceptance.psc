@@ -20,6 +20,8 @@ Actor repeatAggressor
 Int repeatCredits
 Int repeatAggressorCredits
 Int throwableBefore
+Float checkpointDay
+Int checkpointPhase
 
 Actor Function NewShadow(Bool lowerLevel = False)
     Int[] bases = new Int[10]
@@ -282,6 +284,68 @@ Function PrepareBlackout()
     EndIf
     defeatDay = Utility.GetCurrentGameTime()
     OSFDefeatAcceptanceProbe.Record("shadows-repeat-ready", repeatAggressor != None, repeatAggressor)
+EndFunction
+
+Function PrepareCheckpoint()
+    OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
+    hunt.CancelHunt()
+    ShadowsPrepare()
+EndFunction
+
+Function ObserveCheckpoint(String kind)
+    OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
+    checkpointPhase = 2
+    If kind == "time"
+        checkpointPhase = 3
+    EndIf
+    Int waited = 0
+    While aftermath.Phase != checkpointPhase && waited < 150
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    checkpointDay = Utility.GetCurrentGameTime()
+    Float hours = (checkpointDay - defeatDay) * 24.0
+    Bool timeOK = hours < 0.1
+    If kind == "time"
+        timeOK = hours >= 2.0 && hours < 3.1
+    EndIf
+    Bool ok = aftermath.Phase == checkpointPhase && aftermath.IsRunning() && OSFDefeat.IsDefeated(Game.GetPlayer())
+    ok = ok && hunt.Nemesis.GetActorReference() == shadow && Game.GetPlayer().GetItemCount(Game.GetCredits()) == 900
+    ok = ok && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100 && hunt.LastTheftStatus == 7
+    ok = ok && OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "checkpoint-" + kind)
+    OSFDefeatAcceptanceProbe.Record("shadows-blackout-" + kind + "-hours", timeOK, None, hours)
+    OSFDefeatAcceptanceProbe.Record("shadows-blackout-" + kind + "-ready", ok && timeOK, shadow, aftermath.Phase)
+EndFunction
+
+Function InspectLoadedCheckpoint(String kind)
+    ; Sample twice so a saved latent stack cannot pass before replaying later.
+    Int sample = 0
+    Bool ok = True
+    While sample < 2
+        Utility.Wait(3.0)
+        Actor player = Game.GetPlayer()
+        OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
+        ObjectReference stolen = hunt.StolenWeapon.GetReference()
+        Bool creditsOK = player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
+        Bool huntOK = hunt.Nemesis.GetActorReference() == shadow && hunt.IsObjectiveDisplayed(10)
+        huntOK = huntOK && player.HasSpell(hunt.PlayerDebuff) && shadow.HasSpell(hunt.NemesisBuff)
+        Bool weaponOK = stolen != None && stolen.GetContainer() == shadow && stolen.GetBaseObject() == testWeapon
+        weaponOK = weaponOK && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
+        weaponOK = weaponOK && OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "loaded-" + kind)
+        Bool recovered = !OSFDefeat.IsDefeated(player) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled()
+        Bool stopped = aftermath.LastResult == "loaded-blackout" && !aftermath.IsRunning()
+        Float extraHours = (Utility.GetCurrentGameTime() - checkpointDay) * 24.0
+        Bool timeOK = extraHours >= 0.0 && extraHours < 0.1
+        OSFDefeatAcceptanceProbe.Record("checkpoint-credits", creditsOK, player, player.GetItemCount(Game.GetCredits()))
+        OSFDefeatAcceptanceProbe.Record("checkpoint-hunt", huntOK, shadow)
+        OSFDefeatAcceptanceProbe.Record("checkpoint-weapon", weaponOK, shadow)
+        OSFDefeatAcceptanceProbe.Record("checkpoint-controls", recovered)
+        OSFDefeatAcceptanceProbe.Record("checkpoint-stopped", stopped)
+        OSFDefeatAcceptanceProbe.Record("checkpoint-no-time-replay", timeOK, None, extraHours)
+        ok = ok && creditsOK && huntOK && weaponOK && recovered && stopped && timeOK
+        sample += 1
+    EndWhile
+    OSFDefeatAcceptanceProbe.Record("shadows-blackout-" + kind + "-loaded", ok, shadow, checkpointPhase)
 EndFunction
 
 Function PrepareMissedAttackKind(String kind)

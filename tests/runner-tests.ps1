@@ -25,4 +25,16 @@ Reject { Test-DefeatInventory $root @($coverage | Where-Object suite -ne 'damage
 Reject { Test-DefeatInventory $root $coverage @('fake') }
 Reject { Test-DefeatInventory $root $coverage @($runtime + $runtime[0]) }
 . (Join-Path $PSScriptRoot 'cosave-evidence-tests.ps1')
+. (Join-Path $root 'tools/BlackoutTestGates.ps1')
+$gateRoot=Join-Path $root ('build/gate-contract-'+[guid]::NewGuid().ToString('N'))
+$gateSource=Join-Path $root 'shadows/Scripts/Source/OSFDefeatShadowsAftermath.psc'
+$gated=Join-Path $gateRoot 'OSFDefeatShadowsAftermath.psc'
+New-BlackoutTestSource $gateSource $gated
+$gateText=[IO.File]::ReadAllText($gated)
+if ([regex]::Matches($gateText,'While IsCurrent\(run\) && OSFDefeatAcceptanceProbe.HoldBlackout\([23]\)').Count -ne 2) { throw 'Checkpoint gates missing.' }; $checks++
+$withoutGates=[regex]::Replace($gateText,'    While IsCurrent\(run\) && OSFDefeatAcceptanceProbe.HoldBlackout\([23]\)\n        Utility.Wait\(0.1\)\n    EndWhile\n','')
+if ($withoutGates -cne [IO.File]::ReadAllText($gateSource).Replace("`r`n","`n")) { throw 'Instrumentation altered production behavior beyond checkpoint suspension.' }; $checks++
+$invalid=Join-Path $gateRoot 'changed.psc'
+[IO.File]::WriteAllText($invalid,$withoutGates.Replace('    Phase = 2','    Phase = 9'))
+Reject { New-BlackoutTestSource $invalid (Join-Path $gateRoot 'invalid-output.psc') }
 Write-Host "$checks runner evidence checks passed."

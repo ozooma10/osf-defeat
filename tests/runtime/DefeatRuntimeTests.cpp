@@ -75,6 +75,7 @@ namespace OSFDefeat::RuntimeTests {
                 const auto config=Json::parse(input);
                 shadowsOnly=config.value("shadowsOnly",false);
                 blackoutColdStart=config.value("blackoutColdStart",false);
+                Acceptance::Configure(config);
                 directory=config.at("stateDir").get<std::string>(); token=config.at("launchToken").get<std::string>();
                 if(!directory.is_absolute() || token.empty() || !std::filesystem::is_directory(directory)) { directory.clear(); return; }
                 FILETIME created{}, exited{}, kernel{}, user{};

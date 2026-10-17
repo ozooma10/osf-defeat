@@ -14,7 +14,10 @@ $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'CosaveEvidence.ps1')
 . (Join-Path $PSScriptRoot 'RuntimeActions.ps1')
 . (Join-Path $PSScriptRoot 'RuntimeSession.ps1')
+. (Join-Path $PSScriptRoot 'BlackoutTestGates.ps1')
 $script:BlackoutColdStart=$false
+$script:BlackoutCheckpoint=1
+$script:BlackoutWeaponBaseline=@()
 $required=@('scripts/Common.ps1','scripts/Environment.ps1','scripts/Reports.ps1','build/bin/OSFTestHarness.dll','build/bin/OSFTestInput.exe')
 $missing=@($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Harness $_) -PathType Leaf) })
 if ($missing.Count) { Write-Error "[blocked] Missing OSF Test Harness files in ${Harness}: $($missing -join ', ')"; exit 2 }
@@ -81,7 +84,7 @@ function Reset-Fixture {
 # paths above are Defeat-specific; no Animation payload or source is edited.
 function Prepare-AnimationMailbox([string]$LaunchToken) {
     $script:DefeatLaunchToken=$LaunchToken
-    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly;blackoutColdStart=$script:BlackoutColdStart}
+    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly;blackoutColdStart=$script:BlackoutColdStart;blackoutCheckpoint=$script:BlackoutCheckpoint;weaponBaseline=$script:BlackoutWeaponBaseline}
 }
 
 try {
@@ -140,6 +143,11 @@ try {
     Copy-Tree (Join-Path $shadowsPayload 'SFSE/OSFDefeat/Consequences/Player') (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows')
     $script:Run.shadowsBuildReceipt=Join-Path $shadowsBuild 'build.json'
     $papyrus=Join-Path $repo 'tests/runtime/papyrus'
+    $gatedSource=Join-Path $script:Run.path 'blackout-test-source/OSFDefeatShadowsAftermath.psc'
+    New-BlackoutTestSource (Join-Path $repo 'shadows/Scripts/Source/OSFDefeatShadowsAftermath.psc') $gatedSource
+    & $compiler $gatedSource "-i=$papyrus;$(Join-Path $repo 'shadows/Scripts/Source');$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')"
+    if ($LASTEXITCODE) { throw '[failed] Blackout checkpoint instrumentation failed to compile.' }
+    $script:Run.blackoutInstrumentation=@{source=$gatedSource;sha256=(Get-FileHash -LiteralPath $gatedSource).Hash;phases=@(2,3)}
     $packScripts=Join-Path $repo 'pack/Scripts/Source'
     & $compiler $papyrus "-i=$papyrus;$(Join-Path $repo 'shadows/Scripts/Source');$packScripts;$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')" -all
     if ($LASTEXITCODE) { throw '[failed] Acceptance Papyrus compilation failed.' }
@@ -192,19 +200,23 @@ try {
     foreach ($key in @('bSaveOnPause','bSaveOnTravel','bSaveOnWait','bSaveOnRest')) { Set-IniValue (Join-Path $profile 'StarfieldPrefs.ini') 'GamePlay' $key '0' }
     $firstSession=Invoke-DefeatRuntimeSession $mods 'defeat'; $started=$true
     Stop-TestGame
-    Initialize-DefeatBlackoutRestart
-    # Restore the same consequence registration before booting its saved stack.
-    Copy-Item -LiteralPath (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows/minimal-shadows.json') -Destination (Join-Path $payload 'SFSE/OSFDefeat/Consequences/Player/zz-acceptance-shadows.json')
-    Write-Host 'Defeat acceptance: cold restart from the retained blackout save'
-    $coldSession=Invoke-DefeatRuntimeSession $mods 'blackout-cold'
-    if ($firstSession.identity.processStartFileTime -ceq $coldSession.identity.processStartFileTime -or $firstSession.launchToken -ceq $coldSession.launchToken) {
-        throw '[failed] Cold restart did not create a fresh process and launch token.'
+    $cases=@($firstSession.snapshot.cases)
+    $sessions=@(@{label='first';identity=$firstSession.identity;launchToken=$firstSession.launchToken})
+    foreach ($checkpoint in @(1,2,3)) {
+        Initialize-DefeatBlackoutRestart $checkpoint $firstSession.snapshot
+        Copy-Item -LiteralPath (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows/minimal-shadows.json') -Destination (Join-Path $payload 'SFSE/OSFDefeat/Consequences/Player/zz-acceptance-shadows.json')
+        Write-Host "Defeat acceptance: cold restart at blackout checkpoint $checkpoint"
+        $coldSession=Invoke-DefeatRuntimeSession $mods "blackout-cold-$checkpoint"
+        foreach ($session in $sessions) {
+            if ($session.identity.processStartFileTime -ceq $coldSession.identity.processStartFileTime -or $session.launchToken -ceq $coldSession.launchToken) {
+                throw '[failed] Cold restart did not create a fresh process and launch token.'
+            }
+        }
+        $sessions+=@{label="cold-$checkpoint";identity=$coldSession.identity;launchToken=$coldSession.launchToken}
+        $cases+=@($coldSession.snapshot.cases)
+        Stop-TestGame
     }
-    Write-JsonFile (Join-Path $script:Run.path 'runtime-sessions.json') @{
-        first=@{identity=$firstSession.identity;launchToken=$firstSession.launchToken}
-        cold=@{identity=$coldSession.identity;launchToken=$coldSession.launchToken}
-    }
-    $cases=@($firstSession.snapshot.cases)+@($coldSession.snapshot.cases)
+    Write-JsonFile (Join-Path $script:Run.path 'runtime-sessions.json') @{sessions=$sessions}
     $actual=@($cases.name)
     if ($actual.Count -ne $expected.Count -or @($actual | Sort-Object -Unique).Count -ne $actual.Count -or @(Compare-Object $expected $actual).Count -or
         @($cases | Where-Object { $_.passed -isnot [bool] -or -not $_.passed }).Count) { throw '[failed] Incomplete runtime case evidence.' }
