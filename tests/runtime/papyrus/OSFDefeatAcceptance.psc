@@ -132,6 +132,7 @@ Function ShadowsInspect()
 EndFunction
 
 Function ShadowsPlayerKill()
+    ObjectReference stolen = hunt.StolenWeapon.GetReference()
     shadow.Kill(Game.GetPlayer())
     ; Death completion, like ability updates, needs the actor's process running.
     OSFDefeat.ResumeActorAI(shadow)
@@ -145,9 +146,20 @@ Function ShadowsPlayerKill()
     OSFDefeatAcceptanceProbe.Record("shadows-player-kill-buff", Game.GetPlayer().HasSpell(hunt.PlayerReward), shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-player-kill-alias", hunt.Nemesis.GetReference() == None, shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-player-kill-loot", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
+    ObjectReference dropped = Game.FindClosestReferenceOfTypeFromRef(testWeapon, shadow, 5.0)
+    OSFDefeatAcceptanceProbe.Record("shadows-dropped-weapon", dropped != None, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-dropped-identity", dropped != None && dropped == stolen, shadow)
+    If shadow.GetItemCount(testWeapon) == 1
+        shadow.RemoveItem(testWeapon, 1, True, Game.GetPlayer())
+    ElseIf dropped != None && dropped == stolen
+        dropped.Activate(Game.GetPlayer())
+    EndIf
+    Utility.Wait(0.5)
+    Bool recovered = Game.GetPlayer().GetItemCount(testWeapon) == 1
+    OSFDefeatAcceptanceProbe.Record("shadows-weapon-retrieved", recovered, Game.GetPlayer(), Game.GetPlayer().GetItemCount(testWeapon))
     Bool ok = !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && Game.GetPlayer().HasSpell(hunt.PlayerReward)
     ok = ok && hunt.Nemesis.GetReference() == None && hunt.IsObjectiveCompleted(10)
-    ok = ok && shadow.GetItemCount(testWeapon) == 1 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
+    ok = ok && recovered && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
     OSFDefeatAcceptanceProbe.Record("shadows-player-reward", ok, shadow)
     Game.GetPlayer().RemoveSpell(hunt.PlayerReward)
     shadow = NewShadow()
