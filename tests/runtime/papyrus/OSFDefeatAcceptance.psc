@@ -8,6 +8,119 @@ Int imminentToken
 Int actorDownToken
 Int actorUpToken
 String packKind
+OSFDefeatShadowsHunt hunt
+Actor shadow
+Weapon testWeapon
+ActorValue resistance
+Float playerResistance
+Float shadowResistance
+Float defeatDay
+Int shadowCredits
+
+Actor Function NewShadow()
+    Int[] bases = new Int[10]
+    bases[0] = 0x270255
+    bases[1] = 0x270254
+    bases[2] = 0x270253
+    bases[3] = 0x270252
+    bases[4] = 0x129583
+    bases[5] = 0x129582
+    bases[6] = 0x129581
+    bases[7] = 0x129580
+    bases[8] = 0x12957F
+    bases[9] = 0x12957E
+    Int i = 0
+    While i < bases.Length
+        Actor candidate = Game.GetPlayer().PlaceAtMe(Game.GetFormFromFile(bases[i], "Starfield.esm"), 1, False, True, False) as Actor
+        If candidate != None
+            OSFDefeatAcceptanceProbe.Record("shadow-candidate-level", True, candidate, candidate.GetLevel())
+            If candidate.GetLevel() >= Game.GetPlayer().GetLevel() && hunt.Eligible(candidate)
+                candidate.Enable()
+                candidate.MoveTo(Game.GetPlayer(), 8.0, 0.0, 0.0)
+                OSFDefeat.SuspendActorAI(candidate)
+                Utility.Wait(0.5)
+                Return candidate
+            EndIf
+            candidate.Delete()
+        EndIf
+        i += 1
+    EndWhile
+    Return None
+EndFunction
+
+Function ShadowsPrepare()
+    Actor player = Game.GetPlayer()
+    hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
+    If hunt == None
+        OSFDefeatAcceptanceProbe.Record("shadows-ready", False)
+        Return
+    EndIf
+    hunt.Start()
+    Utility.Wait(0.5)
+    shadow = NewShadow()
+    If shadow == None
+        OSFDefeatAcceptanceProbe.Record("shadows-ready", False, player, player.GetLevel())
+        Return
+    EndIf
+    testWeapon = Game.GetFormFromFile(0x476C4, "Starfield.esm") as Weapon
+    player.RemoveItem(testWeapon, player.GetItemCount(testWeapon), True)
+    player.AddItem(testWeapon, 1, True)
+    player.EquipItem(testWeapon, False, True)
+    Weapon old = shadow.GetEquippedWeapon()
+    If old != None
+        shadow.UnequipItem(old, True, True)
+        shadow.RemoveItem(old, shadow.GetItemCount(old), True)
+    EndIf
+    MiscObject credits = Game.GetCredits()
+    player.RemoveItem(credits, player.GetItemCount(credits), True)
+    player.AddItem(credits, 1000, True)
+    shadowCredits = shadow.GetItemCount(credits)
+    resistance = Game.GetFormFromFile(0x2E3, "Starfield.esm") as ActorValue
+    playerResistance = player.GetValue(resistance)
+    shadowResistance = shadow.GetValue(resistance)
+    defeatDay = Utility.GetCurrentGameTime()
+    OSFDefeatAcceptanceProbe.Record("shadows-ready", player.GetEquippedWeapon() == testWeapon && !OSFDefeat.HasQuestAlias(shadow) && !OSFDefeat.HasProtectionOverride(shadow), shadow)
+EndFunction
+
+Function ShadowsInspect()
+    Actor player = Game.GetPlayer()
+    ObjectReference stolen = hunt.StolenWeapon.GetReference()
+    Bool ok = hunt.Nemesis.GetActorReference() == shadow && OSFDefeat.HasQuestAlias(shadow)
+    ok = ok && hunt.IsObjectiveDisplayed(10) && shadow.HasSpell(hunt.NemesisBuff) && player.HasSpell(hunt.PlayerDebuff)
+    ok = ok && player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
+    ok = ok && stolen != None && stolen.GetContainer() == shadow && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
+    ok = ok && Utility.GetCurrentGameTime() - defeatDay >= 0.083
+    ok = ok && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
+    OSFDefeatAcceptanceProbe.Record("shadows-aftermath", ok, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-player-resistance", Math.Abs(player.GetValue(resistance) - (playerResistance - 20.0)) < 0.1, player, player.GetValue(resistance) - playerResistance)
+    OSFDefeatAcceptanceProbe.Record("shadows-nemesis-resistance", Math.Abs(shadow.GetValue(resistance) - (shadowResistance + 40.0)) < 0.1, shadow, shadow.GetValue(resistance) - shadowResistance)
+    Bool replaced = hunt.Promote(npc)
+    OSFDefeatAcceptanceProbe.Record("shadows-slot-preserved", !replaced && hunt.Nemesis.GetActorReference() == shadow && player.HasSpell(hunt.PlayerDebuff), shadow)
+    ; Leave the player unarmed so the next real mouse click tests a missed punch.
+    player.UnequipAll()
+    player.DrawWeapon()
+EndFunction
+
+Function ShadowsPlayerKill()
+    shadow.Kill(Game.GetPlayer())
+    Utility.Wait(2.0)
+    Bool ok = !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && Game.GetPlayer().HasSpell(hunt.PlayerReward)
+    ok = ok && hunt.Nemesis.GetReference() == None && hunt.IsObjectiveCompleted(10)
+    ok = ok && shadow.GetItemCount(testWeapon) == 1 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
+    OSFDefeatAcceptanceProbe.Record("shadows-player-reward", ok, shadow)
+    Game.GetPlayer().RemoveSpell(hunt.PlayerReward)
+    shadow = NewShadow()
+    If shadow == None
+        OSFDefeatAcceptanceProbe.Record("shadows-other-kill", False)
+        Return
+    EndIf
+    Bool promoted = hunt.Promote(shadow)
+    shadow.Kill(npc)
+    Utility.Wait(2.0)
+    ok = promoted && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && !Game.GetPlayer().HasSpell(hunt.PlayerReward)
+    ok = ok && hunt.Nemesis.GetReference() == None
+    OSFDefeatAcceptanceProbe.Record("shadows-other-kill", ok, shadow)
+EndFunction
 
 Function Initialize()
     ; A fresh persistent NPC reference, using the fixture player's valid actor base.

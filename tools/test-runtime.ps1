@@ -125,9 +125,17 @@ try {
         }
     }
     Copy-Tree (Join-Path $repo 'dist') $payload
-    $papyrus=Join-Path $repo 'tests/runtime/papyrus'
+    $shadowsBuild=Join-Path $script:Run.path 'shadows-build'
+    & pwsh -NoProfile -File (Join-Path $repo 'tools/build-shadows.ps1') -OutputDirectory $shadowsBuild
+    if ($LASTEXITCODE) { throw '[failed] Shadows build failed.' }
+    $shadowsPayload=Join-Path $shadowsBuild 'payload'
+    Copy-Tree (Join-Path $shadowsPayload 'Scripts') (Join-Path $payload 'Scripts')
+    Copy-Item -LiteralPath (Join-Path $shadowsPayload 'OSFDefeatShadows.esm') -Destination $payload
+    Copy-Tree (Join-Path $shadowsPayload 'SFSE/OSFDefeat/Consequences/Player') (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows')
+    $script:Run.shadowsBuildReceipt=Join-Path $shadowsBuild 'build.json'
+    $papyrus=Join-Path $repo 'tests/runtime/papyrus' 
     $packScripts=Join-Path $repo 'pack/Scripts/Source'
-    & $compiler $papyrus "-i=$papyrus;$packScripts;$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')" -all
+    & $compiler $papyrus "-i=$papyrus;$(Join-Path $repo 'shadows/Scripts/Source');$packScripts;$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')" -all
     if ($LASTEXITCODE) { throw '[failed] Acceptance Papyrus compilation failed.' }
     & $compiler $packScripts "-i=$packScripts;$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')" -all
     if ($LASTEXITCODE) { throw '[failed] Pack Papyrus compilation failed.' }
@@ -162,8 +170,9 @@ try {
     [IO.File]::WriteAllLines((Join-Path $profile 'modlist.txt'),(@($mods | ForEach-Object {'+'+$_})+$lines))
     foreach ($list in @('plugins.txt','loadorder.txt')) {
         $path=Join-Path $profile $list
-        $pluginLines=@(if (Test-Path -LiteralPath $path) {Get-Content -LiteralPath $path | Where-Object { $_.TrimStart('*') -ine 'OSFDefeatBasic.esm' }})
+        $pluginLines=@(if (Test-Path -LiteralPath $path) {Get-Content -LiteralPath $path | Where-Object { $_.TrimStart('*') -notin @('OSFDefeatBasic.esm','OSFDefeatShadows.esm') }})
         $pluginLines+=if ($list -eq 'plugins.txt') {'*OSFDefeatBasic.esm'} else {'OSFDefeatBasic.esm'}
+        $pluginLines+=if ($list -eq 'plugins.txt') {'*OSFDefeatShadows.esm'} else {'OSFDefeatShadows.esm'}
         [IO.File]::WriteAllLines($path,[string[]]$pluginLines)
     }
     Set-IniValue (Join-Path $profile 'settings.ini') 'General' 'LocalSaves' 'false'

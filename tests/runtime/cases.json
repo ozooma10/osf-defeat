@@ -40,5 +40,16 @@
   "pack-mauled",
   "pack-arrest-fallback",
   "pack-recovery-marker-moves-player",
-  "pack-cleanup-load"
+  "pack-cleanup-load",
+  "shadows-eligible-fixture",
+  "shadows-aftermath-and-loot",
+  "shadows-trait-magnitudes",
+  "shadows-slot-preserved",
+  "truce-save",
+  "truce-real-save-load",
+  "truce-missed-melee",
+  "truce-timer-expiry",
+  "shadows-player-kill-reward",
+  "shadows-other-kill-clears-debuff",
+  "shadows-cleanup-load"
 ]

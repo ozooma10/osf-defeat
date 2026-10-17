@@ -6,6 +6,8 @@
 #include "Core/Defeat.h"
 #include "Core/DefeatContext.h"
 #include "Core/Recovery.h"
+#include "Core/Truce.h"
+#include "Core/GameTime.h"
 #include "Core/RuntimeMutation.h"
 #include "Engine/Engine.h"
 #include "External/OSFSceneAPI.h"
@@ -33,7 +35,7 @@ namespace {
     std::uint64_t acknowledgedId{};
     RE::NiPoint3 beforePosition{};
     std::array<float,9> beforeCamera{};
-    float baselineDistance{}, transferDistance{};
+    float baselineDistance{}, transferDistance{}, truceDeadline{};
     ActorStateSnapshot npcPrior{};
     std::string action;
     struct PackCase { const char* name; const char* file; const char* id; };
@@ -56,7 +58,7 @@ namespace {
         for(auto& ch:label) if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
         records.push_back({{"sequence",++sequence},{"name",label},{"ok",ok},
             {"subject",subject?subject->GetFormID():0},{"value",value}});
-        if(label=="fixture" && ok && subject) npcID=subject->GetFormID();
+        if((label=="fixture" || label=="shadows-ready") && ok && subject) npcID=subject->GetFormID();
     }
     bool Saw(std::string_view name,std::uint64_t after=0,FormID subject=0) {
         std::scoped_lock lock(observationsLock);
@@ -309,6 +311,51 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 28:
         if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player) && scenes->GetSceneForActor(player)==0,60)) break;
         Check(out,"pack-cleanup-load",DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
+        std::filesystem::copy_file(Config::RootPath()/"AcceptanceShadows"/"minimal-shadows.json",
+            Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json",std::filesystem::copy_options::overwrite_existing);
+        Consequence::Reload(); Papyrus("ShadowsPrepare"); Next(); break;
+    case 29:
+        if(Wait(Saw("shadows-ready") && Loaded(npc),30)) break;
+        Check(out,"shadows-eligible-fixture",npc && npc!=player);
+        packDefeatObserved=false;
+        Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc); Next(); break;
+    case 30:
+        if(Defeat::IsDefeated(player) && DefeatContext::GetLastPlayerConsequenceId()=="osfdefeat.shadows.aftermath") packDefeatObserved=true;
+        if(Wait(packDefeatObserved && !Defeat::IsDefeated(player) && Truce::IsActive(player->GetFormID()) && scenes->GetSceneForActor(player)==0,30)) break;
+        Papyrus("ShadowsInspect"); Next(); break;
+    case 31:
+        if(Wait(Saw("shadows-aftermath") && Saw("shadows-player-resistance") && Saw("shadows-nemesis-resistance") && Saw("shadows-slot-preserved"))) break;
+        Check(out,"shadows-aftermath-and-loot",Saw("shadows-aftermath"));
+        Check(out,"shadows-trait-magnitudes",Saw("shadows-player-resistance") && Saw("shadows-nemesis-resistance"));
+        Check(out,"shadows-slot-preserved",Saw("shadows-slot-preserved"));
+        truceDeadline=Truce::Snapshot()[0].expiresAtDay;
+        Request(out,"save","osfdefeattruce"); Next(); break;
+    case 32:
+        if(Wait(Acknowledged(out,directory),60)) break;
+        Check(out,"truce-save",Truce::IsActive(player->GetFormID()) && Engine::HasCaptiveFactionApplied(*player));
+        Truce::End(*player); Request(out,"load","osfdefeattruce"); Next(); break;
+    case 33:
+        if(Wait(Acknowledged(out,directory) && Truce::IsActive(player->GetFormID()),60)) break;
+        Check(out,"truce-real-save-load",!Defeat::IsDefeated(player) && Engine::IsInCaptiveFaction(*player) &&
+            Truce::Snapshot()[0].expiresAtDay==truceDeadline);
+        Request(out,"attack-miss","unarmed"); Next(); break;
+    case 34:
+        if(Wait(Acknowledged(out,directory) && !Truce::IsActive(player->GetFormID()),10)) break;
+        Check(out,"truce-missed-melee",GameTime::NowDay()<truceDeadline && !Engine::HasCaptiveFactionApplied(*player));
+        if(!Truce::Begin(*player,2)) throw std::runtime_error("Cannot start expiry test"); Next(); break;
+    case 35:
+        if(Wait(!Truce::IsActive(player->GetFormID()),10)) break;
+        Check(out,"truce-timer-expiry",!Engine::HasCaptiveFactionApplied(*player) && !Defeat::IsDefeated(player));
+        Papyrus("ShadowsPlayerKill"); Next(); break;
+    case 36:
+        if(Wait(Saw("shadows-player-reward") && Saw("shadows-other-kill"),30)) break;
+        Check(out,"shadows-player-kill-reward",Saw("shadows-player-reward"));
+        Check(out,"shadows-other-kill-clears-debuff",Saw("shadows-other-kill"));
+        std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
+        Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); Next(); break;
+    case 37:
+        if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
+        Check(out,"shadows-cleanup-load",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty());
         return true;
     }
     return false;
