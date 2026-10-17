@@ -1,0 +1,25 @@
+FormKey: 000800:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsAftermathQuest
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatShadowsAftermath
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: Hunt
+      Object: 000801:OSFDefeatShadows.esm
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: Shadows - Aftermath
+Data:
+  Flags: []
+  Priority: 60
+  Unused: 0x000000
+UnusedConditions: []
+NextAliasID: 0
+Aliases: []

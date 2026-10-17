@@ -39,6 +39,13 @@ Bool Function RecoverActorWithTruce(Actor akActor, Float afSeconds = 30.0) globa
 Bool Function IsRecoveryTruceActive(Actor akActor) global native
 Bool Function EndRecoveryTruce(Actor akActor) global native
 
+; Conservative reservation checks for content that changes an existing actor.
+; True for None. Alias presence may include empty retained alias metadata;
+; protection presence includes explicitly cleared per-reference overrides.
+; Check IsEssential and GetLeveledActorBase().IsProtected separately as well.
+Bool Function HasQuestAlias(Actor akActor) global native
+Bool Function HasProtectionOverride(Actor akActor) global native
+
 ; Legacy recovery name retained for source and binary compatibility. Prefer RecoverActor.
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
 

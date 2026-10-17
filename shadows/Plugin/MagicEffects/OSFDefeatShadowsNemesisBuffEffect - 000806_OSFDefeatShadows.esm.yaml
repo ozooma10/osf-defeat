@@ -1,0 +1,22 @@
+FormKey: 000806:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsNemesisBuffEffect
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Unbroken
+ActorValue2: 0002E3:Starfield.esm
+Archetype:
+  MutagenObjectType: MagicEffectPeakValueModArchetype
+UnknownInt2: 3
+UnknownInt3: 1065353216
+Flags:
+- Recover
+- NoDuration
+- NoArea
+Unknown: 0x00000000000000000000000000000000000000000000
+Unknown2: '[]'
+Description:
+  TargetLanguage: English
+  Value: Your nemesis has 40 additional physical damage resistance.
+DATADataTypeState:
+- Break0

@@ -1,0 +1,21 @@
+FormKey: 000803:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsNemesisBuff
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Unbroken
+EquipmentType: 013F44:Starfield.esm
+Description:
+  TargetLanguage: English
+  Value: Your nemesis has 40 additional physical damage resistance.
+Flags:
+- IgnoreResistance
+- NoAbsorbOrReflect
+Type:
+- Ability
+Effects:
+- BaseEffect: 000806:OSFDefeatShadows.esm
+  Data:
+    Magnitude: 40
+  EFIF: 0
+  MUID: 1

@@ -103,6 +103,21 @@ namespace OSFDefeat::Papyrus
             return a_actor && Truce::IsActive(a_actor->GetFormID());
         }
 
+        bool HasQuestAlias(std::monostate, RE::Actor* a_actor)
+        {
+            // Conservative presence test, not a walk of an unproven alias-array layout.
+            // Extra type 0x80 and ref+0xC8: OSF RE gameplay.console_keywords.
+            return !a_actor || (a_actor->extraDataList &&
+                a_actor->extraDataList->HasType(RE::ExtraDataType::kAliasInstanceArray));
+        }
+
+        bool HasProtectionOverride(std::monostate, RE::Actor* a_actor)
+        {
+            // Reject even an explicitly cleared override. Content must also check the base.
+            return !a_actor || (a_actor->extraDataList &&
+                a_actor->extraDataList->HasType(RE::ExtraDataType::kEssentialProtected));
+        }
+
         bool SuspendActorAI(std::monostate, RE::Actor* a_actor)
         {
             return QueueActorOperation(a_actor, &Defeat::SuspendAI);
@@ -440,6 +455,8 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "RecoverActorWithTruce", &RecoverActorWithTruce, std::nullopt, false);
         vm->BindNativeMethod(kClass, "EndRecoveryTruce", &EndRecoveryTruce, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsRecoveryTruceActive", &IsRecoveryTruceActive, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "HasQuestAlias", &HasQuestAlias, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "HasProtectionOverride", &HasProtectionOverride, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RescueActor", &RecoverActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SuspendActorAI", &SuspendActorAI, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ResumeActorAI", &ResumeActorAI, std::nullopt, false);

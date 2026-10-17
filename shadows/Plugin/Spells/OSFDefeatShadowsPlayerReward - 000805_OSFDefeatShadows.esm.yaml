@@ -1,0 +1,21 @@
+FormKey: 000805:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsPlayerReward
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Hardened Resolve
+EquipmentType: 013F44:Starfield.esm
+Description:
+  TargetLanguage: English
+  Value: You overcame your nemesis. Physical damage resistance increased by 10.
+Flags:
+- IgnoreResistance
+- NoAbsorbOrReflect
+Type:
+- Ability
+Effects:
+- BaseEffect: 000808:OSFDefeatShadows.esm
+  Data:
+    Magnitude: 10
+  EFIF: 0
+  MUID: 1

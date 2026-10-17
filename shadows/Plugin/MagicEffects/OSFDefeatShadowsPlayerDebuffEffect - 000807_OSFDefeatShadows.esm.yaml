@@ -1,0 +1,23 @@
+FormKey: 000807:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsPlayerDebuffEffect
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Shaken
+ActorValue2: 0002E3:Starfield.esm
+Archetype:
+  MutagenObjectType: MagicEffectPeakValueModArchetype
+UnknownInt2: 3
+UnknownInt3: 1065353216
+Flags:
+- Recover
+- NoDuration
+- NoArea
+- Detrimental
+Unknown: 0x00000000000000000000000000000000000000000000
+Unknown2: '[]'
+Description:
+  TargetLanguage: English
+  Value: Physical damage resistance reduced by 20 until your nemesis dies.
+DATADataTypeState:
+- Break0

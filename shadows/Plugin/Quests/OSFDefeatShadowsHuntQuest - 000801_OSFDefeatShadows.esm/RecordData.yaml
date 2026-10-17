@@ -1,0 +1,62 @@
+FormKey: 000801:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsHuntQuest
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatShadowsHunt
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: Nemesis
+      Object: 000801:OSFDefeatShadows.esm
+      Alias: 0
+    - MutagenObjectType: ScriptObjectProperty
+      Name: StolenWeapon
+      Object: 000801:OSFDefeatShadows.esm
+      Alias: 1
+    - MutagenObjectType: ScriptObjectProperty
+      Name: NemesisBuff
+      Object: 000803:OSFDefeatShadows.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PlayerDebuff
+      Object: 000804:OSFDefeatShadows.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PlayerReward
+      Object: 000805:OSFDefeatShadows.esm
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: Hunt Your Nemesis
+Data:
+  Flags: []
+  Priority: 60
+  Unused: 0x000000
+UnusedConditions: []
+Objectives:
+- Index: 10
+  DisplayText:
+    TargetLanguage: English
+    Value: Defeat <Alias=Nemesis> and recover your stolen possessions
+  Targets:
+  - AliasID: 0
+NextAliasID: 2
+Aliases:
+- MutagenObjectType: QuestReferenceAlias
+  Name: Nemesis
+  Flags:
+  - Optional
+  - AllowDead
+  - StoresText
+  ALFG: 0
+  DisplayName: 000802:OSFDefeatShadows.esm
+  VoiceTypes: Null
+- MutagenObjectType: QuestReferenceAlias
+  ID: 1
+  Name: StolenWeapon
+  Flags:
+  - Optional
+  ALFG: 0
+  VoiceTypes: Null

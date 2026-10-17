@@ -1,0 +1,21 @@
+FormKey: 000804:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsPlayerDebuff
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Shaken
+EquipmentType: 013F44:Starfield.esm
+Description:
+  TargetLanguage: English
+  Value: Physical damage resistance reduced by 20 until your nemesis dies.
+Flags:
+- IgnoreResistance
+- NoAbsorbOrReflect
+Type:
+- Ability
+Effects:
+- BaseEffect: 000807:OSFDefeatShadows.esm
+  Data:
+    Magnitude: 20
+  EFIF: 0
+  MUID: 1
