@@ -1,3 +1,19 @@
+function Move-DefeatPrivateFile([string]$Source, [string]$Destination, [int]$RetryMs = 5000) {
+    $until=[DateTime]::UtcNow.AddMilliseconds($RetryMs)
+    while ($true) {
+        try { [IO.File]::Move($Source,$Destination,$true); return }
+        catch {
+            # PowerShell wraps static .NET failures. On Windows, a reader that
+            # denies delete can surface as ACCESS_DENIED rather than SHARING.
+            $cause=$_.Exception.GetBaseException()
+            $locked=($cause -is [IO.IOException] -or $cause -is [UnauthorizedAccessException]) -and
+                ($cause.HResult -band 0xffff) -in @(5,32,33)
+            if (-not $locked -or [DateTime]::UtcNow -ge $until) { throw }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+}
+
 # Dot-sourced by test-runtime.ps1; every launch uses a new mailbox and token.
 function Invoke-DefeatRuntimeSession([string[]]$RequiredMods, [string]$Label) {
     $script:AnimationMode=$true
@@ -78,14 +94,7 @@ function Initialize-DefeatBlackoutRestart([int]$Checkpoint, $FirstSnapshot) {
         try {
             Copy-Item -LiteralPath $target -Destination $temporary
             Set-IniValue $temporary 'General' 'sLocalSavePath' ([IO.Path]::GetRelativePath($script:GameDocuments,$script:SaveRoot)+'\')
-            $until=[DateTime]::UtcNow.AddSeconds(5)
-            while ($true) {
-                try { [IO.File]::Move($temporary,$target,$true); break }
-                catch [IO.IOException] {
-                    if (($_.Exception.HResult -band 0xffff) -notin @(32,33) -or [DateTime]::UtcNow -ge $until) { throw }
-                    Start-Sleep -Milliseconds 100
-                }
-            }
+            Move-DefeatPrivateFile $temporary $target
         } finally {
             if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
         }

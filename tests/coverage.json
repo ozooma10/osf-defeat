@@ -152,6 +152,6 @@
       "truce-missed-grenade",
       "truce-scripted-attack-contract"
     ],
-    "limits": "Disposable spawned aggressor in a quiet cell; exact modified/legendary Eon metadata through theft, reload, natural death drop and pickup, plus a zero-ammo equipment fixture. Missed knife/unarmed/Eon/frag attacks and a cooperating scripted attack are covered. Blackout reload covers same-process and cold starts before promotion; external interruption also covers post-promotion. Existing world enemies, generated structures, actual resets, saves after theft/time advancement, other weapon families, non-cooperating attack producers and ship/space refusal require separate acceptance."
+    "limits": "Disposable spawned aggressor in a quiet cell; exact modified/legendary Eon metadata through theft, reload, natural death drop and pickup, plus a zero-ammo equipment fixture. Missed knife/unarmed/Eon/frag attacks and a cooperating scripted attack are covered. Blackout reload covers same-process and cold starts before promotion and at test-gated post-theft/post-time boundaries; external interruption also covers post-promotion. A separate Frontier fixture covers on-foot landed/orbital refusal and automatic healthy reload. Existing world enemies, generated structures, actual resets, other weapon families, non-cooperating attack producers, piloting and hostile boarding layouts need separate acceptance."
   }
 ]
