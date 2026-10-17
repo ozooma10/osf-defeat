@@ -58,6 +58,13 @@ it is transient handoff context, not an item-instance identifier. See the
 
 ## Validation
 
+- Full regression: **53/53 live assertions**, **83 native cases / 1,014 checks**,
+  all runner/payload/build checks and source-integrity checks passed on revision
+  `00735ee`. Receipt:
+  `build/smoke/20261017-014058-4c36794daabd47d3b906eaf99c67b8d7/summary.json`;
+  game artifacts: `../OSF Test Harness/artifacts/20261017-014106-085-DefeatSmoke`.
+  This includes all 42 pre-existing checks plus the 11 new Shadows/truce checks.
+  Subsequent edits only document these results.
 - Offline: **83 native cases / 1,014 checks**, **97 runner checks**, payload validation,
   production DLL build and Papyrus compilation passed. Receipt:
   `build/smoke/20261017-013301-e995c8452c3c4586891cfa3c8957b513/summary.json`.

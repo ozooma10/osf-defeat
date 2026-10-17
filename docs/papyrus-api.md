@@ -109,7 +109,7 @@ Bool Function RemoveCaptiveFaction(Actor akActor) global native
 Bool Function IsCaptiveFactionApplied(Actor akActor) global native
 ```
 
-Adds the actor to the configured `captiveFaction` (default: vanilla `0x0003E0C8`) so **all** hostiles treat them as non-hostile. This is distinct from AI suspension and is independent of `applyCaptiveFactionOnPlayerDefeat`. Membership is added at most once, never over a pre-existing membership, and removal deletes only membership the framework created. It is removed automatically on `RecoverActor`; tracking survives save/load via the co-save.
+Adds the actor to the configured `captiveFaction` (default: vanilla `0x0003E0C8`) so **all** hostiles treat them as non-hostile. This is distinct from AI suspension and is independent of `applyCaptiveFactionOnPlayerDefeat`. Membership is added at most once, never over a pre-existing membership, and removal deletes only membership the framework created. It is removed automatically on ordinary recovery; `RecoverActorWithTruce` retains it until truce ends. Tracking survives save/load via the co-save.
 
 ## Queries
 
@@ -234,7 +234,7 @@ Use this for content mods such as OSF Surrender. The callback has no direct para
 
 `GetLastPlayerEquippedWeapon` returns the owned primary weapon base captured before
 down presentation changes equipment. Copy it at handoff; the context clears on load
-and changes with the next defeat. None means unarmed, unavailable or no owned equipped
+and changes with the next consequence handoff. None means unarmed, unavailable or no owned equipped
 weapon. It is not an instance/stack identifier: consumers must handle multiple copies
 and quest items conservatively.
 
