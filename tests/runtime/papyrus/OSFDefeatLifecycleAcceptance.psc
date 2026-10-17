@@ -107,7 +107,7 @@ EndFunction
 
 Function Prepare(String kind)
     Bool ready = True
-    If kind != "cancel-idempotent" && kind != "stopped-promotion" && kind != "reward-cancel"
+    If kind != "cancel-idempotent" && kind != "stopped-promotion" && kind != "reward-cancel" && kind != "restart-attack"
         ready = FreshHunt()
     EndIf
     OSFDefeatAcceptanceProbe.Record("lifecycle-ready-" + kind, ready, target)
@@ -159,6 +159,20 @@ Function Run(String kind)
                 EndWhile
                 ObserveCleanup("lifecycle-stop-observed")
                 ok = !hunt.IsRunning() && Clean() && LootUnchanged()
+                If !ok
+                    ; Diagnostic recovery follows the recorded production state;
+                    ; it must never turn the failed shutdown assertion into a pass.
+                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-is-stopped", hunt.IsStopped())
+                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-is-stopping", hunt.IsStopping())
+                    hunt.SetObjectiveDisplayed(10, False, True)
+                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-force-hide", !hunt.IsObjectiveDisplayed(10))
+                    hunt.SetObjectiveFailed(10, True)
+                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-mark-failed", hunt.IsObjectiveFailed(10))
+                    hunt.Reset()
+                    Utility.Wait(0.5)
+                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-reset-hide", !hunt.IsObjectiveDisplayed(10))
+                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-reset-stopped", hunt.IsStopped())
+                EndIf
             ElseIf kind == "restart-old-death"
                 ok = previous != None && previous != target
                 If ok
@@ -167,6 +181,15 @@ Function Run(String kind)
                     Utility.Wait(2.0)
                     ok = previous.IsDead() && Active() && LootUnchanged() && !Game.GetPlayer().HasSpell(hunt.PlayerReward)
                 EndIf
+            ElseIf kind == "restart-attack"
+                hunt.LastAttackEvent = ""
+                Spell attack = Game.GetFormFromFile(0x29AAE9, "Starfield.esm") as Spell
+                ok = attack != None && OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer())
+                Game.GetPlayer().DoCombatSpellApply(attack, target)
+                Utility.Wait(1.0)
+                ; Require the actual remote callback after shutdown/start. Native
+                ; damage cancellation alone cannot prove subscriptions returned.
+                ok = ok && hunt.LastAttackEvent == "OnSpellCast" && !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer()) && Active()
             ElseIf kind == "reward-idle"
                 target.Kill(Game.GetPlayer())
                 OSFDefeat.ResumeActorAI(target)

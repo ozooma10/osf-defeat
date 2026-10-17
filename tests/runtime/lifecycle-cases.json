@@ -8,6 +8,7 @@
   "lifecycle-stop",
   "lifecycle-stopped-promotion",
   "lifecycle-restart-old-death",
+  "lifecycle-restart-attack",
   "lifecycle-reward-idle",
   "lifecycle-reward-cancel",
   "lifecycle-active-before-save",

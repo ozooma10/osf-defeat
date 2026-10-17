@@ -61,7 +61,7 @@ namespace {
     bool scriptedOnly=false;
     bool lifecycleOnly=false;
     std::size_t lifecycleIndex{};
-    constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","reward-idle","reward-cancel"};
+    constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","restart-attack","reward-idle","reward-cancel"};
     struct ScriptedCase { const char* name; bool endsTruce; };
     constexpr ScriptedCase scriptedCases[]{
         {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},
@@ -435,7 +435,8 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             const auto ready=std::string("lifecycle-ready-")+lifecycleCases[lifecycleIndex];
             if(Wait(Recorded(ready,beforeRecords))) break;
             if(!Saw(ready,beforeRecords)) throw std::runtime_error("Lifecycle fixture preparation failed");
-            if(std::string_view(lifecycleCases[lifecycleIndex])=="cancel" && !Truce::Begin(*player,30))
+            const std::string_view trial=lifecycleCases[lifecycleIndex];
+            if((trial=="cancel" || trial=="restart-attack") && !Truce::Begin(*player,30))
                 throw std::runtime_error("Cannot start cancellation truce");
             beforeRecords=Sequence(); script("Run",lifecycleCases[lifecycleIndex]); phase=4; phaseAt=Now(); break;
         }
