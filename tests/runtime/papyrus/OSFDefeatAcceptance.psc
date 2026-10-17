@@ -18,6 +18,7 @@ Float defeatDay
 Int shadowCredits
 Actor repeatAggressor
 Int repeatCredits
+Int throwableBefore
 
 Actor Function NewShadow(Bool lowerLevel = False)
     Int[] bases = new Int[10]
@@ -277,6 +278,7 @@ Function PrepareMissedAttackKind(String kind)
         Weapon grenade = Game.GetFormFromFile(0x115EF, "Starfield.esm") as Weapon
         player.AddItem(grenade, 2, True)
         player.EquipItem(grenade, False, True)
+        throwableBefore = player.GetItemCount(grenade)
     EndIf
     player.DrawWeapon()
     Utility.Wait(1.0)
@@ -295,15 +297,31 @@ Function InspectMissedAttackKind(String kind)
     String observed = hunt.LastAttackEvent
     Bool eventMatches = observed == "HitFrame" || observed == "MeleeAttackStart"
     If kind == "ranged"
-        eventMatches = observed == "OnPlayerFireWeapon"
+        eventMatches = observed == "OnPlayerFireWeapon" || observed == "WeaponFire"
     ElseIf kind == "grenade"
-        eventMatches = observed == "ThrowGrenade"
+        eventMatches = observed == "WeaponFire" && Game.GetPlayer().GetItemCount(Game.GetFormFromFile(0x115EF, "Starfield.esm")) == throwableBefore - 1
     EndIf
     OSFDefeatAcceptanceProbe.Record("shadows-attack-event-" + observed, True)
     If kind == "grenade"
         Utility.Wait(5.0)
     EndIf
     OSFDefeatAcceptanceProbe.Record("shadows-miss-kind-observed", eventMatches && !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer()))
+EndFunction
+
+Function CooperativeScriptedAttack()
+    ; A third-party producer that bypasses the player's graph/fire callbacks
+    ; must explicitly end the truce through the public API before its attack.
+    Bool queued = OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
+    Int waited = 0
+    While OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer()) && waited < 20
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    Bool ended = !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer())
+    If queued && ended
+        testWeapon.Fire(Game.GetPlayer())
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-scripted-attack-contract", queued && ended)
 EndFunction
 
 Function WatchBlackout(String mode)
@@ -334,6 +352,8 @@ Function InspectLoadedBlackout()
     Utility.Wait(3.0)
     OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
     Bool ok = aftermath.LastResult == "loaded-blackout" && !aftermath.IsRunning()
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-result-" + aftermath.LastResult, ok)
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-credits", Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits, Game.GetPlayer(), Game.GetPlayer().GetItemCount(Game.GetCredits()))
     ok = ok && !OSFDefeat.IsDefeated(Game.GetPlayer()) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
     ok = ok && hunt.Nemesis.GetReference() == None && Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits
     ok = ok && Utility.GetCurrentGameTime() - defeatDay < 0.01

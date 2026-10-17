@@ -480,9 +480,14 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             truceDeadline=Truce::Snapshot()[0].expiresAtDay;
             Papyrus("PrepareMissedAttackKind",attackKinds[attackIndex]); phase=49;
         } else {
-            beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42;
+            if(!Truce::Begin(*player,30)) throw std::runtime_error("Cannot start scripted attack test");
+            Papyrus("CooperativeScriptedAttack"); phase=52;
         }
         phaseAt=Now(); break;
+    case 52:
+        if(Wait(Saw("shadows-scripted-attack-contract") && !Truce::IsActive(player->GetFormID()))) break;
+        Check(out,"truce-scripted-attack-contract",Saw("shadows-scripted-attack-contract"));
+        beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42; phaseAt=Now(); break;
     }
     return false;
 }

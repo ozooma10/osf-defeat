@@ -63,5 +63,6 @@
   "shadows-blackout-save-load",
   "truce-missed-unarmed",
   "truce-missed-ranged",
-  "truce-missed-grenade"
+  "truce-missed-grenade",
+  "truce-scripted-attack-contract"
 ]

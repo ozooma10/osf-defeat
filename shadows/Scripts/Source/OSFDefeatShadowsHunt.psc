@@ -26,14 +26,13 @@ Function WatchPlayer()
     Actor player = Game.GetPlayer()
     RegisterForRemoteEvent(player, "OnPlayerLoadGame")
     RegisterForRemoteEvent(player, "OnPlayerFireWeapon")
-    ; Starfield graph events, not Skyrim's weaponSwing names. HitFrame is the
-    ; melee contact frame even when there is no target; health damage is also
-    ; handled by the native fallback. Missed attacks still need live acceptance.
+    ; .244 emits WeaponFire when a grenade is released; ThrowGrenade is an
+    ; input/clip name, not the outgoing event. HitFrame covers missed melee.
+    ; Keep the player-fire event and native damage path as additional coverage.
+    RegisterForAnimationEvent(player, "WeaponFire")
     RegisterForAnimationEvent(player, "HitFrame")
     RegisterForAnimationEvent(player, "MeleeAttackStart")
     RegisterForAnimationEvent(player, "MeleeAttackBashStart")
-    RegisterForAnimationEvent(player, "ThrowGrenade")
-    RegisterForAnimationEvent(player, "ThrowMine")
 EndFunction
 
 Bool Function Eligible(Actor candidate)
