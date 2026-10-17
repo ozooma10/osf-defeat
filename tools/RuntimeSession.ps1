@@ -42,6 +42,13 @@ function Invoke-DefeatRuntimeSession([string[]]$RequiredMods, [string]$Label) {
 
 function Initialize-DefeatBlackoutRestart([int]$Checkpoint, $FirstSnapshot) {
     if (@(Get-GameProcess).Count) { throw '[blocked] Game is still running before cold restart preparation.' }
+    # MO2 can flush/lock its profile after the game exits. Close our idle launcher
+    # before changing the next process's save directory, as at initial setup.
+    $moExecutable=Join-Path $script:Config.MO2 'ModOrganizer.exe'
+    foreach ($mo in @(Get-Process -Name ModOrganizer -ErrorAction SilentlyContinue | Where-Object Path -eq $moExecutable)) {
+        $null=$mo.CloseMainWindow()
+        if (-not $mo.WaitForExit(10000)) { throw '[blocked] Idle MO2 did not close before cold restart.' }
+    }
     $name=@{1='osfdefeatblackout';2='osfdefeattheft';3='osfdefeattime'}[$Checkpoint]
     if (-not $name) { throw 'Unknown blackout checkpoint.' }
     $pair=Join-Path $script:Run.path "saves/$name"
@@ -64,7 +71,24 @@ function Initialize-DefeatBlackoutRestart([int]$Checkpoint, $FirstSnapshot) {
     $fixture.files=@(Get-ChildItem -LiteralPath $seed -File | ForEach-Object {@{name=$_.Name;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}})
     Write-JsonFile (Join-Path $script:FixtureRoot 'fixture.json') $fixture
     foreach ($ini in @('Starfield.ini','StarfieldCustom.ini')) {
-        Set-IniValue (Join-Path $script:ProfileRoot $ini) 'General' 'sLocalSavePath' ([IO.Path]::GetRelativePath($script:GameDocuments,$script:SaveRoot)+'\')
+        # Edit a private sibling first: a transient sharing/byte-range lock must
+        # not leave a partially written live INI. Replacement has a bounded retry.
+        $target=Assert-ChildPath $script:ProfileRoot (Join-Path $script:ProfileRoot $ini)
+        $temporary=Assert-ChildPath $script:ProfileRoot ($target+'.'+[guid]::NewGuid().ToString('N')+'.tmp')
+        try {
+            Copy-Item -LiteralPath $target -Destination $temporary
+            Set-IniValue $temporary 'General' 'sLocalSavePath' ([IO.Path]::GetRelativePath($script:GameDocuments,$script:SaveRoot)+'\')
+            $until=[DateTime]::UtcNow.AddSeconds(5)
+            while ($true) {
+                try { [IO.File]::Move($temporary,$target,$true); break }
+                catch [IO.IOException] {
+                    if (($_.Exception.HResult -band 0xffff) -notin @(32,33) -or [DateTime]::UtcNow -ge $until) { throw }
+                    Start-Sleep -Milliseconds 100
+                }
+            }
+        } finally {
+            if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+        }
     }
     $script:Run.coldSaveDirectory=$script:SaveRoot
     $script:DefeatMailbox=Join-Path $script:Run.path "blackout-cold-mailbox-$Checkpoint"
