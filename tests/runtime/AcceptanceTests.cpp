@@ -16,6 +16,7 @@
 #include "RE/V/VirtualMachine.h"
 #include "RE/P/PlayerCamera.h"
 #include "RE/N/NiNode.h"
+#include "WeaponEvidence.h"
 #include <mutex>
 #include <variant>
 
@@ -49,6 +50,7 @@ namespace {
     };
     std::size_t packIndex{};
     bool packDefeatObserved{};
+    WeaponMods weaponBaseline;
     std::int64_t Now() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
     void Record(VM&,std::uint32_t,std::monostate,RE::BSFixedString name,bool ok,RE::Actor* subject,float value) {
         std::scoped_lock lock(observationsLock);
@@ -59,6 +61,22 @@ namespace {
         records.push_back({{"sequence",++sequence},{"name",label},{"ok",ok},
             {"subject",subject?subject->GetFormID():0},{"value",value}});
         if((label=="fixture" || label=="shadows-ready") && ok && subject) npcID=subject->GetFormID();
+    }
+    bool VerifyWeapon(VM&,std::uint32_t,std::monostate,RE::Actor* owner,RE::TESForm* weapon,RE::BSFixedString checkpoint) {
+        const auto mods = owner && weapon ? ReadWeaponMods(*owner,*weapon) : std::nullopt;
+        std::scoped_lock lock(observationsLock);
+        bool ok = mods.has_value();
+        const std::string label = checkpoint.c_str();
+        if (ok && label == "baseline") {
+            for (const auto required : {0x14127Du,0xF2013u,0xFEA04u,0xFA8D6u})
+                ok = ok && std::ranges::any_of(*mods,[required](const auto& entry){return entry[0]==required;});
+            if (ok) weaponBaseline = *mods;
+        } else {
+            ok = ok && !weaponBaseline.empty() && *mods == weaponBaseline;
+        }
+        records.push_back({{"sequence",++sequence},{"name","weapon-mods-"+label},{"ok",ok},
+            {"owner",owner?owner->GetFormID():0},{"mods",mods ? Json(*mods) : Json(nullptr)}});
+        return ok;
     }
     bool Saw(std::string_view name,std::uint64_t after=0,FormID subject=0) {
         std::scoped_lock lock(observationsLock);
@@ -146,7 +164,10 @@ namespace {
         REL::Relocation<Fn> fn{REL::ID{101587}}; fn(&Engine::AVOwnerOf(*actor),RE::ACTOR_VALUE_MODIFIER::kDamage,*Engine::HealthAV(),delta,aggressor);
     }
 }
-void Bind(VM& vm) { vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false); }
+void Bind(VM& vm) {
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false);
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyWeapon",&VerifyWeapon,std::nullopt,false);
+}
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
 bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::filesystem::path& directory,bool shadowsOnly) {
@@ -329,6 +350,8 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Check(out,"shadows-aftermath-and-loot",Saw("shadows-aftermath"));
         Check(out,"shadows-trait-magnitudes",Saw("shadows-player-resistance") && Saw("shadows-nemesis-resistance"));
         Check(out,"shadows-slot-preserved",Saw("shadows-slot-preserved"));
+        Check(out,"shadows-modified-weapon-transfer",Saw("weapon-mods-baseline") && Saw("weapon-mods-transferred"));
+        Check(out,"shadows-negative-eligibility",Saw("shadows-negative-eligibility"));
         truceDeadline=Truce::Snapshot()[0].expiresAtDay;
         Request(out,"save","osfdefeattruce"); Next(); break;
     case 32:
@@ -343,6 +366,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 34:
         if(Wait(Acknowledged(out,directory) && !Truce::IsActive(player->GetFormID()),10)) break;
         Check(out,"truce-missed-melee",GameTime::NowDay()<truceDeadline && !Engine::HasCaptiveFactionApplied(*player));
+        Check(out,"shadows-modified-weapon-reload",Saw("weapon-mods-reloaded"));
         if(!Truce::Begin(*player,2)) throw std::runtime_error("Cannot start expiry test"); Next(); break;
     case 35:
         if(Wait(!Truce::IsActive(player->GetFormID()),10)) break;
@@ -352,6 +376,8 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         if(Wait(Saw("shadows-player-reward") && Saw("shadows-other-kill"),30)) break;
         Check(out,"shadows-player-kill-reward",Saw("shadows-player-reward"));
         Check(out,"shadows-other-kill-clears-debuff",Saw("shadows-other-kill"));
+        Check(out,"shadows-modified-weapon-retrieval",Saw("weapon-mods-retrieved"));
+        Check(out,"shadows-modified-world-drop",Saw("shadows-world-drop") && Saw("weapon-mods-world-pickup"));
         std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
         Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); Next(); break;
     case 37:

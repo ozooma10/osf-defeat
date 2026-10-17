@@ -57,6 +57,7 @@ Function ShadowsPrepare()
     EndIf
     hunt.Start()
     Utility.Wait(0.5)
+    ShadowsNegativeEligibility()
     shadow = NewShadow()
     If shadow == None
         OSFDefeatAcceptanceProbe.Record("shadows-ready", False, player, player.GetLevel())
@@ -65,7 +66,14 @@ Function ShadowsPrepare()
     testWeapon = Game.GetFormFromFile(0x476C4, "Starfield.esm") as Weapon
     player.RemoveItem(testWeapon, player.GetItemCount(testWeapon), True)
     player.AddItem(testWeapon, 1, True)
+    ; Physical suppressor plus all three legendary attachment slots. Verify the
+    ; actual instance array, not just successful Papyrus return values or a name.
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0x14127D, "Starfield.esm") as ObjectMod)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0xF2013, "Starfield.esm") as ObjectMod)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0xFEA04, "Starfield.esm") as ObjectMod)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0xFA8D6, "Starfield.esm") as ObjectMod)
     player.EquipItem(testWeapon, False, True)
+    OSFDefeatAcceptanceProbe.VerifyWeapon(player, testWeapon, "baseline")
     Weapon old = shadow.GetEquippedWeapon()
     If old != None
         shadow.UnequipItem(old, True, True)
@@ -90,6 +98,7 @@ Function ShadowsInspect()
     OSFDefeat.ResumeActorAI(shadow)
     Utility.Wait(2.0)
     ObjectReference stolen = hunt.StolenWeapon.GetReference()
+    OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "transferred")
     Bool ok = hunt.Nemesis.GetActorReference() == shadow && OSFDefeat.HasQuestAlias(shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-alias", ok, shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-objective", hunt.IsObjectiveDisplayed(10), shadow)
@@ -156,6 +165,18 @@ Function ShadowsPlayerKill()
     EndIf
     Utility.Wait(0.5)
     Bool recovered = Game.GetPlayer().GetItemCount(testWeapon) == 1
+    OSFDefeatAcceptanceProbe.VerifyWeapon(Game.GetPlayer(), testWeapon, "retrieved")
+    ; Exercise a real world reference separately from the corpse-loot branch.
+    ; This forces DropObject; it does not claim the NPC naturally dropped it.
+    ObjectReference worldWeapon = Game.GetPlayer().DropObject(testWeapon, 1)
+    Utility.Wait(0.5)
+    Bool leftInventory = worldWeapon != None && Game.GetPlayer().GetItemCount(testWeapon) == 0
+    If worldWeapon != None
+        worldWeapon.Activate(Game.GetPlayer())
+    EndIf
+    Utility.Wait(0.5)
+    OSFDefeatAcceptanceProbe.Record("shadows-world-drop", leftInventory && Game.GetPlayer().GetItemCount(testWeapon) == 1)
+    OSFDefeatAcceptanceProbe.VerifyWeapon(Game.GetPlayer(), testWeapon, "world-pickup")
     OSFDefeatAcceptanceProbe.Record("shadows-weapon-retrieved", recovered, Game.GetPlayer(), Game.GetPlayer().GetItemCount(testWeapon))
     Bool ok = !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && Game.GetPlayer().HasSpell(hunt.PlayerReward)
     ok = ok && hunt.Nemesis.GetReference() == None && hunt.IsObjectiveCompleted(10)
@@ -184,6 +205,7 @@ EndFunction
 
 Function PrepareMissedAttack()
     Actor player = Game.GetPlayer()
+    OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "reloaded")
     ; Equip an explicit melee weapon: after theft, the primary getter can retain
     ; a stale empty gun even after UnequipAll. This also avoids stripping armor.
     Weapon knife = Game.GetFormFromFile(0x35A48, "Starfield.esm") as Weapon
@@ -205,6 +227,41 @@ Function PrepareMissedAttack()
     OSFDefeatAcceptanceProbe.Record("shadows-miss-ready", armed && Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player), player)
     OSFDefeatAcceptanceProbe.Record("shadows-attack-registration", registered, player)
     OSFDefeatAcceptanceProbe.Record("shadows-weapon-drawn", player.IsWeaponDrawn(), player)
+EndFunction
+
+Function ShadowsNegativeEligibility()
+    Bool ok = !hunt.Eligible(None) && !hunt.Eligible(Game.GetPlayer())
+    Actor candidate = NewShadow()
+    If candidate == None
+        OSFDefeatAcceptanceProbe.Record("shadows-negative-eligibility", False)
+        Return
+    EndIf
+    candidate.SetProtected(True)
+    Bool protectedRef = OSFDefeat.HasProtectionOverride(candidate) && !hunt.Eligible(candidate)
+    candidate.SetProtected(False)
+    Bool clearedOverride = OSFDefeat.HasProtectionOverride(candidate) && !hunt.Eligible(candidate)
+    OSFDefeatAcceptanceProbe.Record("shadows-protected-reference", protectedRef, candidate)
+    OSFDefeatAcceptanceProbe.Record("shadows-cleared-protection-override", clearedOverride, candidate)
+    candidate.Disable()
+    candidate.Delete()
+    candidate = NewShadow()
+    If candidate == None
+        OSFDefeatAcceptanceProbe.Record("shadows-negative-eligibility", False)
+        Return
+    EndIf
+    candidate.SetGhost(True)
+    Bool ghost = !hunt.Eligible(candidate)
+    candidate.SetGhost(False)
+    candidate.SetPlayerTeammate(True)
+    Bool teammate = !hunt.Eligible(candidate)
+    candidate.SetPlayerTeammate(False)
+    ; Force into an unrelated alias before eligibility, without promoting it.
+    hunt.StolenWeapon.ForceRefTo(candidate)
+    Bool aliased = OSFDefeat.HasQuestAlias(candidate) && !hunt.Eligible(candidate)
+    hunt.StolenWeapon.Clear()
+    candidate.Disable()
+    candidate.Delete()
+    OSFDefeatAcceptanceProbe.Record("shadows-negative-eligibility", ok && protectedRef && clearedOverride && ghost && teammate && aliased)
 EndFunction
 
 Event OnAnimationEvent(ObjectReference source, String eventName)

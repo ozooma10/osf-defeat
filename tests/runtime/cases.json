@@ -51,5 +51,10 @@
   "truce-timer-expiry",
   "shadows-player-kill-reward",
   "shadows-other-kill-clears-debuff",
-  "shadows-cleanup-load"
+  "shadows-cleanup-load",
+  "shadows-modified-weapon-transfer",
+  "shadows-negative-eligibility",
+  "shadows-modified-weapon-reload",
+  "shadows-modified-weapon-retrieval",
+  "shadows-modified-world-drop"
 ]
