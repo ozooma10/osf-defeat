@@ -241,6 +241,10 @@ pass 13 blackout assertions and 8 landed/orbital Frontier refusal assertions,
 including vanilla death and clean automatic reload. Coverage also includes exact
 modified-weapon natural drops, stolen-weapon ammunition, negative eligibility,
 repeat defeat, attack misses and post-promotion interruption.
+A separate weapon matrix now passes 31 assertions across 26 attacks, including
+energy/heavy/EM weapons, melee/bash, five grenades, and four mines. It verifies
+truce cancellation, ammunition/item consumption, passive controls, and clean
+reloads between explosive cases. The tested production behavior required no change.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.

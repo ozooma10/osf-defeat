@@ -154,13 +154,48 @@ Native-layout and graph-event evidence lives in OSF RE's `gameplay.actor_equipme
 `engine.animation_graphs` and `ui.input_enable_layer` modules. Failed iteration
 receipts are retained rather than overwritten.
 
+## Broader weapon acceptance (2026-10-17)
+
+The separate `-WeaponsOnly` matrix passes **31/31 assertions** on Defeat `1d66618`
+with uninstrumented production Shadows scripts and Animation `fcf9714`. It covers
+26 attacks: Eon, Grendel, Coachman, Breach, Equinox, Va'ruun Inflictor, Magpulse,
+Magstorm, Microgun, Bridger, Novablast, Cutter, combat knife, rescue axe, Wakizashi,
+unarmed, Eon bash, frag/impact/shrapnel/particle/incendiary grenades, and
+frag/inferno/cryo/Tesla mines. Equipment setup and reload/aim input preserve the
+truce; each attack ends it before its deadline and clears captive-faction ownership
+and membership. Guns consume ammo, except the energy-recharging Cutter; each
+throwable consumes exactly one item. The bounded graph observer records WeaponFire
+for all ranged/throwable cases and HitFrame for melee/unarmed/bash, alongside the
+production quest's fire/animation callbacks.
+
+Receipt: `build/weapons-03.json`; artifacts:
+`OSF Test Harness/artifacts/20261017-142007-594-DefeatSmoke`. The owned process was
+PID 44652, creation FILETIME `134367204364080996`. Ten isolation loads and final
+cleanup produce eleven observed load events and epoch 13. The final healthy load
+restores controls, empty framework state, original gear/health, and the original
+camera view; the game closes normally. Offline validation on the same revision
+passes 83 native cases / 1,014 assertions, 132 runner checks, payload verification,
+and the production build (`build/weapons-offline-01/summary.json`).
+
+No production change was necessary. Retained iteration 01 rejected an input hold
+above the helper's one-second limit; the corrected action durations now have a
+runner contract. Iteration 02 passed shrapnel release, then lost its next truce
+before input, consistent with lingering explosive damage. Each throwable now
+starts from a verified healthy load, as does the case after the Bridger, preventing
+effects from contaminating subsequent cases. Mid-session failures also retain a
+capture even when the session has not returned successfully.
+
+This is first-person keyboard/mouse coverage of the listed forms. It does not
+certify all OMOD combinations, camera/controller paths, mine detonation behavior,
+or non-cooperating scripted producers. See the [runtime guide](../tests/runtime/README.md).
+
 ## Remaining acceptance before replacing Basic
 
 - Existing world aggressor at an authored combat encounter and a generated enemy
   structure: normal full-body appearance, title/journal/abilities, normal planet
   departure and return, reload/cold restart, long absence and actual reset behavior.
   The old seeds prove inert surrogates at a city and a natural feature only.
-- Other weapon/throwable families and non-cooperating third-party attack producers.
+- Non-cooperating third-party attack producers that bypass the tested callbacks.
 - Broader unsupported-domain fixtures such as piloting, free-space actors and
   hostile boarding layouts. Landed/orbital on-foot refusal in the Frontier passes.
 

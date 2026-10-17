@@ -35,6 +35,12 @@ mines, with a new load event/epoch and empty framework state required each time.
 The final healthy load also restores equipment and health. This proves the tested keyboard/mouse
 attacks, not every OMOD, camera/controller path, or third-party scripted producer.
 
+Latest acceptance: **31/31 passed**, Defeat `1d66618`, receipt
+`build/weapons-03.json`, artifacts
+`OSF Test Harness/artifacts/20261017-142007-594-DefeatSmoke`. The
+[implementation record](../../docs/MINIMAL-SHADOWS-IMPLEMENTATION.md#broader-weapon-acceptance-2026-10-17)
+retains scope, process identity, isolation-load evidence, and earlier iterations.
+
 ## Run blackout coverage
 
 ```powershell
