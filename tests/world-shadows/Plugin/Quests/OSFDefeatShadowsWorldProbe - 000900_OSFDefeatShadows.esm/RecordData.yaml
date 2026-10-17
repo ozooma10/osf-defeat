@@ -1,0 +1,28 @@
+FormKey: 000900:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsWorldProbe
+FormVersion: 582
+VirtualMachineAdapter:
+  Scripts:
+  - Name: OSFDefeatShadowsWorldProbe
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: Hunt
+      Object: 000801:OSFDefeatShadows.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: IdentityStamp
+      Object: 000901:OSFDefeatShadows.esm
+  Versioning:
+  - Break0
+  ExtraBindDataVersion: 0
+  Script:
+    Name: ''
+Name:
+  TargetLanguage: English
+  Value: Shadows World Acceptance Probe
+Data:
+  Flags: []
+  Priority: 0
+  Unused: 0x000000
+UnusedConditions: []
+NextAliasID: 0
+Aliases: []

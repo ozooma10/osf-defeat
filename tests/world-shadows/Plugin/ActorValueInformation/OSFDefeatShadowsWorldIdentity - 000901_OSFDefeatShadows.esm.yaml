@@ -1,0 +1,10 @@
+FormKey: 000901:OSFDefeatShadows.esm
+EditorID: OSFDefeatShadowsWorldIdentity
+FormVersion: 582
+Name:
+  TargetLanguage: English
+  Value: Shadows world identity stamp
+DefaultValue: 0
+Flags:
+- DefaultToZero
+Type: Variable
