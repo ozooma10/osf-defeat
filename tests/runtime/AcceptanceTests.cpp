@@ -164,11 +164,12 @@ namespace {
             ++loads; return RE::BSEventNotifyControl::kContinue;
         }
     } engineEvents;
-    void Papyrus(std::string_view function,std::string argument={}) {
+    void Papyrus(std::string_view function,std::string argument={},bool requireExisting=false) {
         auto* vm=RE::GameVM::GetSingleton()->GetVM(); auto* player=RE::PlayerCharacter::GetSingleton();
         const auto handle=vm->GetObjectHandlePolicy().GetHandleForObject(static_cast<std::uint32_t>(player->GetFormType()),player);
         RE::BSTSmartPointer<RE::BSScript::Object> object;
         if(!vm->FindBoundObject(handle,Script,false,object,true)) {
+            if(requireExisting) throw std::runtime_error("Saved Papyrus acceptance consumer was not restored");
             if(!vm->CreateObject(Script,object) || !object) throw std::runtime_error("Cannot create Papyrus acceptance consumer");
             RE::BSScript::Internal::VirtualMachine::GetSingleton()->BindObject(object,handle,false);
             RE::BSTSmartPointer<RE::BSScript::Object> bound;
@@ -235,13 +236,38 @@ void Bind(VM& vm) {
 }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
-bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::filesystem::path& directory,bool shadowsOnly) {
+bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::filesystem::path& directory,bool shadowsOnly,bool blackoutColdStart) {
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
     { std::scoped_lock lock(observationsLock); out["papyrus"]=records; }
     auto* npc=RE::TESForm::LookupByID<RE::Actor>(npcID.load());
     if(npc) out["npc"]={{"id",npc->GetFormID()},{"defeated",Defeat::IsDefeated(npc)},{"captive",Capture::IsCaptive(npc)},
         {"faction",Engine::IsInCaptiveFaction(*npc)},{"distance",Distance(npc->GetPosition(),player->GetPosition())}};
+    if(blackoutColdStart) {
+        switch(phase) {
+        case 0:
+            phaseAt=Now();
+            RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);
+            RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
+            // The saved consumer holds the pre-blackout credits/time. A fresh
+            // object or process-local baseline cannot certify cold recovery.
+            Papyrus("InspectLoadedBlackout",{},true); Next(); break;
+        case 1:
+            if(Wait(Saw("shadows-blackout-loaded") && !Defeat::IsDefeated(player),30)) break;
+            out["blackoutReloadInputLayers"]=InputLayers();
+            // Startup's load predates this observer. The runner separately
+            // verifies Auto Load's exact seed and the fresh process identity.
+            Check(out,"shadows-blackout-cold-restart",Loaded(player) && scenes->GetSceneForActor(player)==0);
+            std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
+            Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); Next(); break;
+        case 2:
+            if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player) && scenes->GetSceneForActor(player)==0,60)) break;
+            Check(out,"shadows-blackout-cold-cleanup",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty() &&
+                DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
+            return true;
+        }
+        return false;
+    }
     switch(phase) {
     case 0:
         RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);

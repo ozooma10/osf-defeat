@@ -13,6 +13,8 @@ $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'TestSupport.ps1')
 . (Join-Path $PSScriptRoot 'CosaveEvidence.ps1')
 . (Join-Path $PSScriptRoot 'RuntimeActions.ps1')
+. (Join-Path $PSScriptRoot 'RuntimeSession.ps1')
+$script:BlackoutColdStart=$false
 $required=@('scripts/Common.ps1','scripts/Environment.ps1','scripts/Reports.ps1','build/bin/OSFTestHarness.dll','build/bin/OSFTestInput.exe')
 $missing=@($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Harness $_) -PathType Leaf) })
 if ($missing.Count) { Write-Error "[blocked] Missing OSF Test Harness files in ${Harness}: $($missing -join ', ')"; exit 2 }
@@ -79,7 +81,7 @@ function Reset-Fixture {
 # paths above are Defeat-specific; no Animation payload or source is edited.
 function Prepare-AnimationMailbox([string]$LaunchToken) {
     $script:DefeatLaunchToken=$LaunchToken
-    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly}
+    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly;blackoutColdStart=$script:BlackoutColdStart}
 }
 
 try {
@@ -188,38 +190,24 @@ try {
     Set-IniValue (Join-Path $profile 'StarfieldCustom.ini') 'Archive' 'bInvalidateOlderFiles' '1'
     Set-IniValue (Join-Path $profile 'StarfieldCustom.ini') 'Archive' 'sResourceDataDirsFinal' ''
     foreach ($key in @('bSaveOnPause','bSaveOnTravel','bSaveOnWait','bSaveOnRest')) { Set-IniValue (Join-Path $profile 'StarfieldPrefs.ini') 'GamePlay' $key '0' }
-    $script:AnimationMode=$true # Enables Prepare-AnimationMailbox; payload requirements are explicit below.
-    $null=Start-TestGame -RequiredTestMods $mods -AllowProductionSettings; $started=$true; $script:AnimationMode=$false
-    $identity=Get-ProcessIdentity (Get-OwnedGame)
-    $snapshotPath=Join-Path $script:DefeatMailbox 'snapshot.json'
-    $snapshot=Wait-Observed 'Defeat test-build handshake' {Read-JsonFile $snapshotPath} {param($s) $s -and $s.state -in @('ready','failed')} 20
-    if ($snapshot.state -eq 'failed') { throw "[blocked] Runtime preflight: $($snapshot.error)" }
-    Test-DefeatRuntimeSnapshot $snapshot $identity $script:DefeatLaunchToken
-    $null=Save-Capture 'defeat-before'
-    $runId=[guid]::NewGuid().ToString('N')
-    Write-JsonFile (Join-Path $script:DefeatMailbox 'start.json') @{pid=$identity.pid;processStartFileTime=$identity.processStartFileTime;launchToken=$script:DefeatLaunchToken;runId=$runId;expiresAtUtcMs=[DateTimeOffset]::UtcNow.AddSeconds(15).ToUnixTimeMilliseconds()}
-    $limit=[DateTimeOffset]::UtcNow.AddSeconds(640)
-    $lastAction=0
-    do {
-        Start-Sleep -Milliseconds 500
-        if (-not (Get-OwnedGame)) { throw '[failed] Owned game exited during Defeat tests.' }
-        $snapshot=Read-JsonFile $snapshotPath
-        if ($snapshot.state -eq 'ready') { if ([DateTimeOffset]::UtcNow -ge $limit) { throw '[blocked] Start request was not consumed.' }; continue }
-        Test-DefeatRuntimeSnapshot $snapshot $identity $script:DefeatLaunchToken $runId
-        if ($snapshot.ContainsKey('action') -and $snapshot.action.id -gt $lastAction) {
-            Write-Host "Defeat acceptance: $($snapshot.action.kind) $($snapshot.action.name)"
-            Invoke-DefeatRuntimeAction $snapshot
-            $lastAction=$snapshot.action.id
-        }
-        if ($snapshot.state -in @('passed','failed')) { break }
-        if ([DateTimeOffset]::UtcNow -ge $limit) { throw '[blocked] Runtime suite timed out.' }
-    } while ($true)
-    Write-JsonFile (Join-Path $script:Run.path 'defeat-result.json') $snapshot
-    $null=Save-Capture 'defeat-after'
-    if ($snapshot.state -ne 'passed') { throw "[failed] Runtime assertion: $($snapshot.error)" }
-    $actual=@($snapshot.cases.name)
+    $firstSession=Invoke-DefeatRuntimeSession $mods 'defeat'; $started=$true
+    Stop-TestGame
+    Initialize-DefeatBlackoutRestart
+    # Restore the same consequence registration before booting its saved stack.
+    Copy-Item -LiteralPath (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows/minimal-shadows.json') -Destination (Join-Path $payload 'SFSE/OSFDefeat/Consequences/Player/zz-acceptance-shadows.json')
+    Write-Host 'Defeat acceptance: cold restart from the retained blackout save'
+    $coldSession=Invoke-DefeatRuntimeSession $mods 'blackout-cold'
+    if ($firstSession.identity.processStartFileTime -ceq $coldSession.identity.processStartFileTime -or $firstSession.launchToken -ceq $coldSession.launchToken) {
+        throw '[failed] Cold restart did not create a fresh process and launch token.'
+    }
+    Write-JsonFile (Join-Path $script:Run.path 'runtime-sessions.json') @{
+        first=@{identity=$firstSession.identity;launchToken=$firstSession.launchToken}
+        cold=@{identity=$coldSession.identity;launchToken=$coldSession.launchToken}
+    }
+    $cases=@($firstSession.snapshot.cases)+@($coldSession.snapshot.cases)
+    $actual=@($cases.name)
     if ($actual.Count -ne $expected.Count -or @($actual | Sort-Object -Unique).Count -ne $actual.Count -or @(Compare-Object $expected $actual).Count -or
-        @($snapshot.cases | Where-Object { $_.passed -isnot [bool] -or -not $_.passed }).Count) { throw '[failed] Incomplete runtime case evidence.' }
+        @($cases | Where-Object { $_.passed -isnot [bool] -or -not $_.passed }).Count) { throw '[failed] Incomplete runtime case evidence.' }
     if ((Get-DefeatSourceIdentity $repo).sha256 -cne $SourceHash) { throw '[blocked] Source changed during runtime tests.' }
     if ((Get-DefeatSourceIdentity $Harness).sha256 -cne $harnessIdentity.sha256) { throw '[blocked] Harness source changed during runtime tests.' }
     if ((Get-FileHash -LiteralPath $animationDll).Hash -cne $script:Run.animationDll.sha256) { throw '[blocked] Animation dependency changed during runtime tests.' }

@@ -7,5 +7,5 @@ namespace OSFDefeat::RuntimeTests::Acceptance {
     void Reattached(std::uint32_t actor);
     void Saved();
     bool Tick(nlohmann::json& snapshot, RE::Actor* player, OSF::API::IOSFSceneAPI* scenes,
-        const std::filesystem::path& directory, bool shadowsOnly = false);
+        const std::filesystem::path& directory, bool shadowsOnly = false, bool blackoutColdStart = false);
 }

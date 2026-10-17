@@ -62,6 +62,8 @@
   "shadows-blackout-interrupted",
   "shadows-blackout-post-promotion-interrupted",
   "shadows-blackout-save-load",
+  "shadows-blackout-cold-restart",
+  "shadows-blackout-cold-cleanup",
   "truce-missed-unarmed",
   "truce-missed-ranged",
   "truce-missed-grenade",
