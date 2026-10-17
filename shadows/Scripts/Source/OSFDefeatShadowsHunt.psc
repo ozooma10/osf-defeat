@@ -251,6 +251,10 @@ Function ClearOwnedHunt(Bool removeReward)
         Game.GetPlayer().RemoveSpell(PlayerReward)
         OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     EndIf
+    ; Shutdown can fail an objective, and a previous win can complete it.
+    ; Return it to an unfinished state before hiding the reusable hunt entry.
+    SetObjectiveCompleted(10, False)
+    SetObjectiveFailed(10, False)
     SetObjectiveDisplayed(10, False)
     StolenWeapon.Clear()
     Nemesis.Clear()

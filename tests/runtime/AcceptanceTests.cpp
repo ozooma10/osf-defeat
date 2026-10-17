@@ -61,7 +61,7 @@ namespace {
     bool scriptedOnly=false;
     bool lifecycleOnly=false;
     std::size_t lifecycleIndex{};
-    constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","reward-idle"};
+    constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","reward-idle","reward-cancel"};
     struct ScriptedCase { const char* name; bool endsTruce; };
     constexpr ScriptedCase scriptedCases[]{
         {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},

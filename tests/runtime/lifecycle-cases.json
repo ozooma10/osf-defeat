@@ -9,6 +9,7 @@
   "lifecycle-stopped-promotion",
   "lifecycle-restart-old-death",
   "lifecycle-reward-idle",
+  "lifecycle-reward-cancel",
   "lifecycle-active-before-save",
   "lifecycle-active-load",
   "lifecycle-loaded-cancel",

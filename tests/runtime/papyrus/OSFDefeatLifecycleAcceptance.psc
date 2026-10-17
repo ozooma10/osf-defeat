@@ -99,13 +99,15 @@ Function ObserveCleanup(String label)
     OSFDefeatAcceptanceProbe.Record(label + "-debuff", !Game.GetPlayer().HasSpell(hunt.PlayerDebuff))
     OSFDefeatAcceptanceProbe.Record(label + "-reward", !Game.GetPlayer().HasSpell(hunt.PlayerReward))
     OSFDefeatAcceptanceProbe.Record(label + "-objective", !hunt.IsObjectiveDisplayed(10))
+    OSFDefeatAcceptanceProbe.Record(label + "-objective-failed", hunt.IsObjectiveFailed(10))
+    OSFDefeatAcceptanceProbe.Record(label + "-objective-completed", hunt.IsObjectiveCompleted(10))
     OSFDefeatAcceptanceProbe.Record(label + "-truce", !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer()))
     OSFDefeatAcceptanceProbe.Record(label + "-loot", LootUnchanged(), target)
 EndFunction
 
 Function Prepare(String kind)
     Bool ready = True
-    If kind != "cancel-idempotent" && kind != "stopped-promotion"
+    If kind != "cancel-idempotent" && kind != "stopped-promotion" && kind != "reward-cancel"
         ready = FreshHunt()
     EndIf
     OSFDefeatAcceptanceProbe.Record("lifecycle-ready-" + kind, ready, target)
@@ -117,6 +119,10 @@ Function Run(String kind)
         hunt.CancelHunt()
         hunt.CancelHunt()
         ok = Clean() && LootUnchanged()
+    ElseIf kind == "reward-cancel"
+        ok = Game.GetPlayer().HasSpell(hunt.PlayerReward) && hunt.IsObjectiveCompleted(10)
+        hunt.CancelHunt()
+        ok = ok && Clean() && !hunt.IsObjectiveCompleted(10) && !hunt.IsObjectiveFailed(10)
     ElseIf kind == "stopped-promotion"
         ; Keep the quest stopped, repair only the previous test's leftovers.
         hunt.CancelHunt()
