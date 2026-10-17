@@ -16,13 +16,36 @@ Bool busy = False
 Bool deathPending = False
 ObjectReference pendingKiller
 Int deadObservations = 0
+; Quest.Stop clears aliases BEFORE OnQuestShutdown. Keep the actor whose
+; ability we own independently, including across saves.
+Actor ownedTarget
+Bool cleanupPending = False
+Bool removeRewardPending = False
+Bool shuttingDown = False
 
 Event OnQuestInit()
+    shuttingDown = False
     WatchPlayer()
     StartTimer(5.0)
 EndEvent
 
+Event OnQuestStarted()
+    shuttingDown = False
+    WatchPlayer()
+    StartTimer(5.0)
+EndEvent
+
+Event OnQuestShutdown()
+    shuttingDown = True
+    CancelTimer()
+    UnregisterForAllEvents()
+    CancelHunt()
+EndEvent
+
 Function WatchPlayer()
+    If shuttingDown || !IsRunning()
+        Return
+    EndIf
     Actor player = Game.GetPlayer()
     RegisterForRemoteEvent(player, "OnPlayerLoadGame")
     RegisterForRemoteEvent(player, "OnPlayerFireWeapon")
@@ -55,17 +78,19 @@ Bool Function Eligible(Actor candidate)
 EndFunction
 
 Bool Function Promote(Actor candidate, Weapon lostWeapon = None)
-    If busy || Nemesis.GetReference() != None
+    If busy || cleanupPending || shuttingDown || !IsRunning() || ownedTarget != None || Nemesis.GetReference() != None
         Return False
     EndIf
     busy = True
     If !Eligible(candidate)
-        busy = False
+        FinishMutation()
         Return False
     EndIf
+    ownedTarget = candidate
     Nemesis.ForceRefTo(candidate)
-    If Nemesis.GetActorReference() != candidate
-        busy = False
+    If Nemesis.GetActorReference() != candidate || !IsRunning() || cleanupPending
+        RequestCleanup(False)
+        FinishMutation()
         Return False
     EndIf
     deathPending = False
@@ -78,11 +103,12 @@ Bool Function Promote(Actor candidate, Weapon lostWeapon = None)
     SetObjectiveFailed(10, False)
     SetObjectiveDisplayed(10, True, True)
     TakeLoot(candidate, lostWeapon)
-    busy = False
-    If deathPending || candidate.IsDead()
-        ResolveDeath(pendingKiller)
+    Bool accepted = !cleanupPending && IsRunning()
+    FinishMutation()
+    If accepted && (deathPending || candidate.IsDead())
+        ResolveDeath(pendingKiller, candidate)
     EndIf
-    Return True
+    Return accepted
 EndFunction
 
 Function TakeLoot(Actor candidate, Weapon weaponBase)
@@ -150,14 +176,14 @@ Function TakeLoot(Actor candidate, Weapon weaponBase)
     EndIf
 EndFunction
 
-Function ResolveDeath(ObjectReference killer)
+Function ResolveDeath(ObjectReference killer, Actor dying = None)
+    Actor target = Nemesis.GetActorReference()
+    If cleanupPending || target == None || (dying != None && dying != target) || !target.IsDead()
+        Return
+    EndIf
     If busy
         deathPending = True
         pendingKiller = killer
-        Return
-    EndIf
-    Actor target = Nemesis.GetActorReference()
-    If target == None || !target.IsDead()
         Return
     EndIf
     busy = True
@@ -174,74 +200,133 @@ Function ResolveDeath(ObjectReference killer)
     SetObjectiveCompleted(10, True)
     StolenWeapon.Clear()
     Nemesis.Clear()
+    ownedTarget = None
     deathPending = False
     pendingKiller = None
-    busy = False
+    deadObservations = 0
+    FinishMutation()
 EndFunction
 
 ; Explicit pack cleanup before disabling it. Loot remains where it was transferred.
 Function CancelHunt()
+    RequestCleanup(True)
+EndFunction
+
+Function RequestCleanup(Bool removeReward)
+    ; A request during promotion/death must survive until that mutation finishes.
+    ; Keeping busy set prevents a new promotion from racing the queued cleanup.
+    cleanupPending = True
+    If removeReward
+        removeRewardPending = True
+    EndIf
     If busy
         Return
     EndIf
     busy = True
-    Actor target = Nemesis.GetActorReference()
+    FinishMutation()
+EndFunction
+
+Function FinishMutation()
+    While cleanupPending
+        cleanupPending = False
+        Bool removeReward = removeRewardPending
+        removeRewardPending = False
+        ClearOwnedHunt(removeReward)
+    EndWhile
+    busy = False
+EndFunction
+
+Function ClearOwnedHunt(Bool removeReward)
+    Actor target = ownedTarget
+    If target == None
+        ; Saves made before ownedTarget existed still have their live alias.
+        target = Nemesis.GetActorReference()
+    EndIf
     If target != None
         target.RemoveSpell(NemesisBuff)
         UnregisterForRemoteEvent(target, "OnDeath")
     EndIf
     Game.GetPlayer().RemoveSpell(PlayerDebuff)
-    Game.GetPlayer().RemoveSpell(PlayerReward)
-    OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
+    If removeReward
+        Game.GetPlayer().RemoveSpell(PlayerReward)
+        OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
+    EndIf
     SetObjectiveDisplayed(10, False)
     StolenWeapon.Clear()
     Nemesis.Clear()
+    ownedTarget = None
     deathPending = False
     pendingKiller = None
-    busy = False
+    deadObservations = 0
 EndFunction
 
 Event Actor.OnDeath(Actor sender, ObjectReference killer)
     If sender == Nemesis.GetActorReference()
-        ResolveDeath(killer)
+        ResolveDeath(killer, sender)
     EndIf
 EndEvent
 
 Event Actor.OnPlayerFireWeapon(Actor sender, Form baseObject)
+    If shuttingDown || !IsRunning()
+        Return
+    EndIf
     LastAttackEvent = "OnPlayerFireWeapon"
     OSFDefeat.EndRecoveryTruce(sender)
 EndEvent
 
 Event ObjectReference.OnSpellCast(ObjectReference sender, Form spellCast)
     Spell attack = spellCast as Spell
-    If sender == Game.GetPlayer() && attack != None && attack.IsHostile()
+    If !shuttingDown && IsRunning() && sender == Game.GetPlayer() && attack != None && attack.IsHostile()
         LastAttackEvent = "OnSpellCast"
         OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     EndIf
 EndEvent
 
 Event OnAnimationEvent(ObjectReference source, String eventName)
-    If source == Game.GetPlayer()
+    If !shuttingDown && IsRunning() && source == Game.GetPlayer()
         LastAttackEvent = eventName
         OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     EndIf
 EndEvent
 
 Event Actor.OnPlayerLoadGame(Actor sender)
+    If !IsRunning()
+        shuttingDown = True
+        CancelTimer()
+        UnregisterForAllEvents()
+        CancelHunt()
+        Return
+    EndIf
+    ; Adopt the alias when upgrading a save from the original hunt script.
+    If ownedTarget == None
+        ownedTarget = Nemesis.GetActorReference()
+    EndIf
     WatchPlayer()
     StartTimer(5.0)
 EndEvent
 
 Event OnTimer(Int timerID)
+    If shuttingDown || !IsRunning()
+        Return
+    EndIf
     If !busy
+        busy = True
         Actor target = Nemesis.GetActorReference()
-        If target != None
+        If ownedTarget == None
+            ownedTarget = target
+        EndIf
+        If target != ownedTarget || (target == None && (Game.GetPlayer().HasSpell(PlayerDebuff) || StolenWeapon.GetReference() != None))
+            ; Alias loss is an abandoned hunt, not a credited kill. Preserve a
+            ; previously earned reward and the recovery truce, but lift the wound.
+            RequestCleanup(False)
+        ElseIf target != None
             If target.IsDead()
                 ; Allow the VM to deliver OnDeath before the fallback claims this
                 ; transition. A timer racing the death event must not steal a reward.
                 deadObservations += 1
-                If deadObservations >= 4
-                    ResolveDeath(None)
+                If deadObservations >= 4 && !deathPending
+                    deathPending = True
+                    pendingKiller = None
                 EndIf
             Else
                 deadObservations = 0
@@ -250,9 +335,15 @@ Event OnTimer(Int timerID)
                 EndIf
             EndIf
         EndIf
+        FinishMutation()
+        If deathPending
+            ResolveDeath(pendingKiller, target)
+        EndIf
         If OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer())
             WatchPlayer()
         EndIf
     EndIf
-    StartTimer(5.0)
+    If !shuttingDown && IsRunning()
+        StartTimer(5.0)
+    EndIf
 EndEvent
