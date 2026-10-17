@@ -52,7 +52,7 @@ function Check([bool]$Ok, [string]$Name) {
     Write-Host "PASS: $Name"
 }
 $prepare = Join-Path $repo 'tools/prepare-shadows-world.ps1'
-$arguments = @('-NoProfile','-File',$prepare,'-Harness',$root,'-DefeatDll',$native,'-FixtureSave',$seed,'-Kind','authored','-BuildReceipt',[IO.Path]::GetFullPath($BuildReceipt))
+$arguments = @('-NoProfile','-File',$prepare,'-Harness',$root,'-DefeatDll',$native,'-AnimationDll',$native,'-FixtureSave',$seed,'-Kind','authored','-BuildReceipt',[IO.Path]::GetFullPath($BuildReceipt))
 $planText = & pwsh @arguments -Plan
 Check ($LASTEXITCODE -eq 0) 'plan succeeds'
 $plan = $planText | ConvertFrom-Json
@@ -75,6 +75,7 @@ Check ($plugins -contains '*Regular.esm' -and $plugins -contains '*OSFDefeatShad
 Check ($mods -contains '+OSF Animation' -and $mods -contains '-ConflictingDefeat') 'animation enabled and conflicting native payload disabled'
 Check ($plugins -notcontains '*OSFDefeatBasic.esm') 'Basic plugin excluded from Shadows profile'
 Check ((Get-FileHash -LiteralPath (Join-Path $manifest.payload 'SFSE/Plugins/OSF Defeat.dll')).Hash -ceq (Get-FileHash -LiteralPath $native).Hash) 'production DLL copy verified'
+Check ((Get-FileHash -LiteralPath (Join-Path $manifest.payload 'SFSE/Plugins/OSF Animation.dll')).Hash -ceq (Get-FileHash -LiteralPath $native).Hash) 'tested Animation DLL overrides the deployed dependency privately'
 $ini = Get-Content -LiteralPath (Join-Path $manifest.profile 'StarfieldCustom.ini') -Raw
 Check ($ini.Contains('sLocalSavePath=OSFDefeatShadowsWorld\') -and $ini.Contains('bEnableLogging=1')) 'isolated save path and logging configured'
 Check ($ini.Contains('bAlwaysActive=1') -and $manifest.settingsSource -eq $documents) 'effective global settings replace stale profile copies'

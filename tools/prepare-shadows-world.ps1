@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory)][ValidateSet('authored','generated')][string]$Kind,
     [Parameter(Mandatory)][string]$BuildReceipt,
     [string]$DefeatDll = (Join-Path (Split-Path $PSScriptRoot -Parent) 'build/windows/x64/releasedbg/OSF Defeat.dll'),
+    [string]$AnimationDll = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'OSF Animation/build/windows/x64/releasedbg/OSF Animation.dll'),
     [string]$Harness = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'OSF Test Harness'),
     [switch]$Plan
 )
@@ -19,8 +20,9 @@ if (-not $build -or $build.outcome -cne 'passed' -or $build.runtimeVerified -ne 
 if (-not $build.worldProbe) { throw 'Build with tools/build-shadows.ps1 -WorldProbe first.' }
 $expectedFiles = @('OSFDefeatShadows.esm', 'Scripts/OSFDefeatShadowsAftermath.pex', 'Scripts/OSFDefeatShadowsHunt.pex', 'Scripts/OSFDefeatShadowsWorldProbe.pex', 'SFSE/OSFDefeat/Consequences/Player/minimal-shadows.json')
 $apiPex = Join-Path $repo 'dist/Scripts/OSFDefeat.pex'
-foreach ($nativeFile in @($DefeatDll,$apiPex)) { if (-not (Test-Path -LiteralPath $nativeFile -PathType Leaf)) { throw "Build the production DLL/API first: $nativeFile" } }
+foreach ($nativeFile in @($DefeatDll,$AnimationDll,$apiPex)) { if (-not (Test-Path -LiteralPath $nativeFile -PathType Leaf)) { throw "Build the production DLL/API first: $nativeFile" } }
 $nativeInventory = @(@{source=[IO.Path]::GetFullPath($DefeatDll);path='SFSE/Plugins/OSF Defeat.dll';sha256=(Get-FileHash -LiteralPath $DefeatDll).Hash}, @{source=$apiPex;path='Scripts/OSFDefeat.pex';sha256=(Get-FileHash -LiteralPath $apiPex).Hash})
+$nativeInventory += @{source=[IO.Path]::GetFullPath($AnimationDll);path='SFSE/Plugins/OSF Animation.dll';sha256=(Get-FileHash -LiteralPath $AnimationDll).Hash}
 $nativeInventory += @(Get-ChildItem (Join-Path $repo 'dist/SFSE/OSFDefeat/Settings') -File -Recurse | ForEach-Object {
     @{source=$_.FullName;path=[IO.Path]::GetRelativePath((Join-Path $repo 'dist'),$_.FullName);sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}
 })
@@ -46,7 +48,7 @@ $settingsPath = Join-Path $sourceProfile 'settings.ini'
 $usesLocalSettings = (Test-Path -LiteralPath $settingsPath) -and
     ((Get-Content -LiteralPath $settingsPath -Raw) -match '(?im)^\s*LocalSettings\s*=\s*(true|1)\s*$')
 $iniSource = if ($usesLocalSettings) { $sourceProfile } else { $script:GameDocuments }
-foreach ($relative in @('OSFDefeatShadows.esm','Scripts/OSFDefeatShadowsWorldProbe.pex','SFSE/Plugins/OSFDefeatTest.json','SFSE/Plugins/OSFTestHarness.dll','SFSE/Plugins/OSF Defeat.dll','SFSE/OSFDefeat')) {
+foreach ($relative in @('OSFDefeatShadows.esm','Scripts/OSFDefeatShadowsWorldProbe.pex','SFSE/Plugins/OSFDefeatTest.json','SFSE/Plugins/OSFTestHarness.dll','SFSE/Plugins/OSF Defeat.dll','SFSE/Plugins/OSF Animation.dll','SFSE/OSFDefeat')) {
     if (Test-Path -LiteralPath (Join-Path $script:Config.MO2 "overwrite/$relative")) { throw "Shared overwrite conflicts with the probe: $relative" }
 }
 $id = $Kind + '-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8)

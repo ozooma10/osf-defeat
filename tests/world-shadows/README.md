@@ -11,7 +11,10 @@ the home ship landed nearby. Keep the original saves and sidecars unchanged.
 ## Build and prepare
 
 Build the production native DLL without deployment (`tools/test-smoke.ps1` does
-this), then build the test-only world variant:
+this). Build OSF Animation with its `tools/BuildProduction.ps1` so the private
+profile also receives the blackout-reload input-lock fix (`fcf9714` or later).
+The helper copies both built DLLs and records their hashes; the enabled Animation
+mod continues supplying its assets. Then build the test-only world variant:
 
 ```powershell
 pwsh -File tools/build-shadows.ps1 -WorldProbe

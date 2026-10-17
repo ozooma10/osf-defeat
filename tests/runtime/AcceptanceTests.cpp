@@ -57,7 +57,8 @@ namespace {
     using GraphSink=std::uint32_t (*)(void*,const void*,void*);
     GraphSink originalGraphSink{};
     std::atomic<std::uintptr_t> graphReceiver{};
-    std::atomic<std::uint64_t> graphEpoch{},graphUntil{};
+    std::atomic<std::uint64_t> graphEpoch{};
+    std::atomic<std::int64_t> graphUntil{};
     std::atomic<unsigned> graphCount{};
     std::int64_t Now() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
     Json InputLayers() {
