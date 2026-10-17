@@ -1,6 +1,10 @@
 [
   "healthy-baseline",
   "healthy-save",
+  "native-death-npc-alive",
+  "native-death-npc-down",
+  "native-death-npc-recovered",
+  "native-death-npc-dead",
   "shadows-refusal-landed-fixture",
   "shadows-refusal-landed-normal-death",
   "shadows-refusal-landed-reload-cleanup",

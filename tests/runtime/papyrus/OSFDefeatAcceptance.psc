@@ -745,6 +745,53 @@ Function RebuildNpc()
     OSFDefeatAcceptanceProbe.Record("npc-rebuilt", npc.Is3DLoaded(), npc)
 EndFunction
 
+Function ProbeDeathStates()
+    hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
+    If hunt == None
+        OSFDefeatAcceptanceProbe.Record("death-probe-complete", False)
+        Return
+    EndIf
+    hunt.Start()
+    Utility.Wait(0.5)
+    Actor subject = NewShadow()
+    If subject == None
+        OSFDefeatAcceptanceProbe.Record("death-probe-complete", False)
+        Return
+    EndIf
+    Bool ok = OSFDefeatAcceptanceProbe.VerifyDeathState(subject, subject.IsDead(), False, "npc-alive")
+    OSFDefeat.DefeatActor(subject, Game.GetPlayer())
+    Int waited = 0
+    While !OSFDefeat.IsDefeated(subject) && waited < 50
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    Bool downOK = OSFDefeatAcceptanceProbe.VerifyDeathState(subject, subject.IsDead(), False, "npc-down")
+    OSFDefeat.RecoverActor(subject)
+    waited = 0
+    While OSFDefeat.IsDefeated(subject) && waited < 50
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    Bool upOK = OSFDefeatAcceptanceProbe.VerifyDeathState(subject, subject.IsDead(), False, "npc-recovered")
+    subject.Kill(Game.GetPlayer())
+    waited = 0
+    While !subject.IsDead() && waited < 50
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    Utility.Wait(0.5)
+    Bool deadOK = OSFDefeatAcceptanceProbe.VerifyDeathState(subject, subject.IsDead(), True, "npc-dead")
+    subject.Disable()
+    subject.Delete()
+    OSFDefeatAcceptanceProbe.Record("death-probe-complete", ok && downOK && upOK && deadOK)
+EndFunction
+
+Function InspectRefusalReload(String kind)
+    Actor player = Game.GetPlayer()
+    OSFDefeatAcceptanceProbe.VerifyDeathState(player, player.IsDead(), False, "player-" + kind + "-reloaded")
+    InspectRecoveredControls()
+EndFunction
+
 Function PrepareDomain(String kind)
     Actor player = Game.GetPlayer()
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
@@ -805,6 +852,7 @@ Function PrepareDomain(String kind)
     defeatDay = Utility.GetCurrentGameTime()
     RegisterForRemoteEvent(player, "OnDying")
     RegisterForRemoteEvent(player, "OnDeath")
+    OSFDefeatAcceptanceProbe.VerifyDeathState(player, player.IsDead(), False, "player-" + kind + "-alive")
     OSFDefeatAcceptanceProbe.Record("domain-ready", !player.IsDead() && !OSFDefeat.IsDefeated(player) && player.GetEquippedWeapon() == testWeapon, shadow)
 EndFunction
 
@@ -830,6 +878,7 @@ Function WatchRefusal(String kind)
         waited += 1
     EndWhile
     OSFDefeatAcceptanceProbe.Record("domain-player-dead", player.IsDead(), player)
+    OSFDefeatAcceptanceProbe.VerifyDeathState(player, player.IsDead(), True, "player-" + kind + "-dead")
     Bool stopped = aftermath.LastResult == "unsupported-domain" && !aftermath.IsRunning() && aftermath.Phase == 0
     Bool creditsOK = player.GetItemCount(Game.GetCredits()) == repeatCredits && shadow.GetItemCount(Game.GetCredits()) == shadowCredits
     Bool huntOK = hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && !hunt.IsObjectiveDisplayed(10)

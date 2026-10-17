@@ -5,6 +5,7 @@
 #include "Core/Consequence.h"
 #include "Core/Defeat.h"
 #include "Core/DefeatContext.h"
+#include "Core/Eligibility.h"
 #include "Core/Recovery.h"
 #include "Core/Truce.h"
 #include "Core/GameTime.h"
@@ -132,8 +133,61 @@ namespace {
         for(auto& ch:label) if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
         records.push_back({{"sequence",++sequence},{"name",label},{"ok",ok},
             {"subject",subject?subject->GetFormID():0},{"value",value}});
-        if(label.starts_with("domain-player-") && subject) records.back()["nativeDeadBit"]=subject->IsDead();
+        if(label.starts_with("domain-player-") && subject) {
+            records.back()["nativeDeadBit"]=subject->boolBits.all(RE::Actor::BOOL_BITS::kDead);
+            records.back()["nativeIsDead"]=subject->IsDead();
+            records.back()["lifeState"]=(static_cast<const RE::ActorState&>(*subject).actorState1>>17)&0xF;
+        }
         if((label=="fixture" || label=="shadows-ready" || label=="shadows-repeat-ready" || label=="domain-ready") && ok && subject) npcID=subject->GetFormID();
+    }
+    bool VerifyDeathState(VM&,std::uint32_t,std::monostate,RE::Actor* subject,bool papyrusDead,bool expectedDead,RE::BSFixedString checkpoint) {
+        if(!subject) return false;
+        // Installed .244 Papyrus Actor.IsDead (ID 116726) tail-calls slot 0x10D
+        // with notEssential=true. Both primary actor tables point to ID 100522.
+        const auto image=reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));
+        constexpr unsigned char wrapper[]{0x49,0x8B,0x00,0xB2,0x01,0x49,0x8B,0xC8,0x48,0xFF,0xA0,0x68,0x08,0x00,0x00};
+        constexpr unsigned char predicate[]{
+            0x44,0x8B,0x81,0xF8,0x00,0x00,0x00,0x41,0x8B,0xC0,0x25,0x00,0x00,0x1E,0x00,0x84,
+            0xD2,0x74,0x29,0x3D,0x00,0x00,0x04,0x00,0x74,0x1F,0x41,0x8B,0xC0,0x25,0x00,0x00,
+            0x1E,0x00,0x3D,0x00,0x00,0x02,0x00,0x74,0x10,0x41,0x81,0xE0,0x00,0x00,0x1E,0x00,
+            0x41,0x81,0xF8,0x00,0x00,0x0A,0x00,0x75,0x38,0xB0,0x01,0xC3,0x3D,0x00,0x00,0x04,
+            0x00,0x74,0xF6,0x41,0x8B,0xC0,0x25,0x00,0x00,0x1E,0x00,0x3D,0x00,0x00,0x02,0x00,
+            0x74,0xE7,0x41,0x8B,0xC0,0x25,0x00,0x00,0x1E,0x00,0x3D,0x00,0x00,0x0E,0x00,0x74,
+            0xD8,0x41,0x81,0xE0,0x00,0x00,0x1E,0x00,0x41,0x81,0xF8,0x00,0x00,0x0A,0x00,0x74,
+            0xC8,0x32,0xC0,0xC3};
+        const auto address=reinterpret_cast<std::uintptr_t>(subject);
+        const auto table=*reinterpret_cast<const std::uintptr_t*>(subject);
+        const auto& state=static_cast<const RE::ActorState&>(*subject).actorState1;
+        const bool gate=(table==image+0x4CB9248 || table==image+0x4CBC448) &&
+            reinterpret_cast<const std::uintptr_t*>(table)[0x10D]==image+0x18E4540 &&
+            reinterpret_cast<std::uintptr_t>(&state)-address==0xF8 &&
+            reinterpret_cast<std::uintptr_t>(&subject->boolBits)-address==0x208 &&
+            std::memcmp(reinterpret_cast<const void*>(image+0x1FC7FB0),wrapper,sizeof(wrapper))==0 &&
+            std::memcmp(reinterpret_cast<const void*>(image+0x18E4540),predicate,sizeof(predicate))==0;
+        const std::string label=checkpoint.c_str();
+        Json observation={{"name","death-state-"+label},{"subject",subject->GetFormID()},
+            {"gate",gate},{"papyrusIsDead",papyrusDead},{"expectedDead",expectedDead},{"epoch",RuntimeMutation::CurrentEpoch()}};
+        bool ok=false;
+        if(gate) {
+            const bool native=subject->IsDead();
+            const bool virtualDead=static_cast<const RE::TESObjectREFR*>(subject)->IsDead(true);
+            const auto lifeState=(state>>17)&0xF;
+            ok=native==expectedDead && papyrusDead==expectedDead && virtualDead==expectedDead;
+            if(label=="npc-down") ok=ok && lifeState==8 && Defeat::IsDefeated(subject);
+            if(label=="npc-recovered") ok=ok && !Defeat::IsDefeated(subject);
+            observation.update({{"nativeIsDead",native},{"nativeDeadBit",subject->boolBits.all(RE::Actor::BOOL_BITS::kDead)},
+                {"virtualTrue",virtualDead},{"virtualFalse",static_cast<const RE::TESObjectREFR*>(subject)->IsDead(false)},
+                {"lifeState",lifeState}});
+            if(expectedDead && native && virtualDead) {
+                // Only exercise the early refusal path after independently observing death.
+                const bool rejected=Eligibility::Explain(subject)==Eligibility::Verdict::kVictimDead &&
+                    !Defeat::DefeatActor(subject,nullptr) && !Defeat::IsDefeated(subject);
+                observation["deadActorRejected"]=rejected; ok=ok && rejected;
+            }
+        }
+        std::scoped_lock lock(observationsLock);
+        observation["sequence"]=++sequence; observation["ok"]=ok; records.push_back(std::move(observation));
+        return ok;
     }
     bool VerifyWeapon(VM&,std::uint32_t,std::monostate,RE::Actor* owner,RE::TESForm* weapon,RE::BSFixedString checkpoint) {
         const auto mods = owner && weapon ? ReadWeaponMods(*owner,*weapon) : std::nullopt;
@@ -266,6 +320,7 @@ namespace {
 void Bind(VM& vm) {
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","HoldBlackout",&HoldBlackout,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false);
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyDeathState",&VerifyDeathState,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyWeapon",&VerifyWeapon,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyDroppedWeapon",&VerifyDroppedWeapon,std::nullopt,false);
 }
@@ -382,17 +437,17 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             std::filesystem::copy_file(Config::RootPath()/"AcceptanceShadows"/"minimal-shadows.json",
                 Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json",std::filesystem::copy_options::overwrite_existing);
             Consequence::Reload();
-            beforeRecords=Sequence(); Papyrus("PrepareDomain",refusalDomain); Next(); break;
+            beforeRecords=Sequence(); Papyrus("ProbeDeathStates"); phase=6; phaseAt=Now(); break;
         case 2:
             if(Wait(Saw("domain-ready",beforeRecords) && Loaded(npc),90)) break;
-            Check(out,prefix+"-fixture",npc && npc!=player && !player->IsDead());
+            Check(out,prefix+"-fixture",npc && npc!=player && !player->IsDead() && Saw("death-state-player-"+refusalDomain+"-alive",beforeRecords));
             beforeRecords=Sequence(); beforeLoad=loads; beforeEpoch=RuntimeMutation::CurrentEpoch();
             Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
             Papyrus("WatchRefusal",refusalDomain); Next(); break;
         case 3:
             if(Wait(Saw("domain-refused-"+refusalDomain,beforeRecords) &&
                 (Saw("domain-player-death",beforeRecords) || Saw("domain-player-dead",beforeRecords)),20)) break;
-            Check(out,prefix+"-normal-death",!Defeat::IsDefeated(player) && !Ghost(player) &&
+            Check(out,prefix+"-normal-death",Saw("death-state-player-"+refusalDomain+"-dead",beforeRecords) && !Defeat::IsDefeated(player) && !Ghost(player) &&
                 !Truce::IsActive(player->GetFormID()) && !Engine::HasCaptiveFactionApplied(*player) &&
                 scenes->GetSceneForActor(player)==0 && DefeatContext::GetLastPlayerConsequenceId()=="osfdefeat.shadows.aftermath");
             // Vanilla death must reload the most recent healthy save. Observe
@@ -400,17 +455,23 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             Next(); break;
         case 4:
             if(Wait(loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch && !player->IsDead() && !Defeat::IsDefeated(player),45)) break;
-            beforeRecords=Sequence(); Papyrus("InspectRecoveredControls"); Next(); break;
+            beforeRecords=Sequence(); Papyrus("InspectRefusalReload",refusalDomain); Next(); break;
         case 5:
             if(Wait(Saw("controls-up",beforeRecords) && scenes->GetSceneForActor(player)==0)) break;
             if(Now()-phaseAt<3000) break;
-            Check(out,prefix+"-reload-cleanup",DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty() &&
+            Check(out,prefix+"-reload-cleanup",Saw("death-state-player-"+refusalDomain+"-reloaded",beforeRecords) && DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty() &&
                 Engine::SnapshotCaptiveFactions().empty() && Capture::Snapshot().empty());
             if(refusalDomain=="landed") {
                 refusalDomain="space"; beforeRecords=Sequence(); Papyrus("PrepareDomain",refusalDomain); phase=2; phaseAt=Now(); break;
             }
             std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
             return true;
+        case 6:
+            if(Wait(Recorded("death-probe-complete",beforeRecords),45)) break;
+            for(const auto* state:{"alive","down","recovered","dead"})
+                Check(out,std::string("native-death-npc-")+state,Saw(std::string("death-state-npc-")+state,beforeRecords));
+            if(!Saw("death-probe-complete",beforeRecords)) throw std::runtime_error("Death probe cleanup failed");
+            beforeRecords=Sequence(); Papyrus("PrepareDomain",refusalDomain); phase=2; phaseAt=Now(); break;
         }
         return false;
     }
