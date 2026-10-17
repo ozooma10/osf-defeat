@@ -22,26 +22,33 @@ namespace OSFDefeat::RuntimeTests {
         Json snapshot;
         std::string token, processStart;
         bool initialized=false, running=false, finished=false, shadowsOnly=false, blackoutColdStart=false;
+        bool publishPending=false;
         int phase=0;
-        std::int64_t phaseStart{}, deadline{};
+        std::int64_t phaseStart{}, deadline{}, publishBlockedAt{};
         float initialHealth{};
         OSF::API::IOSFSceneAPI* scenes=nullptr;
         std::int64_t Now() {
             return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         }
         void Publish() {
+            publishPending=false;
             snapshot["updatedAtUtcMs"]=Now(); snapshot["phase"]=phase;
             const auto temporary=directory / "snapshot.tmp";
             { std::ofstream stream(temporary); stream << snapshot.dump(2); if(!stream) throw std::runtime_error("Cannot publish runtime snapshot"); }
-            // Readers share deletion, but a filesystem observer can still hold
-            // a transient handle. Keep replacement atomic and bound retries to
-            // 20 ms; one sharing collision must not tear down a valid game run.
-            DWORD error=0;
-            for(int attempt=0;attempt<11;++attempt) {
-                if(MoveFileExW(temporary.c_str(),(directory / "snapshot.json").c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) return;
-                error=GetLastError();
-                if(error!=ERROR_SHARING_VIOLATION && error!=ERROR_ACCESS_DENIED) break;
-                if(attempt<10) Sleep(2);
+            // Filesystem observers can deny replacement longer than one frame.
+            // Keep the old complete snapshot and retry on a later frame without
+            // sleeping on Main. Terminal results and startup handshakes retry too.
+            if(MoveFileExW(temporary.c_str(),(directory / "snapshot.json").c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) {
+                publishBlockedAt=0;
+                return;
+            }
+            const auto error=GetLastError();
+            if(error==ERROR_SHARING_VIOLATION || error==ERROR_ACCESS_DENIED) {
+                if(!publishBlockedAt) publishBlockedAt=Now();
+                if(Now()-publishBlockedAt<5000) {
+                    publishPending=true;
+                    return;
+                }
             }
             throw std::runtime_error("Cannot replace runtime snapshot (Win32 "+std::to_string(error)+")");
         }
@@ -60,6 +67,7 @@ namespace OSFDefeat::RuntimeTests {
     }
     void Tick() {
         try {
+            if(publishPending) Publish();
             if(!initialized) {
                 initialized=true;
                 std::ifstream input(Config::RootPath().parent_path() / "Plugins" / "OSFDefeatTest.json");
