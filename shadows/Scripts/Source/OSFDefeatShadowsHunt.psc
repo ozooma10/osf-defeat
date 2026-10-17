@@ -10,6 +10,7 @@ Int Property LevelGap = 15 Auto Const
 Bool busy = False
 Bool deathPending = False
 ObjectReference pendingKiller
+Int deadObservations = 0
 
 Event OnQuestInit()
     WatchPlayer()
@@ -64,6 +65,7 @@ Bool Function Promote(Actor candidate)
     EndIf
     deathPending = False
     pendingKiller = None
+    deadObservations = 0
     RegisterForRemoteEvent(candidate, "OnDeath")
     candidate.AddSpell(NemesisBuff, False)
     Game.GetPlayer().AddSpell(PlayerDebuff, True)
@@ -199,9 +201,14 @@ Event OnTimer(Int timerID)
         Actor target = Nemesis.GetActorReference()
         If target != None
             If target.IsDead()
-                ; A missed death event grants no reward rather than guessing the killer.
-                ResolveDeath(None)
+                ; Allow the VM to deliver OnDeath before the fallback claims this
+                ; transition. A timer racing the death event must not steal a reward.
+                deadObservations += 1
+                If deadObservations >= 4
+                    ResolveDeath(None)
+                EndIf
             Else
+                deadObservations = 0
                 If !Game.GetPlayer().HasSpell(PlayerDebuff)
                     Game.GetPlayer().AddSpell(PlayerDebuff, False)
                 EndIf

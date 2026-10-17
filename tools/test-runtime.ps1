@@ -133,7 +133,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $shadowsPayload 'OSFDefeatShadows.esm') -Destination $payload
     Copy-Tree (Join-Path $shadowsPayload 'SFSE/OSFDefeat/Consequences/Player') (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows')
     $script:Run.shadowsBuildReceipt=Join-Path $shadowsBuild 'build.json'
-    $papyrus=Join-Path $repo 'tests/runtime/papyrus' 
+    $papyrus=Join-Path $repo 'tests/runtime/papyrus'
     $packScripts=Join-Path $repo 'pack/Scripts/Source'
     & $compiler $papyrus "-i=$papyrus;$(Join-Path $repo 'shadows/Scripts/Source');$packScripts;$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')" -all
     if ($LASTEXITCODE) { throw '[failed] Acceptance Papyrus compilation failed.' }

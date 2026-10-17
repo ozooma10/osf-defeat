@@ -84,8 +84,27 @@ EndFunction
 
 Function ShadowsInspect()
     Actor player = Game.GetPlayer()
+    ; Let the actual NPC process its newly added ability before reading actor values.
+    ; The active truce is what must keep this hostile actor from attacking now.
+    Float healthBefore = player.GetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue)
+    OSFDefeat.ResumeActorAI(shadow)
+    Utility.Wait(2.0)
     ObjectReference stolen = hunt.StolenWeapon.GetReference()
     Bool ok = hunt.Nemesis.GetActorReference() == shadow && OSFDefeat.HasQuestAlias(shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-alias", ok, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-objective", hunt.IsObjectiveDisplayed(10), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-buff", shadow.HasSpell(hunt.NemesisBuff), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-player-credits", player.GetItemCount(Game.GetCredits()) == 900, player, player.GetItemCount(Game.GetCredits()))
+    OSFDefeatAcceptanceProbe.Record("shadows-nemesis-credits", shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100, shadow, shadow.GetItemCount(Game.GetCredits()) - shadowCredits)
+    OSFDefeatAcceptanceProbe.Record("shadows-weapon-ref", stolen != None, shadow)
+    If stolen != None
+        OSFDefeatAcceptanceProbe.Record("shadows-weapon-container", stolen.GetContainer() == shadow, shadow)
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-player-weapon", player.GetItemCount(testWeapon) == 0, player, player.GetItemCount(testWeapon))
+    OSFDefeatAcceptanceProbe.Record("shadows-nemesis-weapon", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
+    OSFDefeatAcceptanceProbe.Record("shadows-time", Utility.GetCurrentGameTime() - defeatDay >= 0.083, player, (Utility.GetCurrentGameTime() - defeatDay) * 24.0)
+    OSFDefeatAcceptanceProbe.Record("shadows-controls", Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled())
+    OSFDefeatAcceptanceProbe.Record("shadows-truce-live-ai", OSFDefeat.IsRecoveryTruceActive(player) && player.GetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue) >= healthBefore, player)
     ok = ok && hunt.IsObjectiveDisplayed(10) && shadow.HasSpell(hunt.NemesisBuff) && player.HasSpell(hunt.PlayerDebuff)
     ok = ok && player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
     ok = ok && stolen != None && stolen.GetContainer() == shadow && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
@@ -96,6 +115,7 @@ Function ShadowsInspect()
     OSFDefeatAcceptanceProbe.Record("shadows-nemesis-resistance", Math.Abs(shadow.GetValue(resistance) - (shadowResistance + 40.0)) < 0.1, shadow, shadow.GetValue(resistance) - shadowResistance)
     Bool replaced = hunt.Promote(npc)
     OSFDefeatAcceptanceProbe.Record("shadows-slot-preserved", !replaced && hunt.Nemesis.GetActorReference() == shadow && player.HasSpell(hunt.PlayerDebuff), shadow)
+    OSFDefeat.SuspendActorAI(shadow)
     ; Leave the player unarmed so the next real mouse click tests a missed punch.
     player.UnequipAll()
     player.DrawWeapon()
