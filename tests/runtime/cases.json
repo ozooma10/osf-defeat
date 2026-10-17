@@ -60,5 +60,8 @@
   "shadows-repeat-defeat",
   "shadows-lower-level-no-reward",
   "shadows-blackout-interrupted",
-  "shadows-blackout-save-load"
+  "shadows-blackout-save-load",
+  "truce-missed-unarmed",
+  "truce-missed-ranged",
+  "truce-missed-grenade"
 ]

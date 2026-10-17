@@ -51,6 +51,8 @@ namespace {
     std::size_t packIndex{};
     bool packDefeatObserved{};
     WeaponMods weaponBaseline;
+    std::size_t attackIndex{};
+    constexpr const char* attackKinds[]{"unarmed","ranged","grenade"};
     std::int64_t Now() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
     void Record(VM&,std::uint32_t,std::monostate,RE::BSFixedString name,bool ok,RE::Actor* subject,float value) {
         std::scoped_lock lock(observationsLock);
@@ -379,7 +381,10 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Check(out,"shadows-modified-weapon-retrieval",Saw("weapon-mods-retrieved"));
         Check(out,"shadows-modified-world-drop",Saw("shadows-world-drop") && Saw("weapon-mods-world-pickup"));
         Check(out,"shadows-lower-level-no-reward",Saw("shadows-lower-level-no-reward"));
-        beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42; phaseAt=Now(); break;
+        attackIndex=0; beforeRecords=Sequence();
+        if(!Truce::Begin(*player,30)) throw std::runtime_error("Cannot start missed attack test");
+        truceDeadline=Truce::Snapshot()[0].expiresAtDay;
+        Papyrus("PrepareMissedAttackKind",attackKinds[attackIndex]); phase=49; phaseAt=Now(); break;
     case 37:
         if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
         Check(out,"shadows-cleanup-load",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty());
@@ -427,6 +432,24 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Check(out,"shadows-blackout-save-load",Saw("shadows-blackout-loaded"));
         std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
         Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); phase=37; phaseAt=Now(); break;
+    case 49:
+        if(Wait(Saw("shadows-miss-kind-ready",beforeRecords))) break;
+        Request(out,"attack-miss",attackKinds[attackIndex]); Next(); break;
+    case 50:
+        if(Wait(Acknowledged(out,directory) && !Truce::IsActive(player->GetFormID()),10)) break;
+        Papyrus("InspectMissedAttackKind",attackKinds[attackIndex]); Next(); break;
+    case 51:
+        if(Wait(Saw("shadows-miss-kind-observed",beforeRecords))) break;
+        Check(out,std::string("truce-missed-")+attackKinds[attackIndex],GameTime::NowDay()<truceDeadline && !Engine::HasCaptiveFactionApplied(*player));
+        if(++attackIndex<std::size(attackKinds)) {
+            beforeRecords=Sequence();
+            if(!Truce::Begin(*player,30)) throw std::runtime_error("Cannot start next missed attack test");
+            truceDeadline=Truce::Snapshot()[0].expiresAtDay;
+            Papyrus("PrepareMissedAttackKind",attackKinds[attackIndex]); phase=49;
+        } else {
+            beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42;
+        }
+        phaseAt=Now(); break;
     }
     return false;
 }

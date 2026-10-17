@@ -31,6 +31,11 @@ Actor Function NewShadow(Bool lowerLevel = False)
     bases[7] = 0x129580
     bases[8] = 0x12957F
     bases[9] = 0x12957E
+    If lowerLevel
+        ; Installed ESM EncCrimsonFleet01Template is level 2; Spacer starts at 8.
+        bases = new Int[1]
+        bases[0] = 0x10B2E
+    EndIf
     Int i = 0
     While i < bases.Length
         Actor candidate = Game.GetPlayer().PlaceAtMe(Game.GetFormFromFile(bases[i], "Starfield.esm"), 1, False, True, False) as Actor
@@ -245,6 +250,50 @@ Function PrepareBlackout()
     repeatCredits = Game.GetPlayer().GetItemCount(Game.GetCredits())
     defeatDay = Utility.GetCurrentGameTime()
     OSFDefeatAcceptanceProbe.Record("shadows-repeat-ready", repeatAggressor != None, repeatAggressor)
+EndFunction
+
+Function PrepareMissedAttackKind(String kind)
+    Actor player = Game.GetPlayer()
+    ; Keep the disposable player alive if the deliberately missed grenade hits
+    ; a nearby wall. The healthy-save reload restores the original value.
+    player.SetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue, 5000.0)
+    If kind == "unarmed"
+        player.UnequipAll()
+    ElseIf kind == "ranged"
+        player.RemoveModFromInventoryItem(testWeapon, Game.GetFormFromFile(0xFA8D6, "Starfield.esm") as ObjectMod)
+        player.AddItem(testWeapon.GetAmmo(), 100, True)
+        player.EquipItem(testWeapon, False, True)
+    ElseIf kind == "grenade"
+        Weapon grenade = Game.GetFormFromFile(0x115EF, "Starfield.esm") as Weapon
+        player.AddItem(grenade, 2, True)
+        player.EquipItem(grenade, False, True)
+    EndIf
+    player.DrawWeapon()
+    Utility.Wait(1.0)
+    hunt.LastAttackEvent = ""
+    Weapon equipped = player.GetEquippedWeapon()
+    Bool ok = Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player)
+    If kind == "unarmed"
+        ok = ok && (equipped == None || equipped == Game.GetFormFromFile(0x1F4, "Starfield.esm"))
+    ElseIf kind == "ranged"
+        ok = ok && equipped == testWeapon
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-kind-ready", ok)
+EndFunction
+
+Function InspectMissedAttackKind(String kind)
+    String observed = hunt.LastAttackEvent
+    Bool eventMatches = observed == "HitFrame" || observed == "MeleeAttackStart"
+    If kind == "ranged"
+        eventMatches = observed == "OnPlayerFireWeapon"
+    ElseIf kind == "grenade"
+        eventMatches = observed == "ThrowGrenade"
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-attack-event-" + observed, True)
+    If kind == "grenade"
+        Utility.Wait(5.0)
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-kind-observed", eventMatches && !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer()))
 EndFunction
 
 Function WatchBlackout(String mode)

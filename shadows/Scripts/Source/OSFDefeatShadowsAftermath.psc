@@ -54,6 +54,9 @@ Function RunAftermath()
     If !Hunt.IsRunning()
         Hunt.Start()
     EndIf
+    If !IsCurrent(run)
+        Return
+    EndIf
     ; PassTime advances the framework's game-time watchdog too. The registration
     ; leases 12,000 seconds (over three game hours even at time scale 1) and a real
     ; Papyrus timer below recovers/fades in if any latent step gets stuck.

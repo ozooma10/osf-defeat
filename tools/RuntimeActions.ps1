@@ -50,10 +50,14 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
         }
         'attack-miss' {
             $null=Invoke-Input 'focus'
+            if ($name -eq 'grenade') {
+                Send-Key 71 200
+            } elseif ($name -in @('melee','unarmed','ranged')) {
             # The first click may only draw after loading a holstered save.
             $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')
             Start-Sleep -Milliseconds 1200
             $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')
+            } else { throw '[blocked] Unexpected attack fixture.' }
         }
         'move' { $null=Invoke-Input 'focus'; Send-Key 87 700 }
         'look' {
