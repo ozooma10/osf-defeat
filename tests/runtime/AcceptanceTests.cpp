@@ -164,7 +164,8 @@ namespace {
             reinterpret_cast<std::uintptr_t>(&subject->boolBits)-address==0x208 &&
             std::memcmp(reinterpret_cast<const void*>(image+0x1FC7FB0),wrapper,sizeof(wrapper))==0 &&
             std::memcmp(reinterpret_cast<const void*>(image+0x18E4540),predicate,sizeof(predicate))==0;
-        const std::string label=checkpoint.c_str();
+        std::string label=checkpoint.c_str();
+        for(auto& ch:label) if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
         Json observation={{"name","death-state-"+label},{"subject",subject->GetFormID()},
             {"gate",gate},{"papyrusIsDead",papyrusDead},{"expectedDead",expectedDead},{"epoch",RuntimeMutation::CurrentEpoch()}};
         bool ok=false;
