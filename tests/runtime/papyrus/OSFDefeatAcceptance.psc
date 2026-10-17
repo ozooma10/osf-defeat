@@ -154,13 +154,20 @@ EndFunction
 
 Function PrepareMissedAttack()
     Actor player = Game.GetPlayer()
-    player.UnequipAll()
+    ; Equip an explicit melee weapon: after theft, the primary getter can retain
+    ; a stale empty gun even after UnequipAll. This also avoids stripping armor.
+    Weapon knife = Game.GetFormFromFile(0x35A48, "Starfield.esm") as Weapon
+    player.AddItem(knife, 1, True)
+    player.EquipItem(knife, False, True)
     player.DrawWeapon()
     Utility.Wait(1.0)
     Bool registered = RegisterForAnimationEvent(player, "HitFrame")
     Weapon weaponBase = player.GetEquippedWeapon()
-    Bool unarmed = weaponBase == None || weaponBase.GetFormID() == 0x1F4
-    OSFDefeatAcceptanceProbe.Record("shadows-miss-ready", unarmed && Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player), player)
+    Bool armed = weaponBase == knife && player.GetItemCount(knife) == 1
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-weapon", armed, player)
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-controls", Game.IsFightingControlsEnabled(), player)
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-truce", OSFDefeat.IsRecoveryTruceActive(player), player)
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-ready", armed && Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player), player)
     OSFDefeatAcceptanceProbe.Record("shadows-attack-registration", registered, player)
     OSFDefeatAcceptanceProbe.Record("shadows-weapon-drawn", player.IsWeaponDrawn(), player)
 EndFunction

@@ -39,7 +39,7 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
         }
         'attack-miss' {
             $null=Invoke-Input 'focus'
-            # The first click may only raise fists after loading a holstered save.
+            # The first click may only draw after loading a holstered save.
             $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')
             Start-Sleep -Milliseconds 1200
             $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')

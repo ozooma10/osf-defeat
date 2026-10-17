@@ -360,7 +360,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         return true;
     case 38:
         if(Wait(Saw("shadows-miss-ready"),10)) break;
-        Request(out,"attack-miss","unarmed"); phase=34; phaseAt=Now(); break;
+        Request(out,"attack-miss","melee"); phase=34; phaseAt=Now(); break;
     }
     return false;
 }
