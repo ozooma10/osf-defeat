@@ -519,6 +519,14 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 52:
         if(Wait(Saw("shadows-scripted-attack-contract") && !Truce::IsActive(player->GetFormID()))) break;
         Check(out,"truce-scripted-attack-contract",Saw("shadows-scripted-attack-contract"));
+        beforeRecords=Sequence(); Papyrus("PrepareBlackout"); Next(); break;
+    case 53:
+        if(Wait(Saw("shadows-repeat-ready",beforeRecords) && Loaded(npc))) break;
+        Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
+        Papyrus("WatchBlackout","post-promotion"); Next(); break;
+    case 54:
+        if(Wait(Saw("shadows-blackout-promoted-interrupted") && !Defeat::IsDefeated(player))) break;
+        Check(out,"shadows-blackout-post-promotion-interrupted",Saw("shadows-blackout-promoted-interrupted"));
         beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42; phaseAt=Now(); break;
     }
     return false;

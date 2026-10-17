@@ -18,6 +18,7 @@ Float defeatDay
 Int shadowCredits
 Actor repeatAggressor
 Int repeatCredits
+Int repeatAggressorCredits
 Int throwableBefore
 
 Actor Function NewShadow(Bool lowerLevel = False)
@@ -164,6 +165,16 @@ EndFunction
 
 Function ShadowsPlayerKill()
     ObjectReference stolen = hunt.StolenWeapon.GetReference()
+    ; Give the engine a live, drawn weapon at death. Killing a suspended actor
+    ; can leave it in corpse inventory without exercising the natural drop path.
+    OSFDefeat.ResumeActorAI(shadow)
+    shadow.DrawWeapon()
+    Int drawnWait = 0
+    While !shadow.IsWeaponDrawn() && drawnWait < 30
+        Utility.Wait(0.1)
+        drawnWait += 1
+    EndWhile
+    OSFDefeatAcceptanceProbe.Record("shadows-death-weapon-drawn", shadow.IsWeaponDrawn() && shadow.GetEquippedWeapon() == testWeapon, shadow)
     shadow.Kill(Game.GetPlayer())
     ; Death completion, like ability updates, needs the actor's process running.
     OSFDefeat.ResumeActorAI(shadow)
@@ -263,6 +274,9 @@ Function PrepareBlackout()
     hunt.CancelHunt()
     repeatAggressor = NewShadow()
     repeatCredits = Game.GetPlayer().GetItemCount(Game.GetCredits())
+    If repeatAggressor != None
+        repeatAggressorCredits = repeatAggressor.GetItemCount(Game.GetCredits())
+    EndIf
     defeatDay = Utility.GetCurrentGameTime()
     OSFDefeatAcceptanceProbe.Record("shadows-repeat-ready", repeatAggressor != None, repeatAggressor)
 EndFunction
@@ -331,6 +345,47 @@ EndFunction
 Function WatchBlackout(String mode)
     OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
     Int waited = 0
+    If mode == "post-promotion"
+        ; Observe real production phases. Do not delay the aftermath to create
+        ; a synthetic interruption window or count an already-finished run.
+        While aftermath.Phase < 2 && waited < 1000
+            Utility.Wait(0.01)
+            waited += 1
+        EndWhile
+        Int observedPhase = aftermath.Phase
+        Bool inProgress = observedPhase >= 2 && observedPhase <= 3 && aftermath.IsRunning()
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-stop-phase", inProgress, repeatAggressor, observedPhase)
+        aftermath.Stop()
+        Utility.Wait(3.0)
+        Actor player = Game.GetPlayer()
+        Int taken = (repeatCredits * 0.10) as Int
+        If taken < 25
+            taken = 25
+        ElseIf taken > 2500
+            taken = 2500
+        EndIf
+        If taken > repeatCredits
+            taken = repeatCredits
+        EndIf
+        Bool stopped = inProgress && aftermath.LastResult == "interrupted" && !aftermath.IsRunning()
+        Bool recovered = !OSFDefeat.IsDefeated(player) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
+        Bool retained = hunt.Nemesis.GetActorReference() == repeatAggressor && hunt.IsObjectiveDisplayed(10)
+        retained = retained && player.HasSpell(hunt.PlayerDebuff) && repeatAggressor.HasSpell(hunt.NemesisBuff)
+        Bool creditsOnce = player.GetItemCount(Game.GetCredits()) == repeatCredits - taken
+        creditsOnce = creditsOnce && repeatAggressor.GetItemCount(Game.GetCredits()) == repeatAggressorCredits + taken
+        Float elapsedHours = (Utility.GetCurrentGameTime() - defeatDay) * 24.0
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-stopped", stopped)
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-controls", recovered)
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-hunt", retained, repeatAggressor)
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-credits", creditsOnce, player, player.GetItemCount(Game.GetCredits()))
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-hours", elapsedHours < 3.1, player, elapsedHours)
+        hunt.CancelHunt()
+        OSFDefeat.ResumeActorAI(repeatAggressor)
+        repeatAggressor.Disable()
+        repeatAggressor.Delete()
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-interrupted", stopped && recovered && retained && creditsOnce && elapsedHours < 3.1)
+        Return
+    EndIf
     While aftermath.Phase != 1 && waited < 50
         Utility.Wait(0.05)
         waited += 1
