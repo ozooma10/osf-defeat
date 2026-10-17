@@ -1,0 +1,18 @@
+[
+  "healthy-baseline",
+  "scripted-healthy-save",
+  "scripted-fixture",
+  "scripted-native-attributed",
+  "scripted-native-restore",
+  "scripted-native-nonhealth",
+  "scripted-papyrus-anonymous",
+  "scripted-papyrus-cooperative",
+  "scripted-incoming-spell",
+  "scripted-spell-cast",
+  "scripted-spell-remote",
+  "scripted-combat-spell",
+  "scripted-spell-heal",
+  "scripted-weapon-fire-player",
+  "scripted-weapon-fire-npc",
+  "scripted-cleanup-load"
+]

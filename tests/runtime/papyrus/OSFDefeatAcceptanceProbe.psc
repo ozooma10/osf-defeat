@@ -4,3 +4,4 @@ Bool Function VerifyDeathState(Actor subject, Bool papyrusDead, Bool expectedDea
 Bool Function VerifyWeapon(Actor owner, Form weapon, String checkpoint) global native
 Bool Function VerifyDroppedWeapon(ObjectReference reference, Form weapon) global native
 Bool Function HoldBlackout(Int checkpoint) global native
+Bool Function ApplyScriptedDamage(Actor target, Actor source, Int kind) global native

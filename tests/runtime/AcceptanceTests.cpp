@@ -57,6 +57,14 @@ namespace {
     bool refusalOnly=false;
     bool blackoutOnly=false;
     bool weaponsOnly=false;
+    bool scriptedOnly=false;
+    struct ScriptedCase { const char* name; bool endsTruce; };
+    constexpr ScriptedCase scriptedCases[]{
+        {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},
+        {"papyrus-anonymous",false},{"papyrus-cooperative",true},{"incoming-spell",false},
+        {"spell-cast",true},{"spell-remote",true},{"combat-spell",true},{"spell-heal",false},
+        {"weapon-fire-player",true},{"weapon-fire-npc",false}
+    };
     constexpr const char* weaponKinds[]{
         "pistol-eon","rifle-grendel","shotgun-coachman","shotgun-breach",
         "laser-equinox","particle-inflictor","magpulse","magstorm",
@@ -138,7 +146,29 @@ namespace {
             records.back()["nativeIsDead"]=subject->IsDead();
             records.back()["lifeState"]=(static_cast<const RE::ActorState&>(*subject).actorState1>>17)&0xF;
         }
-        if((label=="fixture" || label=="shadows-ready" || label=="shadows-repeat-ready" || label=="domain-ready") && ok && subject) npcID=subject->GetFormID();
+        if((label=="fixture" || label=="scripted-fixture" || label=="shadows-ready" || label=="shadows-repeat-ready" || label=="domain-ready") && ok && subject) npcID=subject->GetFormID();
+    }
+    class ScriptedFireObserver final: public RE::BSTEventSink<RE::WeaponFiredEvent> {
+        RE::BSEventNotifyControl ProcessEvent(const RE::WeaponFiredEvent& event,RE::BSTEventSource<RE::WeaponFiredEvent>*) override {
+            const auto* actor=event.actor.get();
+            if(actor && (actor->IsPlayerRef() || actor->GetFormID()==npcID.load())) {
+                std::scoped_lock lock(observationsLock);
+                records.push_back({{"sequence",++sequence},{"name","scripted-native-fire"},{"ok",true},{"subject",actor->GetFormID()}});
+            }
+            return RE::BSEventNotifyControl::kContinue;
+        }
+    } scriptedFireObserver;
+    void ObserveScriptedFire() {
+        // .244 producer ID61817 -> AA3440 dispatcher; event actor at +0x10.
+        // OSF RE gameplay.defeat_damage_hook contains the original layout proof.
+        const auto image=reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));
+        const REL::Relocation<RE::BSTEventSource<RE::WeaponFiredEvent>*> source{REL::ID{822934}};
+        constexpr unsigned char gate[]{0x48,0x8D,0x0D,0xE9,0x6D,0xE6,0x04};
+        if(reinterpret_cast<std::uintptr_t>(source.get())!=image+0x590A240 ||
+            *reinterpret_cast<const std::uintptr_t*>(source.get())!=image+0x4B88FF0 ||
+            std::memcmp(reinterpret_cast<const void*>(image+0xAA3450),gate,sizeof(gate))!=0)
+            throw std::runtime_error("Scripted WeaponFired observer gate differs");
+        source.get()->RegisterSink(&scriptedFireObserver);
     }
     bool VerifyDeathState(VM&,std::uint32_t,std::monostate,RE::Actor* subject,bool papyrusDead,bool expectedDead,RE::BSFixedString checkpoint) {
         if(!subject) return false;
@@ -317,8 +347,18 @@ namespace {
         using Fn=void(*)(RE::ActorValueOwner*,RE::ACTOR_VALUE_MODIFIER,const RE::ActorValueInfo&,float,RE::TESObjectREFR*);
         REL::Relocation<Fn> fn{REL::ID{101587}}; fn(&Engine::AVOwnerOf(*actor),RE::ACTOR_VALUE_MODIFIER::kDamage,*Engine::HealthAV(),delta,aggressor);
     }
+    bool ApplyScriptedDamage(VM&,std::uint32_t,std::monostate,RE::Actor* target,RE::Actor* source,int kind) {
+        if(!target || !source || kind<0 || kind>2) return false;
+        auto* gauge=kind==2 ? RE::TESForm::LookupByID<RE::ActorValueInfo>(0x2E3) : Engine::HealthAV();
+        if(!gauge) return false;
+        using Fn=void(*)(RE::ActorValueOwner*,RE::ACTOR_VALUE_MODIFIER,const RE::ActorValueInfo&,float,RE::TESObjectREFR*);
+        REL::Relocation<Fn> fn{REL::ID{101587}};
+        fn(&Engine::AVOwnerOf(*target),RE::ACTOR_VALUE_MODIFIER::kDamage,*gauge,kind==1?5.0f:-5.0f,source);
+        return true;
+    }
 }
 void Bind(VM& vm) {
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","ApplyScriptedDamage",&ApplyScriptedDamage,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","HoldBlackout",&HoldBlackout,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyDeathState",&VerifyDeathState,std::nullopt,false);
@@ -332,6 +372,7 @@ void Configure(const Json& config) {
     refusalOnly=config.value("refusalOnly",false);
     blackoutOnly=config.value("blackoutOnly",false);
     weaponsOnly=config.value("weaponsOnly",false);
+    scriptedOnly=config.value("scriptedOnly",false);
     blackoutCheckpoint=config.value("blackoutCheckpoint",1);
     if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
         heldBlackout=blackoutCheckpoint;
@@ -343,6 +384,60 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
     { std::scoped_lock lock(observationsLock); out["papyrus"]=records; }
+    if(scriptedOnly) {
+        const auto& trial=scriptedCases[attackIndex];
+        out["scriptedCase"]=trial.name;
+        const auto script=[](std::string_view function,std::string argument={}) { Papyrus(function,argument,false,"OSFDefeatScriptedAcceptance"); };
+        switch(phase) {
+        case 0:
+            ObserveScriptedFire();
+            RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);
+            RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
+            Request(out,"save","osfdefeathealthy"); Next(); break;
+        case 1:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            Check(out,"scripted-healthy-save",DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty());
+            beforeRecords=Sequence(); script("Initialize"); Next(); break;
+        case 2:
+            if(Wait(Recorded("scripted-fixture",beforeRecords))) break;
+            Check(out,"scripted-fixture",Saw("scripted-fixture",beforeRecords)); Next(); break;
+        case 3:
+            if(!Truce::Begin(*player,30)) throw std::runtime_error("Cannot start scripted attack truce");
+            truceDeadline=Truce::Snapshot()[0].expiresAtDay;
+            beforeRecords=Sequence(); script("Prepare",trial.name); Next(); break;
+        case 4:
+            if(Wait(Recorded(std::string("scripted-ready-")+trial.name,beforeRecords))) break;
+            if(!Saw(std::string("scripted-ready-")+trial.name,beforeRecords)) throw std::runtime_error("Scripted attack preparation failed");
+            beforeRecords=Sequence(); ObserveNextAttack(*player); script("Run",trial.name); Next(); break;
+        case 5: {
+            const auto observation=std::string("scripted-observed-")+trial.name;
+            if(Wait(Recorded(observation,beforeRecords))) break;
+            const bool weapon=std::string_view(trial.name).starts_with("weapon-fire-");
+            const FormID shooter=std::string_view(trial.name)=="weapon-fire-npc" ? npcID.load() : player->GetFormID();
+            const bool passed=Saw(observation,beforeRecords) && (!weapon || Saw("scripted-native-fire",beforeRecords,shooter)) &&
+                Truce::IsActive(player->GetFormID())!=trial.endsTruce &&
+                Engine::HasCaptiveFactionApplied(*player)!=trial.endsTruce && Engine::IsInCaptiveFaction(*player)!=trial.endsTruce &&
+                GameTime::NowDay()<truceDeadline;
+            // Keep all independent compatibility observations even if one fails.
+            out["cases"].push_back({{"name",std::string("scripted-")+trial.name},{"passed",passed}});
+            Truce::End(*player);
+            if(attackIndex+1<std::size(scriptedCases)) { ++attackIndex; phase=3; phaseAt=Now(); }
+            else { Request(out,"load","osfdefeathealthy"); Next(); }
+            break;
+        }
+        case 6:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            beforeRecords=Sequence(); script("InspectCleanup"); Next(); break;
+        case 7:
+            if(Wait(Recorded("scripted-cleanup",beforeRecords))) break;
+            Check(out,"scripted-cleanup-load",Saw("scripted-cleanup",beforeRecords) && DefeatRegistry::Snapshot().empty() &&
+                Truce::Snapshot().empty() && Defeat::SnapshotAISuspensions().empty() && Engine::SnapshotCaptiveFactions().empty());
+            if(std::ranges::any_of(out["cases"],[](const auto& c){return !c.at("passed").template get<bool>();}))
+                throw std::runtime_error("Scripted attack compatibility failed; see individual cases");
+            return true;
+        }
+        return false;
+    }
     if(weaponsOnly) {
         out["weaponCase"]=weaponKinds[attackIndex];
         switch(phase) {
