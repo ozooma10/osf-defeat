@@ -69,10 +69,10 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
 ## Validation — 2026-10-17
 
 - Full regression: **78/78 live assertions**, four owned local MO2/SFSE
-  processes, **83 native cases / 1,014 checks**, **132 runner checks**, payload
-  validation, production build and source-integrity checks pass. Defeat `d78f1a9`,
-  CommonLib `d18e0bd`, Animation `fcf9714`; receipt `build/death-full-01/summary.json`;
-  artifacts: `../OSF Test Harness/artifacts/20261017-144549-908-DefeatSmoke`.
+  processes, **85 native cases / 1,031 checks**, **132 runner checks**, payload
+  validation, production build and source-integrity checks pass. Defeat `ca53475`,
+  CommonLib `ebc14f7`, Animation `fcf9714`; receipt `build/scripted-full-01/summary.json`;
+  artifacts: `../OSF Test Harness/artifacts/20261017-155650-810-DefeatSmoke`.
 - Focused post-theft/post-time suite: **13/13 assertions**, three fresh processes,
   Defeat `aa1c7c9`. Receipt `build/shadows-checkpoints-05.json`; artifacts
   `../OSF Test Harness/artifacts/20261017-133250-510-DefeatSmoke`.
@@ -206,6 +206,58 @@ capture even when the session has not returned successfully.
 This is first-person keyboard/mouse coverage of the listed forms. It does not
 certify all OMOD combinations, camera/controller paths, mine detonation behavior,
 or non-cooperating scripted producers. See the [runtime guide](../tests/runtime/README.md).
+
+## Scripted attack compatibility (2026-10-17)
+
+The focused `-ScriptedOnly` suite passes **23/23 assertions** on Defeat `ca53475`,
+CommonLib `ebc14f7`, with uninstrumented production Shadows scripts. Receipt:
+`build/scripted-05.json`; artifacts:
+`OSF Test Harness/artifacts/20261017-155352-773-DefeatSmoke`. The owned process was
+PID 53024, creation FILETIME `134367260571200486`. The final real healthy reload
+restores controls and requires empty defeat, AI-suspension, truce and faction state.
+
+Three complementary paths now handle scripted attacks. Native weapon-discharge
+notifications end the firing actor's truce even when `Weapon.Fire` emits no watched
+Papyrus/graph callback. Shadows watches hostile `OnSpellCast`, including
+`DoCombatSpellApply`, while healing leaves the truce active. An observer at the
+validated remote-cast call honors explicit hostile-spell blame and forwards the
+original spell application unchanged. These native observers verify the installed
+game code before registration/patching. Deferred cancellation carries only actor
+ID and save epoch, and unit tests reject callbacks from an old save.
+
+The remote-cast failure was real: an actor-source `RemoteCast(NPC, player, NPC)`
+dealt 40 damage, but the health write named the NPC source rather than the blamed
+player, leaving player truce active. The fix observes explicit blame before that
+information is lost. The matrix separately verifies actor and object caster
+implementations, exact blame/spell identity, real damage, and captive-faction
+cleanup. Native hostile-count reads agree with Papyrus for damage and healing.
+NPC blame, missing blame, healing and invalid sources preserve player truce;
+invalid sources never reach the accepted native cast.
+
+Other controls cover attributed health damage, restoration, non-health writes,
+incoming spells, direct casts, and anonymous/cooperating `DamageValue`. Anonymous
+damage has no attacker and intentionally preserves player truce: its producer must
+call `EndRecoveryTruce`. Direct-cast coverage proves attributed damage, not every
+spell miss or effect type. Custom paths outside these observations retain the
+same explicit integration contract. Canonical native findings and retained static
+and runtime evidence are in OSF RE's `gameplay.defeat_damage_hook` module; its
+CommonLib mirror and sandbox build also pass.
+
+Regression after the fixes: **31/31 weapon assertions**, receipt
+`build/scripted-weapons-01.json`, artifacts
+`OSF Test Harness/artifacts/20261017-154604-705-DefeatSmoke`, owned PID 41004 /
+creation FILETIME `134367255890452129`, eleven healthy loads and final epoch 13.
+The expanded fixture only adds object-caster observations and an offset assertion;
+the final full regression passes **78/78 runtime assertions** across four owned
+processes, **85 native cases / 1,031 assertions**, and **132 runner checks**, plus
+payload, production-build and unchanged-source checks. Receipt:
+`build/scripted-full-01/summary.json`. No live source changes occurred during a run.
+
+Earlier failed iterations remain retained. Run 01 exposed missed scripted discharge
+and a suspended-AI spell fixture; run 02 corrected that fixture and isolated remote
+blame; run 03 proved actual health-write attribution. Run 04 passed 21 cases, then
+run 05 added and passed the two object-source controls. None of the failed runs is
+counted as a suite pass. Basic remains the shipped pack; Shadows remains staged.
 
 ## Remaining acceptance before replacing Basic
 

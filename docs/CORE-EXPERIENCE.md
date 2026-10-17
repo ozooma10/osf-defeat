@@ -246,7 +246,13 @@ repeat defeat, attack misses and post-promotion interruption.
 A separate weapon matrix now passes 31 assertions across 26 attacks, including
 energy/heavy/EM weapons, melee/bash, five grenades, and four mines. It verifies
 truce cancellation, ammunition/item consumption, passive controls, and clean
-reloads between explosive cases. The tested production behavior required no change.
+reloads between explosive cases. A separate scripted matrix passes 23 assertions
+covering native/Papyrus damage, direct and remote spells, actor/object cast sources,
+and scripted weapon fire. It exposed and fixed missed native discharge and remote
+blame handling; hostile spell callbacks are also covered. Healing, NPC attacks,
+missing blame and invalid-source controls preserve the player's truce. Anonymous
+`DamageValue` still requires explicit `EndRecoveryTruce` integration. The 31-case
+weapon matrix and full 78-case regression pass with the compatibility changes.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.
