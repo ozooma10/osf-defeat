@@ -1,7 +1,7 @@
 # OSF Defeat automated tests
 
 The test bench follows the sibling Settings/UI/Animation pattern: native production-code
-tests, payload checks, a production build, and an opt-in fresh game session with retained
+tests, payload checks, a production build, and opt-in game sessions with a cold restart and retained
 JSON results, logs and screenshots. Offline success and game acceptance are separate.
 
 Run from the repository using PowerShell 7.2+, XMake and MSVC:
@@ -24,7 +24,7 @@ xmake test 'osfdefeat-persistence-tests/*'
 # Check this PC's game prerequisites without launching or writing a profile.
 pwsh -NoProfile -File tools/test-runtime.ps1 -Preflight
 
-# Focused staged Minimal Shadows loop (28 assertions, same disposable profile).
+# Focused staged Minimal Shadows loop (32 assertions, including a cold restart).
 pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
 ```
 
@@ -121,7 +121,7 @@ and an unexpired request bound to the exact process and launch token. Every muta
 on the existing Main update seam or through the real Papyrus VM. The suite has a
 600-second deadline plus bounded runner startup/cleanup waits.
 
-The 66 game assertions include the original nine defeat/recovery checks and these
+The 70 game assertions include the original nine defeat/recovery checks and these
 acceptance scenarios:
 
 - Real console saves and loads, with fresh `.sfs`/`.osf` pairs retained under `saves/`.
@@ -144,7 +144,8 @@ acceptance scenarios:
   transfers, afflictions, recovery and quest stop. Arrested covers its no-crime-faction
   fallback. A tagged disposable marker checks the shared fade/move/recover helper.
 - Minimal Shadows: a disposable Spacer aggressor becomes the single nemesis, takes
-  credits and the unique equipped Eon, equips it, and applies the authored resistance
+  credits and the unique equipped Eon, equips it with one round when starting without
+  compatible ammunition, and applies the authored resistance
   abilities. Blackout advances at least two hours; recovery restores controls with a
   truce while the hostile NPC's AI runs. An occupied slot is preserved. A real truce
   save/load checks TRC0/CPT0/PCF0 and the unchanged deadline. Real missed knife swings
@@ -154,10 +155,18 @@ acceptance scenarios:
   reload, retrieval and explicit world drop/pickup. The expanded suite checks
   reference protection overrides and other negative eligibility, a second full
   defeat while occupied, lower-level reward refusal, missed unarmed/Eon/frag attacks,
-  cooperating scripted attacks, external aftermath stop and early-blackout reload.
-  Natural death drops are accepted only after exact instance-metadata verification.
+  cooperating scripted attacks, external aftermath stop before/after promotion and
+  early-blackout reload. The NPC resumes AI and draws before death; natural drops
+  are accepted only after exact instance-metadata verification.
+- A second owned game process autoloads the retained blackout save pair into a new
+  private save directory. Save hashes, process creation times, launch tokens, the
+  saved Papyrus consumer and its credits/time baselines are checked. Recovery,
+  controls and final healthy-save cleanup must pass. `defeat-result.json` and
+  `blackout-cold-result.json` contain the two case sets; `runtime-sessions.json`
+  records their separate process identities. Startup sees only the blackout seed;
+  the healthy pair is copied in afterward solely for cleanup.
 
-`-ShadowsOnly` explicitly runs the 24 Shadows cases plus four setup assertions;
+`-ShadowsOnly` explicitly runs the 28 Shadows cases plus four setup assertions;
 its receipt says `scope: shadows`. It does not certify the other 38 full-suite cases.
 The runner privately builds `shadows/` through Spriggit and compiles its scripts.
 Branch diagnostics in the Papyrus observation array are not individual test verdicts;
@@ -175,7 +184,8 @@ sidecar fixture, checksums, duplicate clients/records, stale process identity an
 
 ## Acceptance boundaries
 
-The fixture is a quiet disposable cell. Cold process restarts, failed/cancelled loads,
+The fixture is a quiet disposable cell. Cold restart of an early blackout is covered;
+other cold-start states, post-theft blackout saves, failed/cancelled loads,
 nonpersistent NPC streaming, cross-cell transfers, opt-in hostile NPC lethal combat,
 actual jail/sentence transitions, third-party consumers and physical controllers still need
 dedicated scenarios. Robot/creature selection uses actual keywords on the humanoid clone;

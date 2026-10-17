@@ -20,7 +20,9 @@ remains open below.
 - Promotion takes 10% of credits, clamped to 25–2,500 and available funds. Weapon
   theft uses the pre-down equipped-base snapshot, requires exactly one owned copy,
   skips quest items, compares base credit value, and moves the inventory item to the
-  nemesis. This quality proxy does not evaluate damage or modifications. Suit,
+  nemesis. If it has no compatible base ammunition, promotion supplies one round
+  so its AI keeps the stolen gun equipped. This quality proxy does not evaluate
+  damage or modifications. Suit,
   helmet and boost pack are never taken.
 - The aftermath fades out, advances at least two and less than three game hours,
   then recovers in place with a 30-second truce. PassTime rounds to an hour boundary,
@@ -29,6 +31,9 @@ remains open below.
   stalled work. Generation checks invalidate old latent stacks after cancellation.
   External shutdown or reload during blackout requests recovery and restores the
   fade, preserving an already-created hunt instead of starting the consequence again.
+  Reload aborts invalidate the saved stack before bounded polling for native state
+  restoration and recovery. A load-time empty registry or refused task submission
+  no longer counts as recovery; generation checks also guard the final quest stop.
 - Ship interiors and space refuse this loop, restore framework state, then request
   normal death. This is a staged content-level refusal, not a native domain gate.
 
@@ -61,37 +66,52 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
 
 ## Validation — 2026-10-17
 
-- Focused live suite: **28/28 assertions**, fresh owned local MO2/SFSE session.
-  Defeat revision `624ec08`, Animation `fcf9714`; receipt
-  `build/shadows-acceptance-11.json`; artifacts
-  `../OSF Test Harness/artifacts/20261017-052332-928-DefeatSmoke`.
-- Full regression: **66/66 live assertions**, **83 native cases / 1,014 checks**,
+- Focused live suite: **32/32 assertions**, two owned local MO2/SFSE processes.
+  Defeat revision `2839911`, Animation `fcf9714`; receipt
+  `build/shadows-acceptance-15.json`; artifacts
+  `../OSF Test Harness/artifacts/20261017-063416-677-DefeatSmoke`.
+- Full regression: **70/70 live assertions**, **83 native cases / 1,014 checks**,
   **97 runner checks**, payload validation, production build and source-integrity
-  checks pass on Defeat `c16498a` with Animation `fcf9714`. Receipt:
-  `build/smoke/20261017-053511-42d736e793ad49edb4bbb3b4ba63dd98/summary.json`;
-  artifacts: `../OSF Test Harness/artifacts/20261017-053519-156-DefeatSmoke`.
+  checks pass on Defeat `2839911` with Animation `fcf9714`. Receipt:
+  `build/smoke/20261017-063828-553a437320a94f51bca548089008e1eb/summary.json`;
+  artifacts: `../OSF Test Harness/artifacts/20261017-063836-575-DefeatSmoke`.
 - Animation's **12 engine-free suites** pass (`build/shadows-animation-tests-01.log`).
 - World probe compiles and its 11-record ESM round-trips and verifies. Receipt:
-  `build/shadows-world-02/build.json`. **21 isolated-profile preparation checks** pass;
-  `build/shadows-world-preparation-04.log`. Preparation is not runtime acceptance.
+  `build/shadows-world-04/build.json`. **21 isolated-profile preparation checks** pass;
+  `build/shadows-world-preparation-06.log`. Preparation is not runtime acceptance.
+- The test snapshot publisher survives a **1.5-second replacement-denying file lock**
+  spanning its 500 ms update cadence; it retries without blocking Main and retains
+  a five-second failure deadline (`build/shadows-snapshot-lock-02.json`).
 
 The live fixtures cover the ordinary one-slot loop and resistance magnitudes; a
 second lethal defeat while occupied; player reward, other-killer cleanup and a
 lower-level enemy refusing a reward; reference protection overrides, teammate,
 ghost and unrelated-alias rejection; truce save/load/expiry; missed knife, unarmed,
-Eon and frag attacks; a cooperating scripted attack; external quest interruption;
-and an early-blackout save/reload with control, credits, time and empty-hunt checks.
+Eon and frag attacks; a cooperating scripted attack; external quest interruption
+before and after promotion; and an early-blackout save/reload with control, credits,
+time and empty-hunt checks in both the same process and a cold restart. The later
+interruption was observed in phase 2, with one credit deduction, retained hunt/traits,
+working controls and about 2.03 game hours elapsed. Cold restart uses the exact
+hashed save pair in a new private save directory and verifies distinct process
+creation times and launch tokens (`runtime-sessions.json`). It requires the saved
+Papyrus consumer and its saved baselines rather than creating a replacement.
+
+Two acceptance failures exposed production issues. A stolen Eon with no compatible
+NPC ammunition was replaced by fists after AI resumed; the new fixture starts with
+zero rounds and verifies exactly one after promotion. A cold blackout reload stopped
+the quest while native recovery was not ready, leaving the player down and locked;
+bounded restoration/recovery polling now passes without replaying theft or time.
 
 The weapon fixture attaches a suppressor and Instigating, Rapid and Explosive
 legendary slots to one Eon. A read-only, version-gated native probe compares every
 OMOD row, including attachment metadata and duplicates, at baseline, theft,
-real reload, corpse retrieval and explicit player drop/pickup. All match. That last
-step certifies the forced world-pickup path. The focused run compared 24 rows and
-the full run compared 19; each preserved its own exact baseline. A prior full run
-found the weapon absent from corpse inventory and a nearby Eon with a different
-reference from the stolen inventory alias. The revised test now requires exact
-modification data before accepting a natural drop. The passing rerun took the
-corpse path, so the natural-drop branch remains unverified.
+real reload, natural death drop, retrieval and explicit player drop/pickup. All match:
+22 rows in the latest focused run and 20 in the full run, each against its own exact
+baseline. The NPC's AI is resumed and its equipped weapon drawn before death; the
+test does not force an NPC DropObject. The natural drop has a different reference
+from the inventory alias, so the probe requires exact modification data before
+accepting it. The earlier full run `20261017-053519-156-DefeatSmoke` covered corpse
+retrieval. Explicit player DropObject/pickup remains a separate tested path.
 Native-layout and graph-event evidence lives in OSF RE's `gameplay.actor_equipment`,
 `engine.animation_graphs` and `ui.input_enable_layer` modules. Failed iteration
 receipts are retained rather than overwritten.
@@ -102,10 +122,10 @@ receipts are retained rather than overwritten.
   structure: normal full-body appearance, title/journal/abilities, normal planet
   departure and return, reload/cold restart, long absence and actual reset behavior.
   The old seeds prove inert surrogates at a city and a natural feature only.
-- Naturally dropped NPC weapon retrieval, other weapon/throwable families and
-  non-cooperating third-party attack producers.
-- Ship/space refusal fixtures and blackout interruption after theft/time advancement.
-  The passing blackout reload is within one process and before promotion.
+- Other weapon/throwable families and non-cooperating third-party attack producers.
+- Ship/space refusal fixtures and saves taken after theft/time advancement.
+  External interruption after promotion passes, but both passing blackout reload
+  variants use a save made before promotion.
 
 The [world probe and setup guide](../tests/world-shadows/README.md) are ready. It
 stamps an existing enemy once, relies on the production hunt's alias, observes
