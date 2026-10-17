@@ -234,10 +234,13 @@ the disposable-cell suite. The authored surrogate intermittently rendered
 only partially despite passing identity/loaded checks; include appearance in that coverage.
 The [slice-1 implementation and acceptance record](MINIMAL-SHADOWS-IMPLEMENTATION.md)
 covers the one-slot hunt, traits, blackout, theft, recovery truce and death cleanup.
-Its expanded focused disposable-cell suite passes all 32 assertions, and the full
-regression passes all 70. Coverage includes exact modified-weapon natural drops,
-stolen-weapon ammunition, negative eligibility, repeat defeat, attack misses,
-post-promotion interruption and early-blackout recovery across a cold restart.
+The full regression passes all 78 assertions, including same-process and cold
+loads before theft, after theft, and after time advancement. The later checkpoints
+use test-only phase gates; production timing is unchanged. Separate focused runs
+pass 13 blackout assertions and 8 landed/orbital Frontier refusal assertions,
+including vanilla death and clean automatic reload. Coverage also includes exact
+modified-weapon natural drops, stolen-weapon ammunition, negative eligibility,
+repeat defeat, attack misses and post-promotion interruption.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.

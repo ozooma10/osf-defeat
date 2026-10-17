@@ -66,15 +66,17 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
 
 ## Validation — 2026-10-17
 
-- Focused live suite: **32/32 assertions**, two owned local MO2/SFSE processes.
-  Defeat revision `2839911`, Animation `fcf9714`; receipt
-  `build/shadows-acceptance-15.json`; artifacts
-  `../OSF Test Harness/artifacts/20261017-063416-677-DefeatSmoke`.
-- Full regression: **70/70 live assertions**, **83 native cases / 1,014 checks**,
-  **97 runner checks**, payload validation, production build and source-integrity
-  checks pass on Defeat `2839911` with Animation `fcf9714`. Receipt:
-  `build/smoke/20261017-063828-553a437320a94f51bca548089008e1eb/summary.json`;
-  artifacts: `../OSF Test Harness/artifacts/20261017-063836-575-DefeatSmoke`.
+- Full regression: **78/78 live assertions**, four owned local MO2/SFSE
+  processes, **83 native cases / 1,014 checks**, **103 runner checks**, payload
+  validation, production build and source-integrity checks pass. Defeat `5dc8955`,
+  Animation `fcf9714`; receipt `build/shadows-final-regression-08/summary.json`;
+  artifacts: `../OSF Test Harness/artifacts/20261017-133752-565-DefeatSmoke`.
+- Focused post-theft/post-time suite: **13/13 assertions**, three fresh processes,
+  Defeat `aa1c7c9`. Receipt `build/shadows-checkpoints-05.json`; artifacts
+  `../OSF Test Harness/artifacts/20261017-133250-510-DefeatSmoke`.
+- Uninstrumented ship/space refusal: **8/8 assertions** in the retained Frontier
+  fixture, Defeat `5dd4eff`. Receipt `build/shadows-refusal-02.json`; artifacts
+  `../OSF Test Harness/artifacts/20261017-131715-750-DefeatSmoke`.
 - Animation's **12 engine-free suites** pass (`build/shadows-animation-tests-01.log`).
 - World probe compiles and its 11-record ESM round-trips and verifies. Receipt:
   `build/shadows-world-04/build.json`. **21 isolated-profile preparation checks** pass;
@@ -96,6 +98,43 @@ hashed save pair in a new private save directory and verifies distinct process
 creation times and launch tokens (`runtime-sessions.json`). It requires the saved
 Papyrus consumer and its saved baselines rather than creating a replacement.
 
+The [expanded acceptance runner](../tests/runtime/README.md) also saves after theft
+and after time advancement, loads each in the same process, then boots each exact
+pair in a fresh process. Test-only gates pause those brief phases at the production
+generation guards; the ordinary builder and ship-refusal suite have no gates.
+Removing the two test loops must reproduce the production source byte-for-byte
+after newline normalization. This proves save/load behavior at the boundaries,
+not that manual console saves can reliably hit them at normal timing.
+
+Both later checkpoints retain the hunt/objective/traits, exactly one credit
+deduction, and the stolen weapon's complete OMOD rows. Two inspections three
+seconds apart reject a delayed replay of theft/time. The focused run preserved
+24 rows after theft and 22 after the approximately 2.01-hour skip, including cold
+restart. Aliased inventory proxies can report no container: ownership comes from
+the actual inventories and exact metadata, while the alias/base is checked
+separately. Sidecar inspection requires valid CRCs and exactly one defeat plus
+one AI suspension. Earlier disposable subjects are resumed and removed before
+the next checkpoint. Phase writes retain generation guards before and after them.
+
+The Frontier suite verifies a landed interior, then the actual home ship's
+`TakeOff()` transition to an orbital interior (`IsLanded=False`, both space
+predicates true). Each lethal hit selects the production refusal, preserves
+credits/weapon metadata/time, creates no hunt/traits/truce, clears the held state,
+and ends in vanilla death followed by an automatic healthy reload. Animation's
+retained log confirms `osfdefeathealthy.osf` loaded twice. Controls and empty
+Defeat registries pass after each load. The CommonLib dead-bit predicate stayed
+false while Papyrus reported death, so the oracle retains Papyrus dying/death
+events and `IsDead`, plus the real load event and epoch. The narrow observation is
+recorded in OSF RE's `gameplay.defeat_damage_hook`; no new native offset is claimed.
+This covers on-foot refusal in that ship, not piloting or hostile boarding layouts.
+
+Cold-restart preparation closes the idle test MO2 launcher before changing its
+private save path, writes a sibling INI, and atomically replaces the old file with
+a bounded retry. Deliberate file-lock checks prove failed replacement preserves
+the original and a released lock permits replacement. Earlier failed/blocked run
+receipts remain retained, including the corrected inventory-proxy assertion and
+the MO2 INI lock; they are not counted as passes.
+
 Two acceptance failures exposed production issues. A stolen Eon with no compatible
 NPC ammunition was replaced by fists after AI resumed; the new fixture starts with
 zero rounds and verifies exactly one after promotion. A cold blackout reload stopped
@@ -106,8 +145,7 @@ The weapon fixture attaches a suppressor and Instigating, Rapid and Explosive
 legendary slots to one Eon. A read-only, version-gated native probe compares every
 OMOD row, including attachment metadata and duplicates, at baseline, theft,
 real reload, natural death drop, retrieval and explicit player drop/pickup. All match:
-22 rows in the latest focused run and 20 in the full run, each against its own exact
-baseline. The NPC's AI is resumed and its equipped weapon drawn before death; the
+30 rows in the latest full run, each compared with its exact pre-theft baseline. The NPC's AI is resumed and its equipped weapon drawn before death; the
 test does not force an NPC DropObject. The natural drop has a different reference
 from the inventory alias, so the probe requires exact modification data before
 accepting it. The earlier full run `20261017-053519-156-DefeatSmoke` covered corpse
@@ -123,9 +161,8 @@ receipts are retained rather than overwritten.
   departure and return, reload/cold restart, long absence and actual reset behavior.
   The old seeds prove inert surrogates at a city and a natural feature only.
 - Other weapon/throwable families and non-cooperating third-party attack producers.
-- Ship/space refusal fixtures and saves taken after theft/time advancement.
-  External interruption after promotion passes, but both passing blackout reload
-  variants use a save made before promotion.
+- Broader unsupported-domain fixtures such as piloting, free-space actors and
+  hostile boarding layouts. Landed/orbital on-foot refusal in the Frontier passes.
 
 The [world probe and setup guide](../tests/world-shadows/README.md) are ready. It
 stamps an existing enemy once, relies on the production hunt's alias, observes
