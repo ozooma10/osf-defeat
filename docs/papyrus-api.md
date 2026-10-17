@@ -28,12 +28,18 @@ the defeat for normal recovery/watchdog handling. Its return means dispatch acce
 wait for `!IsDefeated(actor) && IsRecoveryTruceActive(actor)` before relying on it.
 
 Truce provides no damage immunity. The timer uses a saved game-day deadline, so reload
-does not renew it and advancing game time can expire it. Outgoing health damage, a new
-defeat, `EndRecoveryTruce` or `ForceRecoverAll` ends it. Content must also call
-`EndRecoveryTruce` on fire/attack events to cover misses. The staged Shadows pack shows
-this pattern: `WeaponFire` covers the tested Eon and frag release, and `HitFrame`
-covers melee/unarmed misses. Scripted producers bypassing these callbacks must
-explicitly call `EndRecoveryTruce` before their attack. Only framework-owned faction
+does not renew it and advancing game time can expire it. Attributed outgoing health
+damage, native weapon discharge (including `Weapon.Fire`), and an accepted hostile
+`Spell.RemoteCast` with an explicit blame actor end that actor's truce. A new defeat,
+`EndRecoveryTruce` or `ForceRecoverAll` also ends it. The native attack observers are
+gated against the verified game code; a failed gate is logged and leaves other paths
+available. Shadows additionally watches player fire, `WeaponFire`, `HitFrame` and
+hostile `OnSpellCast` callbacks to cover attack misses and `DoCombatSpellApply`.
+Incoming NPC attacks and healing preserve the player's truce.
+
+Anonymous `DamageValue` carries no attacker identity. Such producers, and custom
+attack paths outside these observations, must explicitly call `EndRecoveryTruce`
+before their attack. Do not infer player responsibility from damage alone. Only framework-owned faction
 membership is removed; pre-existing membership is preserved. `TRC0` v1 and the
 existing `CPT0` record retain truce and ownership across saves.
 

@@ -2,6 +2,7 @@ Scriptname OSFDefeatScriptedAcceptance extends ObjectReference
 
 OSFDefeatShadowsHunt hunt
 Actor target
+ObjectReference origin
 ActorValue health
 Weapon weaponBase
 Spell damageSpell
@@ -18,12 +19,14 @@ Function Initialize()
     healingSpell = Game.GetFormFromFile(0x1E1171, "Starfield.esm") as Spell
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
     target = player.PlaceAtMe(Game.GetFormFromFile(0x270255, "Starfield.esm"), 1, False, True, False) as Actor
-    If target == None || hunt == None || weaponBase == None || damageSpell == None || healingSpell == None
+    origin = player.PlaceAtMe(Game.GetFormFromFile(0x3B, "Starfield.esm"), 1, False, False, False)
+    If target == None || origin == None || hunt == None || weaponBase == None || damageSpell == None || healingSpell == None
         OSFDefeatAcceptanceProbe.Record("scripted-fixture", False)
         Return
     EndIf
     target.Enable()
     target.MoveTo(player, 5.0, 0.0, 0.0)
+    origin.MoveTo(player, 3.0, 0.0, 0.0)
     target.SetRestrained(True)
     OSFDefeat.SuspendActorAI(target)
     hunt.Start()
@@ -86,6 +89,10 @@ Function Run(String kind)
         damageSpell.RemoteCast(target, player, target)
     ElseIf kind == "spell-remote-npc"
         damageSpell.RemoteCast(target, target, player)
+    ElseIf kind == "spell-remote-object"
+        damageSpell.RemoteCast(origin, player, target)
+    ElseIf kind == "spell-remote-object-npc"
+        damageSpell.RemoteCast(origin, target, player)
     ElseIf kind == "spell-remote-anonymous"
         damageSpell.RemoteCast(target, None, target)
     ElseIf kind == "spell-remote-heal"
@@ -111,7 +118,7 @@ Function Run(String kind)
         effect = targetDelta > 0.1
     ElseIf kind == "native-nonhealth"
         effect = targetDelta == 0.0 && playerDelta == 0.0
-    ElseIf kind == "incoming-spell" || kind == "spell-remote-npc"
+    ElseIf kind == "incoming-spell" || kind == "spell-remote-npc" || kind == "spell-remote-object-npc"
         effect = playerDelta < -0.1
     ElseIf kind == "spell-remote-heal"
         effect = targetDelta > 0.1

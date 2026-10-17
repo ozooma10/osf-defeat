@@ -64,6 +64,7 @@ namespace {
         {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},
         {"papyrus-anonymous",false},{"papyrus-cooperative",true},{"incoming-spell",false},
         {"spell-cast",true},{"spell-remote",true},{"spell-remote-npc",false},
+        {"spell-remote-object",true},{"spell-remote-object-npc",false},
         {"spell-remote-anonymous",false},{"spell-remote-heal",false},{"spell-remote-invalid",false},
         {"combat-spell",true},{"spell-heal",false},{"combat-spell-heal",false},
         {"weapon-fire-player",true},{"weapon-fire-npc",false}
@@ -380,11 +381,11 @@ void Bind(VM& vm) {
 }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
-void ObservedRemoteCast(std::uint32_t spell,std::uint32_t blame,bool hostile) {
+void ObservedRemoteCast(std::uint32_t spell,std::uint32_t blame,bool hostile,std::uintptr_t casterTableRva) {
     if(!scriptedOnly) return;
     std::scoped_lock lock(observationsLock);
     records.push_back({{"sequence",++sequence},{"name","scripted-native-remote"},{"ok",true},
-        {"subject",blame},{"spell",spell},{"hostile",hostile}});
+        {"subject",blame},{"spell",spell},{"hostile",hostile},{"casterTableRva",casterTableRva}});
 }
 void ObservedHealthWrite(std::uint32_t victim,std::uint32_t source,float delta) {
     if(!scriptedOnly || (victim!=0x14 && victim!=npcID.load())) return;
@@ -440,16 +441,17 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             const bool weapon=std::string_view(trial.name).starts_with("weapon-fire-");
             const bool remote=std::string_view(trial.name).starts_with("spell-remote");
             const bool invalid=std::string_view(trial.name)=="spell-remote-invalid";
-            const FormID blame=std::string_view(trial.name)=="spell-remote-npc" ? npcID.load() :
+            const FormID blame=(std::string_view(trial.name)=="spell-remote-npc" || std::string_view(trial.name)=="spell-remote-object-npc") ? npcID.load() :
                 std::string_view(trial.name)=="spell-remote-anonymous" ? 0 : player->GetFormID();
             bool remoteObserved=false;
             if(remote) {
                 const bool healing=std::string_view(trial.name)=="spell-remote-heal";
+                const bool object=std::string_view(trial.name).starts_with("spell-remote-object");
                 std::scoped_lock lock(observationsLock);
                 remoteObserved=std::ranges::any_of(records,[&](const auto& r) {
                     return r.value("sequence",0ULL)>beforeRecords && r.value("name","")=="scripted-native-remote" &&
                         r.value("subject",0U)==blame && r.value("spell",0U)==(healing?0x1E1171U:0x29AAE9U) &&
-                        r.value("hostile",false)!=healing;
+                        r.value("hostile",false)!=healing && r.value("casterTableRva",0ULL)==(object?0x4B21B10ULL:0x4CA2C98ULL);
                 });
             }
             const FormID shooter=std::string_view(trial.name)=="weapon-fire-npc" ? npcID.load() : player->GetFormID();

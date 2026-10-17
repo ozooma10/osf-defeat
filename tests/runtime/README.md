@@ -3,6 +3,34 @@
 These are local, disposable MO2 + SFSE tests. Enemy-world persistence remains a
 separate [world-probe acceptance task](../world-shadows/README.md).
 
+## Run scripted attack compatibility
+
+```powershell
+pwsh -NoProfile -File tools/test-runtime.ps1 -ScriptedOnly `
+  -ResultPath build/new-scripted-result.json
+```
+
+This uses the disposable quiet-cell seed and uninstrumented production Shadows
+scripts. Its separate `scripted-cases.json` inventory contains 23 assertions.
+The fixture creates a restrained, AI-enabled NPC and a marker source. Suspended
+NPC AI prevents active spell effects from updating and cannot prove damage
+attribution. Health is raised for these nonlethal checks; a real healthy-save
+reload removes the fixture and requires empty framework state and working controls.
+
+The matrix covers attributed native health damage, restoration/non-health controls,
+anonymous and cooperating `DamageValue`, incoming damage, direct `Spell.Cast`,
+`RemoteCast` from actor and object sources with player/NPC blame, missing blame,
+healing and invalid source, hostile/healing `DoCombatSpellApply`, and player/NPC
+`Weapon.Fire`. Spell cases require real health changes; fire cases require native
+discharge observations, including when no watched graph/Papyrus callback fires.
+Remote-cast observations verify exact spell, blame, hostility and caster vtable;
+invalid sources must never reach the validated cast. Every case checks truce,
+faction ownership/membership, and the unexpired deadline.
+
+These are engine-API compatibility checks, not certification of arbitrary mod
+scripts. Anonymous damage cannot establish who attacked; its integration contract
+is explicit `EndRecoveryTruce`. See the [Papyrus API](../../docs/papyrus-api.md).
+
 ## Run broader weapon coverage
 
 ```powershell

@@ -11,6 +11,8 @@
   "scripted-spell-cast",
   "scripted-spell-remote",
   "scripted-spell-remote-npc",
+  "scripted-spell-remote-object",
+  "scripted-spell-remote-object-npc",
   "scripted-spell-remote-anonymous",
   "scripted-spell-remote-heal",
   "scripted-spell-remote-invalid",

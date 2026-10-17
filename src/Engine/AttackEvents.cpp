@@ -27,6 +27,7 @@ namespace OSFDefeat::AttackEvents
         } g_weaponFireSink;
 
         using Cast = void(void*, RE::MagicItem*, bool, RE::TESObjectREFR*, float, bool, float, RE::Actor*);
+        static_assert(offsetof(RE::MagicItem, hostileCount) == 0x138);
 
         void RemoteCast(void* caster, RE::MagicItem* spell, bool dual, RE::TESObjectREFR* target,
             float effectiveness, bool adjustArea, float magnitude, RE::Actor* blame)
@@ -39,7 +40,8 @@ namespace OSFDefeat::AttackEvents
             const auto original = reinterpret_cast<Cast*>((*reinterpret_cast<std::uintptr_t**>(caster))[2]);
             original(caster, spell, dual, target, effectiveness, adjustArea, magnitude, blame);
 #ifdef OSF_DEFEAT_TESTING
-            RuntimeTests::Acceptance::ObservedRemoteCast(spell ? spell->GetFormID() : 0, blameId, hostile);
+            RuntimeTests::Acceptance::ObservedRemoteCast(spell ? spell->GetFormID() : 0, blameId, hostile,
+                *reinterpret_cast<const std::uintptr_t*>(caster) - reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr)));
 #endif
             if (hostile) Truce::QueueEndForAttack(blameId, epoch);
         }

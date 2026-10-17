@@ -51,10 +51,12 @@ becomes a saved game-day deadline. It does not grant damage immunity. Query
 Missing pacification leaves recovery held for the existing watchdog.
 
 Outgoing health damage queues truce cancellation after the original damage write,
-with the save-epoch guard. Shadows also watches player fire and graph callbacks for
-misses. Actual frag release emits `WeaponFire`; guessed `ThrowGrenade` callbacks did
-not fire. `HitFrame` covers melee/unarmed misses. Scripted attack producers that
-bypass these events must call `EndRecoveryTruce` explicitly. New defeat and
+with the save-epoch guard. Native observers also cover scripted `Weapon.Fire` and
+accepted hostile `Spell.RemoteCast` with explicit blame. Shadows watches player fire,
+graph callbacks and hostile `OnSpellCast` for misses and `DoCombatSpellApply`.
+Actual frag release emits `WeaponFire`; guessed `ThrowGrenade` callbacks did not fire.
+`HitFrame` covers melee/unarmed misses. Anonymous `DamageValue` and custom producers
+outside these paths must call `EndRecoveryTruce` explicitly. New defeat and
 `ForceRecoverAll` end the truce. Pre-existing faction memberships are preserved;
 unresolved actors retain cleanup tracking. `TRC0` v1 saves the deadline and ownership;
 `CPT0` retains the exact faction ID. See the [Papyrus API](papyrus-api.md).
@@ -211,7 +213,8 @@ or non-cooperating scripted producers. See the [runtime guide](../tests/runtime/
   structure: normal full-body appearance, title/journal/abilities, normal planet
   departure and return, reload/cold restart, long absence and actual reset behavior.
   The old seeds prove inert surrogates at a city and a natural feature only.
-- Non-cooperating third-party attack producers that bypass the tested callbacks.
+- Custom third-party attack paths outside the scripted compatibility matrix.
+  Anonymous `DamageValue` requires explicit `EndRecoveryTruce` integration.
 - Broader unsupported-domain fixtures such as piloting, free-space actors and
   hostile boarding layouts. Landed/orbital on-foot refusal in the Frontier passes.
 

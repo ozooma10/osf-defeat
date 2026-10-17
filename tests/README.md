@@ -26,6 +26,9 @@ pwsh -NoProfile -File tools/test-runtime.ps1 -Preflight
 
 # Focused staged Minimal Shadows loop (32 assertions, including a cold restart).
 pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
+
+# Scripted attacks, attribution controls, and healthy-load cleanup (23 assertions).
+pwsh -NoProfile -File tools/test-runtime.ps1 -ScriptedOnly
 ```
 
 `-Mode debug` selects debug instead of releasedbg. `-Harness 'D:\...\OSF Test Harness'`
@@ -49,7 +52,7 @@ seeds for an authored encounter and generated enemy structure. Its build and
 
 ## Native coverage
 
-Nine binaries run 83 named cases. Checks execute in both debug and releasedbg;
+Nine binaries run 85 named cases. Checks execute in both debug and releasedbg;
 they do not use the C `assert` macro. Each test resets registries, clocks, forms, callbacks,
 queues and private JSON fixtures. Fixture directories are created uniquely below TEMP.
 
