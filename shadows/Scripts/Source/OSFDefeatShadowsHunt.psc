@@ -233,6 +233,12 @@ Function FinishMutation()
         removeRewardPending = False
         ClearOwnedHunt(removeReward)
     EndWhile
+    If shuttingDown && IsStopped()
+        ; Stopped quests ignore objective setters in .244. Reset only after
+        ; owned actor/ability cleanup; it clears the journal state without
+        ; starting the quest or moving the already-transferred loot.
+        Reset()
+    EndIf
     busy = False
 EndFunction
 
@@ -251,8 +257,8 @@ Function ClearOwnedHunt(Bool removeReward)
         Game.GetPlayer().RemoveSpell(PlayerReward)
         OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     EndIf
-    ; Shutdown can fail an objective, and a previous win can complete it.
-    ; Return it to an unfinished state before hiding the reusable hunt entry.
+    ; A previous win can complete the objective. Return it to an unfinished
+    ; state before hiding the reusable hunt entry during explicit cleanup.
     SetObjectiveCompleted(10, False)
     SetObjectiveFailed(10, False)
     SetObjectiveDisplayed(10, False)

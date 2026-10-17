@@ -159,20 +159,6 @@ Function Run(String kind)
                 EndWhile
                 ObserveCleanup("lifecycle-stop-observed")
                 ok = !hunt.IsRunning() && Clean() && LootUnchanged()
-                If !ok
-                    ; Diagnostic recovery follows the recorded production state;
-                    ; it must never turn the failed shutdown assertion into a pass.
-                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-is-stopped", hunt.IsStopped())
-                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-is-stopping", hunt.IsStopping())
-                    hunt.SetObjectiveDisplayed(10, False, True)
-                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-force-hide", !hunt.IsObjectiveDisplayed(10))
-                    hunt.SetObjectiveFailed(10, True)
-                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-mark-failed", hunt.IsObjectiveFailed(10))
-                    hunt.Reset()
-                    Utility.Wait(0.5)
-                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-reset-hide", !hunt.IsObjectiveDisplayed(10))
-                    OSFDefeatAcceptanceProbe.Record("lifecycle-stop-reset-stopped", hunt.IsStopped())
-                EndIf
             ElseIf kind == "restart-old-death"
                 ok = previous != None && previous != target
                 If ok
