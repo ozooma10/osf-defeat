@@ -53,7 +53,7 @@ Bool Function Eligible(Actor candidate)
     Return candidate.GetLevel() <= player.GetLevel() + LevelGap
 EndFunction
 
-Bool Function Promote(Actor candidate)
+Bool Function Promote(Actor candidate, Weapon lostWeapon = None)
     If busy || Nemesis.GetReference() != None
         Return False
     EndIf
@@ -76,7 +76,7 @@ Bool Function Promote(Actor candidate)
     SetObjectiveCompleted(10, False)
     SetObjectiveFailed(10, False)
     SetObjectiveDisplayed(10, True, True)
-    TakeLoot(candidate)
+    TakeLoot(candidate, lostWeapon)
     busy = False
     If deathPending || candidate.IsDead()
         ResolveDeath(pendingKiller)
@@ -84,7 +84,7 @@ Bool Function Promote(Actor candidate)
     Return True
 EndFunction
 
-Function TakeLoot(Actor candidate)
+Function TakeLoot(Actor candidate, Weapon weaponBase)
     Actor player = Game.GetPlayer()
     MiscObject credits = Game.GetCredits()
     Int available = player.GetItemCount(credits)
@@ -101,7 +101,6 @@ Function TakeLoot(Actor candidate)
         player.RemoveItem(credits, taken, True, candidate)
     EndIf
 
-    Weapon weaponBase = player.GetEquippedWeapon()
     Weapon theirs = candidate.GetEquippedWeapon()
     LastWeaponConsidered = weaponBase
     ; v1 quality proxy: base credit value. No stat/instance API is claimed here.

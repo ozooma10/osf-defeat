@@ -3,6 +3,7 @@
 #include "Core/Presentation.h"
 
 namespace OSFDefeat::Engine {
+    FormID PrimaryWeaponFormID(RE::Actor&) { return Test::primaryWeaponID; }
     RE::ActorValueInfo* HealthAV() { static RE::ActorValueInfo health; return &health; }
     RE::ActorValueOwner& AVOwnerOf(RE::Actor& actor) { return actor; }
     RE::Actor* ResolveCombatTarget(RE::Actor* actor) { return actor ? actor->combatTarget : nullptr; }
@@ -32,7 +33,7 @@ namespace OSFDefeat::Engine {
     void ResetRuntimeState() { Test::ownedFactions.clear(); }
 }
 namespace OSFDefeat::Presentation {
-    void ShowPlayerDown() { ++Test::showCalls; }
+    void ShowPlayerDown() { ++Test::showCalls; if(Test::onShow) Test::onShow(); }
     void ClearPlayerDown() { ++Test::clearCalls; }
     void ReassertPlayerDown() { ++Test::reassertCalls; }
     void ResetRuntimeState() { ++Test::resetCalls; }
@@ -54,6 +55,7 @@ namespace Test {
         RE::TESForm::forms.clear(); RE::TESForm::editors.clear(); RE::PlayerCharacter::instance = nullptr;
         calendar = {}; RE::Calendar::instance = &calendar;
         vm = {}; gameVM.vm = &vm; RE::GameVM::instance = &gameVM;
+        primaryWeaponID=0; onShow={};
         factionAvailable = factionApplyWorks = true; preexistingFactions.clear(); onRestore = {}; onOriginalDamage = {};
         downCalls = restoreCalls = showCalls = clearCalls = reassertCalls = resetCalls = 0;
         TestEngine::logs.clear(); TestEngine::moduleAvailable = true; TestEngine::persistenceExport = nullptr;

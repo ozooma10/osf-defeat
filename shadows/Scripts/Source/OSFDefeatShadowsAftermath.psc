@@ -11,6 +11,7 @@ EndEvent
 Function RunAftermath()
     Actor player = Game.GetPlayer()
     Actor aggressor = OSFDefeat.GetLastPlayerAggressor()
+    Weapon lostWeapon = OSFDefeat.GetLastPlayerEquippedWeapon()
     If !OSFDefeat.IsDefeated(player)
         Stop()
         Return
@@ -42,7 +43,7 @@ Function RunAftermath()
     StartTimer(30.0, 1)
     Game.FadeOutGame(True, True, 0.0, 0.6, True)
     Utility.Wait(0.7)
-    Bool promoted = Hunt.Promote(aggressor)
+    Bool promoted = Hunt.Promote(aggressor, lostWeapon)
     Float wakeDay = Utility.GetCurrentGameTime() + (BlackoutHours / 24.0)
     Game.PassTime(BlackoutHours)
     ; PassTime lands on an hour boundary and can advance less than requested.

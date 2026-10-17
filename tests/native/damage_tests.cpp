@@ -17,6 +17,13 @@ TEST(lethal_health_clamps_and_queues_once_until_committed) {
     CHECK(DefeatContext::GetLastPlayerAggressor()==&w.enemy); CHECK(Recovery::SecondsRemaining(&w.player)>0);
     Hit(w.player,-100,&w.enemy); CHECK(w.player.health==5); CHECK(downCalls==1);
 }
+TEST(weapon_context_snapshots_before_down_presentation_and_clears_on_load) {
+    World w; RE::TESObjectWEAP weapon; weapon.id=42; Add(weapon);
+    primaryWeaponID=weapon.id; onShow=[] {primaryWeaponID=0;};
+    Hit(w.player,-200,&w.enemy); w.Drain();
+    CHECK(primaryWeaponID==0); CHECK(DefeatContext::GetLastPlayerEquippedWeapon()==&weapon);
+    DefeatContext::ClearPlayerContext(); CHECK(!DefeatContext::GetLastPlayerEquippedWeapon());
+}
 TEST(inline_queue_commits_only_after_original_health_write_returns) {
     World w; RE::BSService::TaskQueue::GetSingleton()->inlineTasks=true;
     bool checked=false; onOriginalDamage=[&] { checked=true; CHECK(!Defeat::IsDefeated(&w.player)); CHECK(w.player.health==5); };

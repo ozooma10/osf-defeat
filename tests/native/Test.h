@@ -54,6 +54,8 @@ namespace Test {
     inline std::set<FormID> preexistingFactions;
     inline int downCalls{}, restoreCalls{}, showCalls{}, clearCalls{}, reassertCalls{}, resetCalls{};
     inline std::function<void(RE::Actor&)> onRestore;
+    inline FormID primaryWeaponID{};
+    inline std::function<void()> onShow;
     inline std::string startedQuest, questContextAtStart;
     inline std::function<void()> onOriginalDamage;
     void Hit(RE::Actor& actor, float delta, RE::TESObjectREFR* aggressor = nullptr,

@@ -446,6 +446,7 @@ namespace OSFDefeat::PlayerDefeat
         // combatant target lists (and may apply captive-faction membership), which can clear the hostility the
         // recent-hostile-attacker filter keys on.
         const auto recentHostileAttackers = CollectRecentHostileAttackers(*player, a_aggressor, Config::RecentHostileAttackerRadius());
+        const auto equippedWeapon = Engine::PrimaryWeaponFormID(*player);
         if (!Defeat::DefeatActor(player, a_aggressor, a_cause)) {
             return;
         }
@@ -478,7 +479,7 @@ namespace OSFDefeat::PlayerDefeat
         // consumers such as OSF Surrender. Context-before-quest so a quest's
         // OnQuestInit can already read the payload. We are on the game thread here,
         // so the VM dispatches are safe.
-        DefeatContext::SetPlayerContext(a_aggressor, consequence, recentHostileAttackers, a_cause);
+        DefeatContext::SetPlayerContext(a_aggressor, consequence, recentHostileAttackers, a_cause, equippedWeapon);
         if (consequence.quest && consequence.startQuest) {
             QuestHandoff::TryStartQuestToken(*consequence.quest);
         }

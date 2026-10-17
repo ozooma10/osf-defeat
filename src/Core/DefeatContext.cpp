@@ -9,6 +9,7 @@ namespace OSFDefeat::DefeatContext
         struct PlayerContext
         {
             FormID aggressor{ 0 };
+            FormID equippedWeapon{ 0 };
             std::string consequenceId;
             std::string consequenceDisplayName;
             std::string consequenceQuest;
@@ -22,7 +23,7 @@ namespace OSFDefeat::DefeatContext
     }
 
     void SetPlayerContext(RE::Actor* a_aggressor, const Consequence::PlayerConsequence& a_consequence,
-        const std::vector<RE::Actor*>& a_recentHostileAttackers, DefeatCause a_cause)
+        const std::vector<RE::Actor*>& a_recentHostileAttackers, DefeatCause a_cause, FormID a_equippedWeapon)
     {
         PlayerContext next;
         next.aggressor = a_aggressor ? a_aggressor->GetFormID() : 0;
@@ -31,6 +32,7 @@ namespace OSFDefeat::DefeatContext
         next.consequenceQuest = a_consequence.quest.value_or("");
         next.autoRecoveryDelaySeconds = a_consequence.HoldsRecovery() ? -1.0f : a_consequence.autoRecoveryDelaySeconds;
         next.cause = a_cause;
+        next.equippedWeapon = a_equippedWeapon;
         next.recentHostileAttackerIds.reserve(a_recentHostileAttackers.size());
         for (auto* const attacker : a_recentHostileAttackers) {
             next.recentHostileAttackerIds.push_back(attacker->GetFormID());
@@ -54,6 +56,16 @@ namespace OSFDefeat::DefeatContext
             aggressor = g_playerContext.aggressor;
         }
         return aggressor ? RE::TESForm::LookupByID<RE::Actor>(aggressor) : nullptr;
+    }
+
+    RE::TESObjectWEAP* GetLastPlayerEquippedWeapon()
+    {
+        FormID id;
+        {
+            std::shared_lock lock{ g_lock };
+            id = g_playerContext.equippedWeapon;
+        }
+        return id ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(id) : nullptr;
     }
 
     std::string GetLastPlayerConsequenceId()

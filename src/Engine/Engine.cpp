@@ -8,9 +8,44 @@
 #include "RE/B/BSPointerHandle.h"
 #include "RE/P/ProcessLists.h"
 #include "RE/T/TESFaction.h"
+#include "REX/W32/KERNEL32.h"
 
 namespace OSFDefeat::Engine
 {
+    FormID PrimaryWeaponFormID(RE::Actor& a_actor)
+    {
+        // Proven .244 Papyrus getter, OSF RE engine.animation_graphs, 2026-09-23/24;
+        // same gated wrapper used by OSF Multiplayer ReadPrimaryWeapon. It owns
+        // and releases the equipped instance; never fabricate that return object.
+        const auto image = reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));
+        const auto address = REL::ID(116695).address();
+        constexpr unsigned char gate[]{0x40,0x53,0x48,0x83,0xEC,0x30,0x49,0x8B,0xC8,0x48,0x8D,0x54,0x24,0x20,0x45,0x8B,0xC1,0xE8,0x5A,0xE2,0x9B,0xFF,0x48,0x8B,0x4C,0x24,0x28,0x48,0x8B,0x18,0x48,0xC7,0x44,0x24,0x28,0,0,0,0,0x48,0x85,0xC9,0x74,0x15,0xBA,0xFF,0xFF,0xFF,0xFF,0xF0,0x0F,0xC1,0x51,0x08,0x83,0xFA,1,0x75,6,0x4C,0x8B,1,0x41,0xFF,0x10,0x48,0x8B,0xC3,0x48,0x83,0xC4,0x30,0x5B,0xC3};
+        if (!a_actor.currentProcess || address-image != 0x1FC7000 ||
+            (*reinterpret_cast<std::uintptr_t**>(&a_actor))[0xCC] != image+0x1985210 ||
+            std::memcmp(reinterpret_cast<const void*>(address), gate, sizeof(gate)) != 0) {
+            REX::WARN("[OSFDefeat] primary weapon getter unavailable; skipping weapon context");
+            return 0;
+        }
+        using Getter = RE::TESForm* (*)(void*, std::uint32_t, RE::Actor*, std::uint32_t);
+        auto* weapon = reinterpret_cast<Getter>(address)(nullptr, 0, &a_actor, 0);
+        if (!weapon || weapon->GetFormType() != RE::FormType::kWEAP) {
+            return 0;
+        }
+        const auto inventory = a_actor.inventoryList.LockRead();
+        if (*inventory) {
+            for (const auto& item : (*inventory)->data) {
+                if (item.object == weapon && item.IsEquipped()) {
+                    for (const auto& stack : item.stacks) {
+                        if (stack.count) {
+                            return weapon->GetFormID();
+                        }
+                    }
+                }
+            }
+        }
+        return 0; // Inherent unarmed form (0001F4) or stale, no-longer-owned base.
+    }
+
     namespace
     {
         // Per-actor record of the captive-faction membership WE created (actorID -> factionID)

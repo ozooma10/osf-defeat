@@ -103,6 +103,11 @@ namespace OSFDefeat::Papyrus
             return a_actor && Truce::IsActive(a_actor->GetFormID());
         }
 
+        RE::TESObjectWEAP* GetLastPlayerEquippedWeapon(std::monostate)
+        {
+            return DefeatContext::GetLastPlayerEquippedWeapon();
+        }
+
         bool HasQuestAlias(std::monostate, RE::Actor* a_actor)
         {
             // Conservative presence test, not a walk of an unproven alias-array layout.
@@ -455,6 +460,7 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "RecoverActorWithTruce", &RecoverActorWithTruce, std::nullopt, false);
         vm->BindNativeMethod(kClass, "EndRecoveryTruce", &EndRecoveryTruce, std::nullopt, false);
         vm->BindNativeMethod(kClass, "IsRecoveryTruceActive", &IsRecoveryTruceActive, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "GetLastPlayerEquippedWeapon", &GetLastPlayerEquippedWeapon, std::nullopt, false);
         vm->BindNativeMethod(kClass, "HasQuestAlias", &HasQuestAlias, std::nullopt, false);
         vm->BindNativeMethod(kClass, "HasProtectionOverride", &HasProtectionOverride, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RescueActor", &RecoverActor, std::nullopt, false);

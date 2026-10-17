@@ -11,6 +11,9 @@ namespace OSFDefeat::Engine
 	[[nodiscard]] RE::ActorValueInfo* HealthAV();
 	[[nodiscard]] RE::ActorValueOwner& AVOwnerOf(RE::Actor& a_actor);
 
+	// Game-thread snapshot before down presentation changes the equipped hand.
+	[[nodiscard]] FormID PrimaryWeaponFormID(RE::Actor& a_actor);
+
 	// Resolves who a_victim was fighting (currentCombatTarget @ Actor+0x298) to an Actor.
 	// Must be called on the game thread (handle-manager reader lock).
 	[[nodiscard]] RE::Actor* ResolveCombatTarget(RE::Actor* a_victim);

@@ -73,6 +73,7 @@ namespace RE {
     struct TESObjectREFR : TESForm, ActorValueOwner {};
     struct BGSKeyword : TESForm {};
     struct TESFaction : TESForm {};
+    struct TESObjectWEAP : TESForm {};
     struct Actor : TESObjectREFR {
         explicit Actor(std::uint32_t value = 0) { id = value; }
         bool dead = false, inScene = false;

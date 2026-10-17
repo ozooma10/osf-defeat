@@ -43,6 +43,11 @@ Bool Function EndRecoveryTruce(Actor akActor) global native
 ; True for None. Alias presence may include empty retained alias metadata;
 ; protection presence includes explicitly cleared per-reference overrides.
 ; Check IsEssential and GetLeveledActorBase().IsProtected separately as well.
+; Base weapon captured before down presentation changes the hand. None for
+; unarmed, unavailable getter, or after load (context is transient). Copy into
+; consequence state immediately. This does not identify a particular item stack.
+Weapon Function GetLastPlayerEquippedWeapon() global native
+
 Bool Function HasQuestAlias(Actor akActor) global native
 Bool Function HasProtectionOverride(Actor akActor) global native
 
