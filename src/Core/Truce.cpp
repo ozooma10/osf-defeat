@@ -55,6 +55,22 @@ namespace OSFDefeat::Truce
         return true;
     }
 
+    void QueueEndForAttack(FormID a_actorId, std::uint64_t a_epoch)
+    {
+        if (!a_actorId || !RuntimeMutation::IsCurrent(a_epoch) || !IsActive(a_actorId)) {
+            return;
+        }
+        if (auto* queue = RuntimeMutation::GetTaskQueue()) {
+            queue->AddTask([a_actorId, a_epoch]() {
+                if (RuntimeMutation::IsCurrent(a_epoch)) {
+                    if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(a_actorId)) {
+                        End(*actor);
+                    }
+                }
+            });
+        }
+    }
+
     bool IsActive(FormID a_actorId)
     {
         std::shared_lock lock{ g_lock };

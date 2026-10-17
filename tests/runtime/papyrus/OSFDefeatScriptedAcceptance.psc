@@ -24,6 +24,7 @@ Function Initialize()
     EndIf
     target.Enable()
     target.MoveTo(player, 5.0, 0.0, 0.0)
+    target.SetRestrained(True)
     OSFDefeat.SuspendActorAI(target)
     hunt.Start()
     hunt.WatchPlayer()
@@ -34,11 +35,14 @@ Function Initialize()
     target.AddItem(weaponBase, 1, True)
     target.AddItem(weaponBase.GetAmmo(), 500, True)
     target.EquipItem(weaponBase, False, True)
+    ; Active effects need the NPC's process running. Restrain the disposable
+    ; target to prevent ordinary attacks while leaving effect updates enabled.
+    OSFDefeat.ResumeActorAI(target)
     RegisterForRemoteEvent(player, "OnSpellCast")
     Utility.Wait(2.0)
     OSFDefeatAcceptanceProbe.Record("scripted-damage-hostile", damageSpell.IsHostile())
     OSFDefeatAcceptanceProbe.Record("scripted-healing-hostile", healingSpell.IsHostile())
-    OSFDefeatAcceptanceProbe.Record("scripted-fixture", target.Is3DLoaded() && !target.IsDead() && OSFDefeat.IsActorAISuspended(target), target)
+    OSFDefeatAcceptanceProbe.Record("scripted-fixture", target.Is3DLoaded() && !target.IsDead() && !OSFDefeat.IsActorAISuspended(target), target)
 EndFunction
 
 Event ObjectReference.OnSpellCast(ObjectReference sender, Form spellCast)
@@ -83,6 +87,8 @@ Function Run(String kind)
         player.DoCombatSpellApply(damageSpell, target)
     ElseIf kind == "spell-heal"
         healingSpell.Cast(player, player)
+    ElseIf kind == "combat-spell-heal"
+        player.DoCombatSpellApply(healingSpell, player)
     ElseIf kind == "weapon-fire-player"
         weaponBase.Fire(player, weaponBase.GetAmmo())
     ElseIf kind == "weapon-fire-npc"
@@ -98,7 +104,7 @@ Function Run(String kind)
         effect = targetDelta == 0.0 && playerDelta == 0.0
     ElseIf kind == "incoming-spell"
         effect = playerDelta < -0.1
-    ElseIf kind == "spell-heal"
+    ElseIf kind == "spell-heal" || kind == "combat-spell-heal"
         effect = playerDelta > 0.1
     ElseIf kind == "weapon-fire-player" || kind == "weapon-fire-npc"
         ; The native WeaponFired event is additionally required by the driver.

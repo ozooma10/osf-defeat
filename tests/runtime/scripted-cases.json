@@ -12,6 +12,7 @@
   "scripted-spell-remote",
   "scripted-combat-spell",
   "scripted-spell-heal",
+  "scripted-combat-spell-heal",
   "scripted-weapon-fire-player",
   "scripted-weapon-fire-npc",
   "scripted-cleanup-load"

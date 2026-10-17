@@ -376,15 +376,7 @@ namespace OSFDefeat::PlayerDefeat
             g_original(a_owner, a_modifier, a_info, a_delta, a_ref);
 
             if (breakTruce) {
-                if (auto* queue = RuntimeMutation::GetTaskQueue()) {
-                    queue->AddTask([attackingId, epoch]() {
-                        if (RuntimeMutation::IsCurrent(epoch)) {
-                            if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(attackingId)) {
-                                Truce::End(*actor);
-                            }
-                        }
-                    });
-                }
+                Truce::QueueEndForAttack(attackingId, epoch);
             }
             switch (action) {
             case AfterDamage::kPlayerDefeat:

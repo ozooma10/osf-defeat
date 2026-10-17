@@ -62,7 +62,7 @@ namespace {
     constexpr ScriptedCase scriptedCases[]{
         {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},
         {"papyrus-anonymous",false},{"papyrus-cooperative",true},{"incoming-spell",false},
-        {"spell-cast",true},{"spell-remote",true},{"combat-spell",true},{"spell-heal",false},
+        {"spell-cast",true},{"spell-remote",true},{"combat-spell",true},{"spell-heal",false},{"combat-spell-heal",false},
         {"weapon-fire-player",true},{"weapon-fire-npc",false}
     };
     constexpr const char* weaponKinds[]{

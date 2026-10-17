@@ -15,6 +15,8 @@ namespace OSFDefeat::Truce
     // it would otherwise remove; a pre-existing, unowned membership stays unowned.
     bool Begin(RE::Actor& a_actor, float a_seconds);
     bool End(RE::Actor& a_actor);
+    // Borrowed event/damage callbacks carry only identity and save epoch to Main.
+    void QueueEndForAttack(FormID a_actorId, std::uint64_t a_epoch);
     [[nodiscard]] bool IsActive(FormID a_actorId);
     void Tick();
     void EndAll();

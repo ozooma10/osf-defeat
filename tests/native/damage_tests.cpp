@@ -104,3 +104,25 @@ TEST(outgoing_damage_breaks_truce_after_engine_write_and_obeys_load_epoch) {
     Hit(victim,-1,&attacker); (void)RuntimeMutation::AdvanceEpoch();
     RE::BSService::TaskQueue::GetSingleton()->Drain(); CHECK(Truce::IsActive(1));
 }
+TEST(incoming_anonymous_healing_and_nonhealth_writes_preserve_player_truce) {
+    World w; RE::ActorValueInfo other;
+    CHECK(Truce::Begin(w.player,30));
+    Hit(w.player,-1,&w.enemy); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+    Hit(w.enemy,-1); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+    Hit(w.enemy,1,&w.player); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+    Hit(w.enemy,-1,&w.player,RE::ACTOR_VALUE_MODIFIER::kDamage,&other); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+    Hit(w.enemy,-1,&w.player,RE::ACTOR_VALUE_MODIFIER::kTemporary); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+    CHECK(Engine::HasCaptiveFactionApplied(w.player));
+}
+TEST(attack_notifications_target_only_the_attacker_and_discard_old_save_callbacks) {
+    World w; CHECK(Truce::Begin(w.player,30)); CHECK(Truce::Begin(w.enemy,30));
+    Truce::QueueEndForAttack(w.enemy.id,RuntimeMutation::CurrentEpoch());
+    CHECK(Truce::IsActive(w.enemy.id)); w.Drain();
+    CHECK(!Truce::IsActive(w.enemy.id)); CHECK(!Engine::HasCaptiveFactionApplied(w.enemy));
+    CHECK(Truce::IsActive(w.player.id)); CHECK(Engine::HasCaptiveFactionApplied(w.player));
+    Truce::QueueEndForAttack(w.player.id,RuntimeMutation::CurrentEpoch());
+    (void)RuntimeMutation::AdvanceEpoch(); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+    Truce::End(w.player);
+    Truce::QueueEndForAttack(w.player.id,RuntimeMutation::CurrentEpoch());
+    CHECK(Truce::Begin(w.player,30)); w.Drain(); CHECK(Truce::IsActive(w.player.id));
+}

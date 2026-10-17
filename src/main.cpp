@@ -8,6 +8,7 @@
 #include "Core/Presentation.h"
 #include "Core/Reattach.h"
 #include "Core/Recovery.h"
+#include "Engine/AttackEvents.h"
 #include "Papyrus/Functions.h"
 
 namespace
@@ -28,6 +29,7 @@ namespace
             OSFDefeat::Config::Load();
             OSFDefeat::Consequence::Load();
             OSFDefeat::PlayerDefeat::Install();
+            OSFDefeat::AttackEvents::Install();
             OSFDefeat::Reattach::Install();
             OSFDefeat::Papyrus::Register();
         } else if (a_msg->type == SFSE::MessagingInterface::kPostPostDataLoad) {

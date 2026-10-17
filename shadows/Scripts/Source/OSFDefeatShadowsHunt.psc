@@ -26,6 +26,7 @@ Function WatchPlayer()
     Actor player = Game.GetPlayer()
     RegisterForRemoteEvent(player, "OnPlayerLoadGame")
     RegisterForRemoteEvent(player, "OnPlayerFireWeapon")
+    RegisterForRemoteEvent(player, "OnSpellCast")
     ; .244 emits WeaponFire when a grenade is released; ThrowGrenade is an
     ; input/clip name, not the outgoing event. HitFrame covers missed melee.
     ; Keep the player-fire event and native damage path as additional coverage.
@@ -209,6 +210,14 @@ EndEvent
 Event Actor.OnPlayerFireWeapon(Actor sender, Form baseObject)
     LastAttackEvent = "OnPlayerFireWeapon"
     OSFDefeat.EndRecoveryTruce(sender)
+EndEvent
+
+Event ObjectReference.OnSpellCast(ObjectReference sender, Form spellCast)
+    Spell attack = spellCast as Spell
+    If sender == Game.GetPlayer() && attack != None && attack.IsHostile()
+        LastAttackEvent = "OnSpellCast"
+        OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
+    EndIf
 EndEvent
 
 Event OnAnimationEvent(ObjectReference source, String eventName)
