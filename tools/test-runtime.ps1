@@ -256,7 +256,9 @@ try {
     $outcome='passed'; $message="$($actual.Count) runtime assertions passed."; $code=0
 } catch {
     $message=$_.Exception.Message; $outcome=if ($message.StartsWith('[failed]')) {'failed'} else {'blocked'}; $code=if ($outcome -eq 'failed') {1} else {2}
-    try { if ($started -and (Get-OwnedGame)) { $null=Save-Capture 'defeat-failure' } } catch { Write-Warning "Failure capture unavailable: $_" }
+    # Invoke-DefeatRuntimeSession can throw before returning to set $started.
+    # Ownership, not successful session completion, admits a failure capture.
+    try { if (Get-OwnedGame) { $null=Save-Capture 'defeat-failure' } } catch { Write-Warning "Failure capture unavailable: $_" }
     Write-Warning $message
 } finally {
     $script:AnimationMode=$false

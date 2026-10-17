@@ -163,6 +163,11 @@ Function PrepareAttack(String kind)
         OSFDefeatAcceptanceProbe.Record("weapons-form-" + kind, True, player, attackWeapon.GetFormID())
     EndIf
     OSFDefeatAcceptanceProbe.Record("weapons-ammo-before-" + kind, True, player, ammoBefore)
+    OSFDefeatAcceptanceProbe.Record("weapons-equipped-" + kind, armed)
+    OSFDefeatAcceptanceProbe.Record("weapons-drawn-" + kind, player.IsWeaponDrawn())
+    OSFDefeatAcceptanceProbe.Record("weapons-controls-" + kind, Game.IsFightingControlsEnabled())
+    OSFDefeatAcceptanceProbe.Record("weapons-truce-before-" + kind, OSFDefeat.IsRecoveryTruceActive(player))
+    OSFDefeatAcceptanceProbe.Record("weapons-setup-event-" + kind + "-" + hunt.LastAttackEvent, hunt.LastAttackEvent == "")
     OSFDefeatAcceptanceProbe.Record("weapons-ready-" + kind, armed && player.IsWeaponDrawn() && Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player) && hunt.LastAttackEvent == "")
 EndFunction
 

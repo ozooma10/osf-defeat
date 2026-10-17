@@ -330,7 +330,16 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             Check(out,std::string("weapons-")+weaponKinds[attackIndex],Saw(name,beforeRecords) &&
                 !Truce::IsActive(player->GetFormID()) && !Engine::HasCaptiveFactionApplied(*player) &&
                 !Engine::IsInCaptiveFaction(*player) && GameTime::NowDay()<truceDeadline);
-            if(attackIndex+1<std::size(weaponKinds)) { ++attackIndex; PrepareWeaponCase(*player); }
+            if(attackIndex+1<std::size(weaponKinds)) {
+                const bool firedLauncher=std::string_view(weaponKinds[attackIndex])=="heavy-bridger";
+                const std::string_view nextKind=weaponKinds[++attackIndex];
+                if(firedLauncher || nextKind.starts_with("grenade-") || nextKind.starts_with("mine-")) {
+                    // Delayed self-damage from an earlier explosive legitimately
+                    // ends a fresh truce. Discard those effects via a real load,
+                    // rather than guessing their duration or suppressing damage.
+                    Request(out,"load","osfdefeathealthy"); phase=11; phaseAt=Now();
+                } else PrepareWeaponCase(*player);
+            }
             else { Request(out,"load","osfdefeathealthy"); Next(); }
             break;
         }
@@ -342,6 +351,17 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             Check(out,"weapons-cleanup-load",Saw("weapons-cleanup",beforeRecords) && DefeatRegistry::Snapshot().empty() &&
                 Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty() && scenes->GetSceneForActor(player)==0);
             return true;
+        case 11:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            if(!DefeatRegistry::Snapshot().empty() || !Truce::Snapshot().empty() || !Engine::SnapshotCaptiveFactions().empty())
+                throw std::runtime_error("Weapon isolation load retained framework state");
+            out["weaponIsolationLoads"].push_back({{"before",weaponKinds[attackIndex]},
+                {"loads",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()}});
+            beforeRecords=Sequence(); WeaponPapyrus("Initialize"); Next(); break;
+        case 12:
+            if(Wait(Recorded("weapons-fixture",beforeRecords))) break;
+            if(!Saw("weapons-fixture",beforeRecords)) throw std::runtime_error("Weapon isolation fixture failed");
+            PrepareWeaponCase(*player); break;
         }
         return false;
     }

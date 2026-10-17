@@ -29,8 +29,10 @@ leave truce and ammunition unchanged.
 
 The bounded native graph observer retains callback diagnostics. Explosive cases
 wait six additional seconds after inspection; test health is raised to tolerate
-nearby wall impacts. A real healthy-save reload restores the seed and discards
-equipment, placed mines, and health changes. This proves the tested keyboard/mouse
+nearby wall impacts. Each throwable starts after a real healthy-save reload, as
+does the case following the Bridger. This discards delayed damage and placed
+mines, with a new load event/epoch and empty framework state required each time.
+The final healthy load also restores equipment and health. This proves the tested keyboard/mouse
 attacks, not every OMOD, camera/controller path, or third-party scripted producer.
 
 ## Run blackout coverage
