@@ -101,9 +101,12 @@ pwsh -NoProfile -File tools/test-runtime.ps1 `
 
 Both arguments are required. Payload hashes and conflicts are checked before the
 probe is copied into the private test mod. Original saves and profiles are not
-edited. The separate inventory is `tests/runtime/refusal-cases.json`.
+edited. The separate inventory is `tests/runtime/refusal-cases.json` (12 assertions).
 
-The test saves a healthy baseline, moves to the previously captured interior
+The test saves a healthy baseline and first exercises a disposable NPC through
+alive, defeated, recovered and killed states. Native and Papyrus death predicates
+must agree with each expected state, and the production entry points must reject
+the killed actor. The test then moves to the previously captured interior
 marker, and verifies the actual home-ship/interior/landed/space predicates. A
 disposable eligible aggressor supplies a lethal health hit through the production
 hook. Acceptance requires the production `unsupported-domain` result, no theft,
@@ -112,11 +115,17 @@ Papyrus death evidence, and a real automatic reload with working controls and
 empty Defeat state. It repeats after the actual home ship's `TakeOff()` transition
 and requires both `IsLanded=False` and `IsInSpaceEx(False)=True` before the hit.
 
-The native CommonLib dead-bit helper stayed false during the observed player death
-transition. The oracle therefore retains Papyrus `OnDying`/`OnDeath` and `IsDead`
-observations and requires subsequent load events/epoch changes. The narrow finding
-is recorded in OSF RE's `gameplay.defeat_damage_hook` module; no replacement native
-offset or general NPC death predicate is claimed.
+The corrected CommonLib `Actor::IsDead()` helper uses the same virtual predicate
+and argument as Papyrus. A version-gated native probe compares both at every NPC
+checkpoint and before death, during death, and after reload for each player fixture.
+It verifies complete function bytes, primary vtables and compiler-visible field
+offsets. `nativeDeadBit` records the original raw flag separately from
+`nativeIsDead`; the raw flag stayed false during the proven deaths. The oracle
+also retains Papyrus `OnDying`/`OnDeath` observations and requires subsequent load
+events/epoch changes. Canonical proof is in OSF RE's `gameplay.defeat_damage_hook`
+module. The focused suite and full 78-assertion regression pass on Defeat `d78f1a9`
+with CommonLib `d18e0bd` (`build/death-refusal-03.json` and
+`build/death-full-01/summary.json`).
 
 Coverage is on-foot refusal inside the tested Frontier while landed and in orbit.
 It does not certify piloting, free-space actors, hostile boarding layouts, or a

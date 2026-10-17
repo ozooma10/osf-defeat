@@ -237,8 +237,10 @@ covers the one-slot hunt, traits, blackout, theft, recovery truce and death clea
 The full regression passes all 78 assertions, including same-process and cold
 loads before theft, after theft, and after time advancement. The later checkpoints
 use test-only phase gates; production timing is unchanged. Separate focused runs
-pass 13 blackout assertions and 8 landed/orbital Frontier refusal assertions,
-including vanilla death and clean automatic reload. Coverage also includes exact
+pass 13 blackout assertions and 12 native-death/landed/orbital Frontier assertions,
+including vanilla death and clean automatic reload. The native death-detection
+mismatch is fixed and verified against Papyrus for NPCs and the player; defeated
+actors remain alive and dead actors are refused. Coverage also includes exact
 modified-weapon natural drops, stolen-weapon ammunition, negative eligibility,
 repeat defeat, attack misses and post-promotion interruption.
 A separate weapon matrix now passes 31 assertions across 26 attacks, including

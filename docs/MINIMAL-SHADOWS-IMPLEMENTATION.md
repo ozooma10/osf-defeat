@@ -67,16 +67,17 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
 ## Validation — 2026-10-17
 
 - Full regression: **78/78 live assertions**, four owned local MO2/SFSE
-  processes, **83 native cases / 1,014 checks**, **103 runner checks**, payload
-  validation, production build and source-integrity checks pass. Defeat `5dc8955`,
-  Animation `fcf9714`; receipt `build/shadows-final-regression-08/summary.json`;
-  artifacts: `../OSF Test Harness/artifacts/20261017-133752-565-DefeatSmoke`.
+  processes, **83 native cases / 1,014 checks**, **132 runner checks**, payload
+  validation, production build and source-integrity checks pass. Defeat `d78f1a9`,
+  CommonLib `d18e0bd`, Animation `fcf9714`; receipt `build/death-full-01/summary.json`;
+  artifacts: `../OSF Test Harness/artifacts/20261017-144549-908-DefeatSmoke`.
 - Focused post-theft/post-time suite: **13/13 assertions**, three fresh processes,
   Defeat `aa1c7c9`. Receipt `build/shadows-checkpoints-05.json`; artifacts
   `../OSF Test Harness/artifacts/20261017-133250-510-DefeatSmoke`.
-- Uninstrumented ship/space refusal: **8/8 assertions** in the retained Frontier
-  fixture, Defeat `5dd4eff`. Receipt `build/shadows-refusal-02.json`; artifacts
-  `../OSF Test Harness/artifacts/20261017-131715-750-DefeatSmoke`.
+- Uninstrumented ship/space refusal and native death checks: **12/12 assertions**
+  in the retained Frontier fixture, Defeat `d78f1a9`. Receipt
+  `build/death-refusal-03.json`; artifacts
+  `../OSF Test Harness/artifacts/20261017-144240-139-DefeatSmoke`.
 - Animation's **12 engine-free suites** pass (`build/shadows-animation-tests-01.log`).
 - World probe compiles and its 11-record ESM round-trips and verifies. Receipt:
   `build/shadows-world-04/build.json`. **21 isolated-profile preparation checks** pass;
@@ -122,11 +123,26 @@ predicates true). Each lethal hit selects the production refusal, preserves
 credits/weapon metadata/time, creates no hunt/traits/truce, clears the held state,
 and ends in vanilla death followed by an automatic healthy reload. Animation's
 retained log confirms `osfdefeathealthy.osf` loaded twice. Controls and empty
-Defeat registries pass after each load. The CommonLib dead-bit predicate stayed
-false while Papyrus reported death, so the oracle retains Papyrus dying/death
-events and `IsDead`, plus the real load event and epoch. The narrow observation is
-recorded in OSF RE's `gameplay.defeat_damage_hook`; no new native offset is claimed.
+Defeat registries pass after each load. The CommonLib `Actor::IsDead()` mismatch
+is fixed: the no-argument helper now dispatches the engine predicate used by
+Papyrus instead of reading the separate dead bit. The expanded suite compares
+native and Papyrus results for a disposable NPC alive, defeated, recovered, and
+dying, plus the player before death, during refusal death, and after both reloads.
+Dead actors are rejected by the production eligibility and defeat entry points;
+held defeat stays alive. The old bit remains recorded separately and stayed false
+even at the landed player's `OnDeath` callback, where the corrected helper was true.
+Executable, vtable and field-layout gates pass for all ten explicit comparisons.
+Canonical native evidence and the mirrored header fix are in OSF RE's
+`gameplay.defeat_damage_hook` module. The suite retains Papyrus death observations
+and requires actual automatic load events and epoch changes.
 This covers on-foot refusal in that ship, not piloting or hostile boarding layouts.
+
+The earlier `death-refusal-02` run passed the NPC comparisons but stopped on
+Papyrus's case-insensitive string interning returning `Landed`; checkpoint labels
+now normalize before matching. Its retained failure is not counted as acceptance.
+`death-refusal-01` was blocked during preparation by an incorrect build-receipt
+path and did not launch the game. The final documentation changes follow the
+verified `d78f1a9` source; executable/test source is unchanged after validation.
 
 Cold-restart preparation closes the idle test MO2 launcher before changing its
 private save path, writes a sibling INI, and atomically replaces the old file with
