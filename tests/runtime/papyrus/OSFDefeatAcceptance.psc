@@ -108,6 +108,16 @@ Function ShadowsInspect()
     Float healthBefore = player.GetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue)
     OSFDefeat.ResumeActorAI(shadow)
     Utility.Wait(2.0)
+    Int equipWait = 0
+    While shadow.GetEquippedWeapon() != testWeapon && equipWait < 30
+        Utility.Wait(0.1)
+        equipWait += 1
+    EndWhile
+    Weapon actualEquipped = shadow.GetEquippedWeapon()
+    If actualEquipped != None
+        OSFDefeatAcceptanceProbe.Record("shadows-actual-equipped", True, shadow, actualEquipped.GetFormID())
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-ammo-count", True, shadow, shadow.GetItemCount(testWeapon.GetAmmo()))
     ObjectReference stolen = hunt.StolenWeapon.GetReference()
     OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "transferred")
     Bool ok = hunt.Nemesis.GetActorReference() == shadow && OSFDefeat.HasQuestAlias(shadow)
