@@ -98,6 +98,7 @@ Function ShadowsInspect()
     OSFDefeatAcceptanceProbe.Record("shadows-nemesis-credits", shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100, shadow, shadow.GetItemCount(Game.GetCredits()) - shadowCredits)
     OSFDefeatAcceptanceProbe.Record("shadows-weapon-ref", stolen != None, shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-theft-status", hunt.LastTheftStatus == 7, shadow, hunt.LastTheftStatus)
+    OSFDefeatAcceptanceProbe.Record("shadows-theft-source", hunt.LastTheftSource == 0x14, player, hunt.LastTheftSource)
     If hunt.LastWeaponConsidered != None
         OSFDefeatAcceptanceProbe.Record("shadows-considered-weapon", hunt.LastWeaponConsidered == testWeapon, player, hunt.LastWeaponConsidered.GetFormID())
     EndIf

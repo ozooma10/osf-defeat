@@ -7,9 +7,11 @@ Spell Property PlayerDebuff Auto Const Mandatory
 Spell Property PlayerReward Auto Const Mandatory
 Int Property LevelGap = 15 Auto Const
 ; Observable aftermath result: 1 unarmed, 2 ambiguous stack, 3 not better,
-; 4 alias failed, 5 quest item, 6 transfer refused, 7 transferred.
+; 4 alias failed, 5 quest item, 6 transfer refused, 7 transferred,
+; 8 inventory reference did not resolve to the player.
 Int Property LastTheftStatus = 0 Auto Hidden
 Weapon Property LastWeaponConsidered Auto Hidden
+Int Property LastTheftSource = 0 Auto Hidden
 
 Bool busy = False
 Bool deathPending = False
@@ -103,6 +105,7 @@ Function TakeLoot(Actor candidate, Weapon weaponBase)
 
     Weapon theirs = candidate.GetEquippedWeapon()
     LastWeaponConsidered = weaponBase
+    LastTheftSource = 0
     ; v1 quality proxy: base credit value. No stat/instance API is claimed here.
     ; A single copy is required because GetEquippedWeapon returns only a base.
     If weaponBase == None
@@ -131,13 +134,22 @@ Function TakeLoot(Actor candidate, Weapon weaponBase)
     ; AddItem(reference) uses the engine's reference-transfer path (also used by
     ; vanilla TestSteveCQuestScript), preserving this instance and its alias.
     ; RemoveItem(reference, ..., destination) can refuse the newly aliased item.
-    If item.GetContainer() != player
-        LastTheftStatus = 6
+    Int attempts = 0
+    While item.GetContainer() != player && attempts < 10
+        Utility.Wait(0.1)
+        attempts += 1
+    EndWhile
+    ObjectReference sourceContainer = item.GetContainer()
+    If sourceContainer != None
+        LastTheftSource = sourceContainer.GetFormID()
+    EndIf
+    If sourceContainer != player
+        LastTheftStatus = 8
         StolenWeapon.Clear()
         Return
     EndIf
     candidate.AddItem(item, 1, True)
-    Int attempts = 0
+    attempts = 0
     While item.GetContainer() != candidate && attempts < 10
         Utility.Wait(0.1)
         attempts += 1
