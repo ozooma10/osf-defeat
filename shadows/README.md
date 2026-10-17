@@ -18,8 +18,9 @@ be replaced by another defeat.
 
 An eligible promotion transfers 10% of credits (25 minimum, 2,500 maximum, bounded
 by available credits). Weapon theft compares base credit values in this first
-version. It requires exactly one copy of the equipped base and transfers its
-aliased inventory reference; ambiguous stacks and quest items are skipped. Suit,
+version. The framework snapshots the equipped base before down presentation changes
+it. Theft requires exactly one owned copy, holds it in an alias, and moves that
+inventory item by base form; ambiguous stacks and quest items are skipped. Suit,
 helmet, and boost pack are never taken. Modified-weapon transfer still requires
 live acceptance; base value is not a damage or modification-quality comparison.
 
@@ -28,9 +29,11 @@ scene-bound, and more-than-15-levels-higher actors are excluded. Native reservat
 checks conservatively reject retained alias metadata and any per-reference
 protection override, including cleared overrides.
 
-The aftermath fades out, passes two hours, recovers in place and grants a
+The aftermath fades out, passes at least two and less than three hours (the engine
+rounds to hour boundaries), recovers in place and grants a
 30-second truce. The native damage path and player fire/animation callbacks end
-the truce on attack; missed melee/grenade event coverage remains a live gate.
+the truce on attack. Missed knife swings, truce save/load and expiry pass in the
+disposable-cell suite; unarmed, ranged and grenade misses still need acceptance.
 Ship interiors and space refuse this loop and recover the framework state before
 requesting normal death. That refusal path also needs a dedicated live fixture.
 

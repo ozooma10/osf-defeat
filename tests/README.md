@@ -23,6 +23,9 @@ xmake test 'osfdefeat-persistence-tests/*'
 
 # Check this PC's game prerequisites without launching or writing a profile.
 pwsh -NoProfile -File tools/test-runtime.ps1 -Preflight
+
+# Focused staged Minimal Shadows loop (15 assertions, same disposable profile).
+pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
 ```
 
 `-Mode debug` selects debug instead of releasedbg. `-Harness 'D:\...\OSF Test Harness'`
@@ -43,7 +46,7 @@ the ordinary smoke-suite case inventory.
 
 ## Native coverage
 
-Nine binaries run 75 named cases. Checks execute in both debug and releasedbg;
+Nine binaries run 83 named cases. Checks execute in both debug and releasedbg;
 they do not use the C `assert` macro. Each test resets registries, clocks, forms, callbacks,
 queues and private JSON fixtures. Fixture directories are created uniquely below TEMP.
 
@@ -56,7 +59,7 @@ queues and private JSON fixtures. Fixture directories are created uniquely below
 | state | Idempotent/reentrant recovery, AI ownership, player events, capture/recapture/release, rollback, deferred MoveTo arguments, unresolved cleanup, handoff context. |
 | recovery | Invalid times, minimum delay/time scale, legacy timer holds, competing leases, extension/release, automatic recovery, player/NPC watchdog, missing actors. |
 | events | Registration, removal, slot generations, all six channels, deferred actor resolution, missing VM, clearing subscriptions. |
-| persistence | Real OSFD callback registration, DFT0/CPT0/CAP0/PCF0 round trips, v1 migration, every byte truncation, corrupt counts/flags/times, remapping, failed I/O, deferred/stale/inline loads. |
+| persistence | Real OSFD callback registration, DFT0/CPT0/CAP0/PCF0/TRC0 round trips, v1 migration, every byte truncation, corrupt counts/flags/times, remapping, failed I/O, deferred/stale/inline loads. |
 | damage | Actual detour logic: lethal clamp, pending latch, write-before-queue ordering, immunity, eligibility/resist/early-boot passthrough, stale saves, imminent hysteresis, NPC gates and recent attacker filtering. |
 
 The static test target compiles the real `src/Core` implementations. `native/stubs` and
@@ -115,7 +118,7 @@ and an unexpired request bound to the exact process and launch token. Every muta
 on the existing Main update seam or through the real Papyrus VM. The suite has a
 600-second deadline plus bounded runner startup/cleanup waits.
 
-The 42 game assertions include the original nine defeat/recovery checks and these
+The 53 game assertions include the original nine defeat/recovery checks and these
 acceptance scenarios:
 
 - Real console saves and loads, with fresh `.sfs`/`.osf` pairs retained under `saves/`.
@@ -137,6 +140,19 @@ acceptance scenarios:
   enabled one at a time for deterministic selection. Real quest effects check credit/digipick
   transfers, afflictions, recovery and quest stop. Arrested covers its no-crime-faction
   fallback. A tagged disposable marker checks the shared fade/move/recover helper.
+- Minimal Shadows: a disposable Spacer aggressor becomes the single nemesis, takes
+  credits and the unique equipped Eon, equips it, and applies the authored resistance
+  abilities. Blackout advances at least two hours; recovery restores controls with a
+  truce while the hostile NPC's AI runs. An occupied slot is preserved. A real truce
+  save/load checks TRC0/CPT0/PCF0 and the unchanged deadline. Real missed knife swings
+  cancel truce before expiry; a separate short truce expires normally. Player/other
+  kill rules, weapon retrieval and clean-load cleanup complete the loop.
+
+`-ShadowsOnly` explicitly runs the 11 Shadows cases plus four setup assertions;
+its receipt says `scope: shadows`. It does not certify the other 38 full-suite cases.
+The runner privately builds `shadows/` through Spriggit and compiles its scripts.
+Branch diagnostics in the Papyrus observation array are not individual test verdicts;
+the named `cases` array and exact expected inventory determine acceptance.
 
 The damage injection calls the exact five-argument entry documented in `HookTrigger.md`;
 do not replace it with CommonLib's overloaded `ModActorValue` virtual call. An initial

@@ -13,6 +13,40 @@ Bool Function ResumeActorAI(Actor akActor) global native
 
 `DefeatActor` records the actor as defeated and persists that state. `RecoverActor` ends the defeat and restores framework-owned actor state. `SuspendActorAI` records the actor's prior AI-processing state before disabling it; `ResumeActorAI` restores that exact state.
 
+## Post-recovery truce
+
+```papyrus
+Bool Function RecoverActorWithTruce(Actor akActor, Float afSeconds = 30.0) global native
+Bool Function IsRecoveryTruceActive(Actor akActor) global native
+Bool Function EndRecoveryTruce(Actor akActor) global native
+```
+
+`RecoverActorWithTruce` recovers a defeated actor and resumes framework-suspended AI
+while atomically retaining captive-faction non-hostility. It requires a finite positive
+duration up to 3,600 seconds and available pacification. A refused operation leaves
+the defeat for normal recovery/watchdog handling. Its return means dispatch acceptance;
+wait for `!IsDefeated(actor) && IsRecoveryTruceActive(actor)` before relying on it.
+
+Truce provides no damage immunity. The timer uses a saved game-day deadline, so reload
+does not renew it and advancing game time can expire it. Outgoing health damage, a new
+defeat, `EndRecoveryTruce` or `ForceRecoverAll` ends it. Content must also call
+`EndRecoveryTruce` on fire/attack events to cover misses. The staged Shadows pack shows
+this pattern. Only framework-owned faction membership is removed; pre-existing membership
+is preserved. `TRC0` v1 and the existing `CPT0` record retain truce and ownership across saves.
+
+## Actor reservation checks
+
+```papyrus
+Bool Function HasQuestAlias(Actor akActor) global native
+Bool Function HasProtectionOverride(Actor akActor) global native
+```
+
+Conservative exclusion queries for content that wants to reserve an actor. They return
+true for None. Alias metadata can remain after an alias clears; protection metadata can
+remain after a reference override is cleared. These functions report presence, not the
+current quest list or effective protection value. Also check base essential/protected/
+unique flags and any other content-specific eligibility rules.
+
 ## Recovery Handshake
 
 ```papyrus
@@ -180,6 +214,7 @@ final priority/weight roll.
 Int  Function RegisterForPlayerConsequenceStarted(ScriptObject akReceiver, String asCallback) global native
 Bool Function UnregisterForPlayerConsequenceStarted(Int aiToken) global native
 Actor Function GetLastPlayerAggressor() global native
+Weapon Function GetLastPlayerEquippedWeapon() global native
 String Function GetLastPlayerConsequenceId() global native
 String Function GetLastPlayerConsequenceName() global native
 String Function GetLastPlayerConsequenceQuest() global native
@@ -196,6 +231,12 @@ EndFunction
 ```
 
 Use this for content mods such as OSF Surrender. The callback has no direct parameters; content reads the payload through the `GetLastPlayer*` functions so the broadcaster stays simple and stable.
+
+`GetLastPlayerEquippedWeapon` returns the owned primary weapon base captured before
+down presentation changes equipment. Copy it at handoff; the context clears on load
+and changes with the next defeat. None means unarmed, unavailable or no owned equipped
+weapon. It is not an instance/stack identifier: consumers must handle multiple copies
+and quest items conservatively.
 
 `GetLastPlayerConsequenceId` is the stable machine identity; `GetLastPlayerConsequenceName` is the display label retained for compatibility. `GetLastPlayerRecentHostileAttackers` returns the aggressor plus recent damage sources that are still live and hostile. `recentHostileAttackerRadius` (settings JSON, default 4096 units, `0` = no radius filter) drops distant entries. The list comes from actual damage events, so it contains combatants rather than bystanders.
 

@@ -226,12 +226,15 @@ pass cold restart, two normal planet round trips with away-save reloads, a 48-lo
 wait, alias names/journal substitution, and movement to a captured landed-ship interior
 with working controls and exit before/after reload. Identity uses per-instance stamps;
 departure observes alias detach events, and return compares live reference cells.
-**Slice 0's feasibility gate passes for the two tested sites. Minimal Shadows is next.**
+**Slice 0's feasibility gate passes for the two tested sites. Minimal Shadows is implemented as a staged pack.**
 The generated seed is an outdoor natural feature, and the actor is an inert surrogate.
 Existing-aggressor promotion at an enemy structure, actual cell reset, and weapon-instance
 transfer still need acceptance coverage. The authored surrogate intermittently rendered
 only partially despite passing identity/loaded checks; include appearance in that coverage.
-The Basic Consequences pack remains the shipped content; slice 1 has not started.
+The [slice-1 implementation and acceptance record](MINIMAL-SHADOWS-IMPLEMENTATION.md)
+covers the one-slot hunt, traits, blackout, theft, recovery truce and death cleanup.
+Its focused disposable-cell suite passes all 15 assertions. Basic Consequences remains
+the shipped content pending the broader acceptance gates recorded there.
 
 0. **Spike: persistence.** Prove that a quest-aliased actor and a placed container survive
    leaving and returning to a planet, in both an authored location and a procedurally
