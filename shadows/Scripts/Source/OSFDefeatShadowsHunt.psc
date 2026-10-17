@@ -135,6 +135,13 @@ Function TakeLoot(Actor candidate, Weapon weaponBase)
     Int moved = player.RemoveItem(weaponBase, 1, True, candidate)
     If moved == 1 && player.GetItemCount(weaponBase) == 0 && candidate.GetItemCount(weaponBase) == beforeCount + 1
         LastTheftStatus = 7
+        ; The AI can immediately switch to fists if the stolen gun uses an
+        ; ammunition type absent from its original loadout. Supply one round
+        ; only when needed; do not take more of the player's inventory.
+        Ammo ammunition = weaponBase.GetAmmo()
+        If ammunition != None && candidate.GetItemCount(ammunition) == 0
+            candidate.AddItem(ammunition, 1, True)
+        EndIf
         candidate.EquipItem(weaponBase, False, True)
     Else
         LastTheftStatus = 6

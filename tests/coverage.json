@@ -117,6 +117,7 @@
     "runtime": [
       "shadows-eligible-fixture",
       "shadows-aftermath-and-loot",
+      "shadows-stolen-weapon-ammo",
       "shadows-trait-magnitudes",
       "shadows-slot-preserved",
       "truce-save",

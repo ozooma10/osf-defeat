@@ -92,6 +92,9 @@ Function ShadowsPrepare()
         shadow.UnequipItem(old, True, True)
         shadow.RemoveItem(old, shadow.GetItemCount(old), True)
     EndIf
+    Ammo ammunition = testWeapon.GetAmmo()
+    shadow.RemoveItem(ammunition, shadow.GetItemCount(ammunition), True)
+    OSFDefeatAcceptanceProbe.Record("shadows-no-ammo-fixture", shadow.GetItemCount(ammunition) == 0, shadow)
     MiscObject credits = Game.GetCredits()
     player.RemoveItem(credits, player.GetItemCount(credits), True)
     player.AddItem(credits, 1000, True)
@@ -119,7 +122,7 @@ Function ShadowsInspect()
     If actualEquipped != None
         OSFDefeatAcceptanceProbe.Record("shadows-actual-equipped", True, shadow, actualEquipped.GetFormID())
     EndIf
-    OSFDefeatAcceptanceProbe.Record("shadows-ammo-count", True, shadow, shadow.GetItemCount(testWeapon.GetAmmo()))
+    OSFDefeatAcceptanceProbe.Record("shadows-ammo-count", shadow.GetItemCount(testWeapon.GetAmmo()) == 1, shadow, shadow.GetItemCount(testWeapon.GetAmmo()))
     ObjectReference stolen = hunt.StolenWeapon.GetReference()
     OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "transferred")
     Bool ok = hunt.Nemesis.GetActorReference() == shadow && OSFDefeat.HasQuestAlias(shadow)

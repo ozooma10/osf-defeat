@@ -439,6 +439,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 31:
         if(Wait(Saw("shadows-aftermath") && Saw("shadows-player-resistance") && Saw("shadows-nemesis-resistance") && Saw("shadows-slot-preserved"))) break;
         Check(out,"shadows-aftermath-and-loot",Saw("shadows-aftermath"));
+        Check(out,"shadows-stolen-weapon-ammo",Saw("shadows-no-ammo-fixture") && Saw("shadows-ammo-count"));
         Check(out,"shadows-trait-magnitudes",Saw("shadows-player-resistance") && Saw("shadows-nemesis-resistance"));
         Check(out,"shadows-slot-preserved",Saw("shadows-slot-preserved"));
         Check(out,"shadows-modified-weapon-transfer",Saw("weapon-mods-baseline") && Saw("weapon-mods-transferred"));
