@@ -345,15 +345,23 @@ EndFunction
 Function WatchBlackout(String mode)
     OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
     Int waited = 0
+    ; The quest retains the previous run's completed phase until OnQuestInit.
+    ; Observe the new blackout before watching any later phase.
+    While aftermath.Phase != 1 && waited < 50
+        Utility.Wait(0.05)
+        waited += 1
+    EndWhile
+    Bool wasBlack = aftermath.Phase == 1 && OSFDefeat.IsDefeated(Game.GetPlayer())
     If mode == "post-promotion"
         ; Observe real production phases. Do not delay the aftermath to create
         ; a synthetic interruption window or count an already-finished run.
-        While aftermath.Phase < 2 && waited < 1000
+        waited = 0
+        While wasBlack && aftermath.Phase < 2 && waited < 1000
             Utility.Wait(0.01)
             waited += 1
         EndWhile
         Int observedPhase = aftermath.Phase
-        Bool inProgress = observedPhase >= 2 && observedPhase <= 3 && aftermath.IsRunning()
+        Bool inProgress = wasBlack && observedPhase >= 2 && observedPhase <= 3 && aftermath.IsRunning()
         OSFDefeatAcceptanceProbe.Record("shadows-blackout-stop-phase", inProgress, repeatAggressor, observedPhase)
         aftermath.Stop()
         Utility.Wait(3.0)
@@ -386,11 +394,6 @@ Function WatchBlackout(String mode)
         OSFDefeatAcceptanceProbe.Record("shadows-blackout-promoted-interrupted", stopped && recovered && retained && creditsOnce && elapsedHours < 3.1)
         Return
     EndIf
-    While aftermath.Phase != 1 && waited < 50
-        Utility.Wait(0.05)
-        waited += 1
-    EndWhile
-    Bool wasBlack = aftermath.Phase == 1 && OSFDefeat.IsDefeated(Game.GetPlayer())
     If mode == "interrupt"
         aftermath.Stop()
         Utility.Wait(3.0)
