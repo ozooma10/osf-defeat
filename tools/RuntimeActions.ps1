@@ -37,7 +37,13 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             # TESLoadGameEvent and persistence epoch before advancing after this receipt.
             $null=Wait-Observed 'loaded acceptance gameplay' {Get-GameState} {param($s) $s.loaded -and -not $s.snapshotStale -and 'LoadingMenu' -notin $s.menus -and 'Console' -notin $s.menus -and 'ConsoleMenu' -notin $s.menus} 60
         }
-        'attack-miss' { $null=Invoke-Input 'focus'; $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100') }
+        'attack-miss' {
+            $null=Invoke-Input 'focus'
+            # The first click may only raise fists after loading a holstered save.
+            $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')
+            Start-Sleep -Milliseconds 1200
+            $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')
+        }
         'move' { $null=Invoke-Input 'focus'; Send-Key 87 700 }
         'look' {
             $null=Invoke-Input 'focus'

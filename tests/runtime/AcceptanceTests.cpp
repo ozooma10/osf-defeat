@@ -339,7 +339,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         if(Wait(Acknowledged(out,directory) && Truce::IsActive(player->GetFormID()),60)) break;
         Check(out,"truce-real-save-load",!Defeat::IsDefeated(player) && Engine::IsInCaptiveFaction(*player) &&
             Truce::Snapshot()[0].expiresAtDay==truceDeadline);
-        Request(out,"attack-miss","unarmed"); Next(); break;
+        Papyrus("PrepareMissedAttack"); phase=38; phaseAt=Now(); break;
     case 34:
         if(Wait(Acknowledged(out,directory) && !Truce::IsActive(player->GetFormID()),10)) break;
         Check(out,"truce-missed-melee",GameTime::NowDay()<truceDeadline && !Engine::HasCaptiveFactionApplied(*player));
@@ -358,6 +358,9 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
         Check(out,"shadows-cleanup-load",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty());
         return true;
+    case 38:
+        if(Wait(Saw("shadows-miss-ready"),10)) break;
+        Request(out,"attack-miss","unarmed"); phase=34; phaseAt=Now(); break;
     }
     return false;
 }

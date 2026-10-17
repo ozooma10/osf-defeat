@@ -10,6 +10,7 @@ Int Property LevelGap = 15 Auto Const
 ; 4 alias failed, 5 quest item, 6 transfer refused, 7 transferred.
 Int Property LastTheftStatus = 0 Auto Hidden
 Weapon Property LastWeaponConsidered Auto Hidden
+String Property LastAttackEvent Auto Hidden
 
 Bool busy = False
 Bool deathPending = False
@@ -200,11 +201,13 @@ Event Actor.OnDeath(Actor sender, ObjectReference killer)
 EndEvent
 
 Event Actor.OnPlayerFireWeapon(Actor sender, Form baseObject)
+    LastAttackEvent = "OnPlayerFireWeapon"
     OSFDefeat.EndRecoveryTruce(sender)
 EndEvent
 
 Event OnAnimationEvent(ObjectReference source, String eventName)
     If source == Game.GetPlayer()
+        LastAttackEvent = eventName
         OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     EndIf
 EndEvent

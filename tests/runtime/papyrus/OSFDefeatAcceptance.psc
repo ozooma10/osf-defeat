@@ -152,6 +152,23 @@ Function ShadowsPlayerKill()
     OSFDefeatAcceptanceProbe.Record("shadows-other-kill", ok, shadow)
 EndFunction
 
+Function PrepareMissedAttack()
+    Actor player = Game.GetPlayer()
+    player.UnequipAll()
+    player.DrawWeapon()
+    Utility.Wait(1.0)
+    Bool registered = RegisterForAnimationEvent(player, "HitFrame")
+    Weapon weaponBase = player.GetEquippedWeapon()
+    Bool unarmed = weaponBase == None || weaponBase.GetFormID() == 0x1F4
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-ready", unarmed && Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player), player)
+    OSFDefeatAcceptanceProbe.Record("shadows-attack-registration", registered, player)
+    OSFDefeatAcceptanceProbe.Record("shadows-weapon-drawn", player.IsWeaponDrawn(), player)
+EndFunction
+
+Event OnAnimationEvent(ObjectReference source, String eventName)
+    OSFDefeatAcceptanceProbe.Record("shadows-animation-" + eventName, source == Game.GetPlayer(), Game.GetPlayer())
+EndEvent
+
 Function Initialize()
     ; A fresh persistent NPC reference, using the fixture player's valid actor base.
     ; This avoids modifying an existing quest NPC or depending on a workstation FormID.
