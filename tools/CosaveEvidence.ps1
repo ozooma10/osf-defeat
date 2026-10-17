@@ -49,7 +49,10 @@ public static class OSFDefeatTestCrc32 {
     if ($found.Count -ne $Expected.Count) { throw '[failed] Defeat sidecar record inventory differs.' }
     foreach ($type in $Expected.Keys) {
         $version=if ($type -in @('DFT0','CAP0')) {2} else {1}
-        if (-not $found.ContainsKey($type) -or $found[$type].count -ne $Expected[$type] -or $found[$type].version -ne $version) { throw "[failed] Unexpected $type record in real save." }
+        if (-not $found.ContainsKey($type) -or $found[$type].count -ne $Expected[$type] -or $found[$type].version -ne $version) {
+            $actual=if ($found.ContainsKey($type)) { "count=$($found[$type].count), version=$($found[$type].version)" } else { 'missing' }
+            throw "[failed] Unexpected $type record in real save: $actual; expected count=$($Expected[$type]), version=$version."
+        }
     }
     return @{path=$Path;sha256=(Get-FileHash -LiteralPath $Path).Hash;clientCount=$clients;defeatRecords=$found}
 }

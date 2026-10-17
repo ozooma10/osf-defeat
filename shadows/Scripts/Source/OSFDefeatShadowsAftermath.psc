@@ -69,6 +69,9 @@ Function RunAftermath()
         Return
     EndIf
     Bool promoted = Hunt.Promote(aggressor, lostWeapon)
+    If !IsCurrent(run)
+        Return
+    EndIf
     Phase = 2
     If !IsCurrent(run)
         Return
@@ -82,6 +85,9 @@ Function RunAftermath()
     ; One additional hour ensures at least the requested elapsed time.
     If Utility.GetCurrentGameTime() < wakeDay
         Game.PassTime(1)
+    EndIf
+    If !IsCurrent(run)
+        Return
     EndIf
     Phase = 3
     If !IsCurrent(run)

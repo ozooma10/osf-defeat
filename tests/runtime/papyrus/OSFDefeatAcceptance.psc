@@ -295,6 +295,20 @@ EndFunction
 Function PrepareCheckpoint()
     OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     hunt.CancelHunt()
+    ; PCF0 persists AI suspensions. Release the previous disposable subjects
+    ; before seeding this checkpoint so its sidecar contains only this actor.
+    If shadow != None
+        OSFDefeat.ResumeActorAI(shadow)
+        shadow.Disable()
+        shadow.Delete()
+    EndIf
+    If repeatAggressor != None
+        OSFDefeat.ResumeActorAI(repeatAggressor)
+        repeatAggressor.Disable()
+        repeatAggressor.Delete()
+        repeatAggressor = None
+    EndIf
+    Utility.Wait(0.5)
     PrepareShadowsFixture(False)
 EndFunction
 
@@ -326,7 +340,7 @@ EndFunction
 Function InspectLoadedCheckpoint(String kind)
     ; Sample twice so a saved latent stack cannot pass before replaying later.
     Int sample = 0
-    Bool ok = True
+    Bool ok = (kind == "theft" && checkpointPhase == 2) || (kind == "time" && checkpointPhase == 3)
     While sample < 2
         Utility.Wait(3.0)
         Actor player = Game.GetPlayer()
