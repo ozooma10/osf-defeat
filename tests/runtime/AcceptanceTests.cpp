@@ -53,7 +53,39 @@ namespace {
     WeaponMods weaponBaseline;
     std::size_t attackIndex{};
     constexpr const char* attackKinds[]{"unarmed","ranged","grenade"};
+    using GraphSink=std::uint32_t (*)(void*,const void*,void*);
+    GraphSink originalGraphSink{};
+    std::atomic<std::uintptr_t> graphReceiver{};
+    std::atomic<std::uint64_t> graphEpoch{},graphUntil{};
+    std::atomic<unsigned> graphCount{};
     std::int64_t Now() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
+    std::uint32_t ObserveGraph(void* receiver,const void* event,void* source) {
+        // Read-only .244 seam proven in OSF RE engine.animation_graphs and
+        // Multiplayer AnimationSourceProbe. Borrow only event+8's fixed string.
+        if(event && reinterpret_cast<std::uintptr_t>(receiver)==graphReceiver.load() &&
+            RuntimeMutation::CurrentEpoch()==graphEpoch.load() && Now()<graphUntil.load() && graphCount.fetch_add(1)<128) {
+            const auto& name=*reinterpret_cast<const RE::BSFixedString*>(static_cast<const char*>(event)+8);
+            if(const auto* value=name.c_str()) {
+                std::scoped_lock lock(observationsLock);
+                records.push_back({{"sequence",++sequence},{"name","observed-player-graph"},{"event",std::string(value,strnlen(value,96))},{"ok",true}});
+            }
+        }
+        return originalGraphSink(receiver,event,source);
+    }
+    void ObserveNextAttack(RE::Actor& player) {
+        const auto image=reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));
+        const auto receiver=reinterpret_cast<std::uintptr_t>(&player)+0x50;
+        constexpr unsigned char gate[]{0x48,0x89,0x5c,0x24,0x10,0x55,0x56,0x57,0x41,0x54};
+        const auto table=image+0x4cbc3d0;
+        if(*reinterpret_cast<const std::uintptr_t*>(receiver)!=table ||
+            std::memcmp(reinterpret_cast<const void*>(image+0x18f1490),gate,sizeof(gate))!=0) throw std::runtime_error("Player graph observer gate differs");
+        if(!originalGraphSink) {
+            if(reinterpret_cast<std::uintptr_t*>(table)[1]!=image+0x18f1490) throw std::runtime_error("Player graph sink already hooked");
+            originalGraphSink=reinterpret_cast<GraphSink>(image+0x18f1490);
+            REL::Relocation<std::uintptr_t>{table}.write_vfunc(1,&ObserveGraph);
+        }
+        graphCount=0; graphEpoch=RuntimeMutation::CurrentEpoch(); graphReceiver=receiver; graphUntil=Now()+10000;
+    }
     void Record(VM&,std::uint32_t,std::monostate,RE::BSFixedString name,bool ok,RE::Actor* subject,float value) {
         std::scoped_lock lock(observationsLock);
         // Papyrus interns strings case-insensitively and may return the casing
@@ -434,6 +466,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); phase=37; phaseAt=Now(); break;
     case 49:
         if(Wait(Saw("shadows-miss-kind-ready",beforeRecords))) break;
+        ObserveNextAttack(*player);
         Request(out,"attack-miss",attackKinds[attackIndex]); Next(); break;
     case 50:
         if(Wait(Acknowledged(out,directory) && !Truce::IsActive(player->GetFormID()),10)) break;
