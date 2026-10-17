@@ -26,6 +26,7 @@ Reject { Test-DefeatInventory $root $coverage @('fake') }
 Reject { Test-DefeatInventory $root $coverage @($runtime + $runtime[0]) }
 . (Join-Path $PSScriptRoot 'cosave-evidence-tests.ps1')
 . (Join-Path $PSScriptRoot 'ini-replacement-tests.ps1')
+. (Join-Path $PSScriptRoot 'weapon-input-tests.ps1')
 . (Join-Path $root 'tools/BlackoutTestGates.ps1')
 $gateRoot=Join-Path $root ('build/gate-contract-'+[guid]::NewGuid().ToString('N'))
 $gateSource=Join-Path $root 'shadows/Scripts/Source/OSFDefeatShadowsAftermath.psc'

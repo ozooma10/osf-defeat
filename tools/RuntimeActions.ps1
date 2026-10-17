@@ -73,7 +73,7 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             } elseif ($name -eq 'bash-eon') {
                 Send-Key 86 200
             } elseif ($name -in @('heavy-microgun','magstorm','em-novablast','beam-cutter')) {
-                $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','1800')
+                $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','1000')
             } elseif ($name -in @('pistol-eon','rifle-grendel','shotgun-coachman','shotgun-breach','laser-equinox','particle-inflictor','magpulse','heavy-bridger','melee-knife','melee-axe','melee-wakizashi','unarmed')) {
                 $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','200')
             } else { throw '[blocked] Unexpected weapon matrix fixture.' }
