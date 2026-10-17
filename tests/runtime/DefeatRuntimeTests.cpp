@@ -21,7 +21,7 @@ namespace OSFDefeat::RuntimeTests {
         std::filesystem::path directory;
         Json snapshot;
         std::string token, processStart;
-        bool initialized=false, running=false, finished=false;
+        bool initialized=false, running=false, finished=false, shadowsOnly=false;
         int phase=0;
         std::int64_t phaseStart{}, deadline{};
         float initialHealth{};
@@ -56,6 +56,7 @@ namespace OSFDefeat::RuntimeTests {
                 std::ifstream input(Config::RootPath().parent_path() / "Plugins" / "OSFDefeatTest.json");
                 if(!input) return;
                 const auto config=Json::parse(input);
+                shadowsOnly=config.value("shadowsOnly",false);
                 directory=config.at("stateDir").get<std::string>(); token=config.at("launchToken").get<std::string>();
                 if(!directory.is_absolute() || token.empty() || !std::filesystem::is_directory(directory)) { directory.clear(); return; }
                 FILETIME created{}, exited{}, kernel{}, user{};
@@ -95,6 +96,11 @@ namespace OSFDefeat::RuntimeTests {
                 snapshot["runId"]=request.at("runId"); snapshot["state"]="running";
                 running=true; deadline=Now()+600000; phaseStart=Now();
                 scenes=OSF::API::RequestSceneAPI();
+                if(shadowsOnly) {
+                    Check("healthy-baseline",player && Engine::HealthAV() && scenes && !Defeat::IsDefeated(player));
+                    initialHealth=Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV());
+                    phase=8;
+                }
             }
             if(Now()>deadline) throw std::runtime_error("Runtime suite deadline expired");
             if(auto* ui=RE::UI::GetSingleton(); ui && (ui->IsMenuOpen("LoadingMenu") || ui->IsMenuOpen("MainMenu"))) { Publish(); return; }
@@ -146,7 +152,7 @@ namespace OSFDefeat::RuntimeTests {
                 Check("presentation-stays-cleared",!Defeat::IsDefeated(player) && scenes->GetSceneForActor(player)==0);
                 Next(); break;
             case 8:
-                if(!Acceptance::Tick(snapshot,player,scenes,directory)) break;
+                if(!Acceptance::Tick(snapshot,player,scenes,directory,shadowsOnly)) break;
                 Cleanup(player); snapshot["state"]="passed"; finished=true; running=false; break;
             }
             Publish();

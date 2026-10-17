@@ -149,7 +149,7 @@ namespace {
 void Bind(VM& vm) { vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false); }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
-bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::filesystem::path& directory) {
+bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::filesystem::path& directory,bool shadowsOnly) {
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
     { std::scoped_lock lock(observationsLock); out["papyrus"]=records; }
@@ -165,6 +165,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         if(Wait(Saw("fixture") && Saw("registered") && Loaded(npc))) break;
         Check(out,"npc-disposable-fixture",npc!=player && !npc->IsDead() && !Engine::IsInCaptiveFaction(*npc));
         Check(out,"papyrus-registration",Saw("registered"));
+        if(shadowsOnly) { Request(out,"save","osfdefeathealthy"); phase=28; phaseAt=Now(); break; }
         beforePosition=player->GetPosition(); Request(out,"move","baseline"); Next(); break;
     case 2:
         if(Wait(Acknowledged(out,directory))) break;
@@ -310,7 +311,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Request(out,"load","osfdefeathealthy"); Next(); break;
     case 28:
         if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player) && scenes->GetSceneForActor(player)==0,60)) break;
-        Check(out,"pack-cleanup-load",DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
+        Check(out,shadowsOnly ? "healthy-save" : "pack-cleanup-load",DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
         std::filesystem::copy_file(Config::RootPath()/"AcceptanceShadows"/"minimal-shadows.json",
             Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json",std::filesystem::copy_options::overwrite_existing);
         Consequence::Reload(); Papyrus("ShadowsPrepare"); Next(); break;

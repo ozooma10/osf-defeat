@@ -6,6 +6,10 @@ Spell Property NemesisBuff Auto Const Mandatory
 Spell Property PlayerDebuff Auto Const Mandatory
 Spell Property PlayerReward Auto Const Mandatory
 Int Property LevelGap = 15 Auto Const
+; Observable aftermath result: 1 unarmed, 2 ambiguous stack, 3 not better,
+; 4 alias failed, 5 quest item, 6 transfer refused, 7 transferred.
+Int Property LastTheftStatus = 0 Auto Hidden
+Weapon Property LastWeaponConsidered Auto Hidden
 
 Bool busy = False
 Bool deathPending = False
@@ -99,27 +103,39 @@ Function TakeLoot(Actor candidate)
 
     Weapon weaponBase = player.GetEquippedWeapon()
     Weapon theirs = candidate.GetEquippedWeapon()
+    LastWeaponConsidered = weaponBase
     ; v1 quality proxy: base credit value. No stat/instance API is claimed here.
     ; A single copy is required because GetEquippedWeapon returns only a base.
-    If weaponBase == None || player.GetItemCount(weaponBase) != 1
+    If weaponBase == None
+        LastTheftStatus = 1
         Return
     EndIf
-    If theirs != None && theirs.GetGoldValue() >= weaponBase.GetGoldValue()
+    If player.GetItemCount(weaponBase) != 1
+        LastTheftStatus = 2
+        Return
+    EndIf
+    ; NPC getters can retain an inherent or no-longer-owned weapon base.
+    If theirs != None && candidate.GetItemCount(theirs) > 0 && theirs.GetGoldValue() >= weaponBase.GetGoldValue()
+        LastTheftStatus = 3
         Return
     EndIf
     ObjectReference item = player.MakeAliasedRefFromInventory(weaponBase, StolenWeapon)
     If item == None
+        LastTheftStatus = 4
         Return
     EndIf
     If item.IsQuestItem()
+        LastTheftStatus = 5
         StolenWeapon.Clear()
         Return
     EndIf
     ; Transfer the reference, preserving its instance data, never recreate its base.
     Int moved = player.RemoveItem(item, 1, True, candidate)
     If moved == 1
+        LastTheftStatus = 7
         candidate.EquipItem(item, False, True)
     Else
+        LastTheftStatus = 6
         StolenWeapon.Clear()
     EndIf
 EndFunction

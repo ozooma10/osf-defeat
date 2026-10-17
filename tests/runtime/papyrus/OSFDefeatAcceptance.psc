@@ -97,6 +97,11 @@ Function ShadowsInspect()
     OSFDefeatAcceptanceProbe.Record("shadows-player-credits", player.GetItemCount(Game.GetCredits()) == 900, player, player.GetItemCount(Game.GetCredits()))
     OSFDefeatAcceptanceProbe.Record("shadows-nemesis-credits", shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100, shadow, shadow.GetItemCount(Game.GetCredits()) - shadowCredits)
     OSFDefeatAcceptanceProbe.Record("shadows-weapon-ref", stolen != None, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-theft-status", hunt.LastTheftStatus == 7, shadow, hunt.LastTheftStatus)
+    If hunt.LastWeaponConsidered != None
+        OSFDefeatAcceptanceProbe.Record("shadows-considered-weapon", hunt.LastWeaponConsidered == testWeapon, player, hunt.LastWeaponConsidered.GetFormID())
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("shadows-equipped-weapon", shadow.GetEquippedWeapon() == testWeapon, shadow)
     If stolen != None
         OSFDefeatAcceptanceProbe.Record("shadows-weapon-container", stolen.GetContainer() == shadow, shadow)
     EndIf
@@ -117,7 +122,10 @@ Function ShadowsInspect()
     OSFDefeatAcceptanceProbe.Record("shadows-slot-preserved", !replaced && hunt.Nemesis.GetActorReference() == shadow && player.HasSpell(hunt.PlayerDebuff), shadow)
     OSFDefeat.SuspendActorAI(shadow)
     ; Leave the player unarmed so the next real mouse click tests a missed punch.
-    player.UnequipAll()
+    Weapon remaining = player.GetEquippedWeapon()
+    If remaining != None
+        player.UnequipItem(remaining, False, True)
+    EndIf
     player.DrawWeapon()
 EndFunction
 

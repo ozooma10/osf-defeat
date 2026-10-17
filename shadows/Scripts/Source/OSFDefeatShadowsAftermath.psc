@@ -36,14 +36,20 @@ Function RunAftermath()
         Hunt.Start()
     EndIf
     ; PassTime advances the framework's game-time watchdog too. The registration
-    ; leases 8,000 seconds (over two game hours even at time scale 1) and a real
+    ; leases 12,000 seconds (over three game hours even at time scale 1) and a real
     ; Papyrus timer below recovers/fades in if any latent step gets stuck.
     RegisterForRemoteEvent(player, "OnPlayerLoadGame")
     StartTimer(30.0, 1)
     Game.FadeOutGame(True, True, 0.0, 0.6, True)
     Utility.Wait(0.7)
     Bool promoted = Hunt.Promote(aggressor)
+    Float wakeDay = Utility.GetCurrentGameTime() + (BlackoutHours / 24.0)
     Game.PassTime(BlackoutHours)
+    ; PassTime lands on an hour boundary and can advance less than requested.
+    ; One additional hour ensures at least the requested elapsed time.
+    If Utility.GetCurrentGameTime() < wakeDay
+        Game.PassTime(1)
+    EndIf
     OSFDefeat.RecoverActorWithTruce(player, TruceSeconds)
     Int tries = 0
     While OSFDefeat.IsDefeated(player) && tries < 50
@@ -58,9 +64,9 @@ Function RunAftermath()
     CancelTimer(1)
     UnregisterForRemoteEvent(player, "OnPlayerLoadGame")
     If promoted
-        Debug.Notification("Two hours later. Your attacker left a wound and a trail. Check your journal.")
+        Debug.Notification("Hours later. Your attacker left a wound and a trail. Check your journal.")
     Else
-        Debug.Notification("Two hours later. You have a brief chance to get away.")
+        Debug.Notification("Hours later. You have a brief chance to get away.")
     EndIf
     Stop()
 EndFunction

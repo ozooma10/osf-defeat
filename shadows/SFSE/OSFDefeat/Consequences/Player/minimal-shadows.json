@@ -7,6 +7,6 @@
   "autoRecoveryDelaySeconds": 8.0,
   "quest": "OSFDefeatShadowsAftermathQuest",
   "recoveryMode": "held",
-  "leaseTimeoutSeconds": 8000.0,
+  "leaseTimeoutSeconds": 12000.0,
   "domain": "onfoot"
 }

@@ -4,7 +4,8 @@ param(
     [string]$Harness = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'OSF Test Harness'),
     [string]$ResultPath = '',
     [string]$SourceHash = '',
-    [switch]$Preflight
+    [switch]$Preflight,
+    [switch]$ShadowsOnly
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -29,6 +30,9 @@ $outputName='OSF Defeat Testing - Output'
 $payload=Join-Path $script:ModRoot $payloadName
 $animationMod=if ($script:Config.ContainsKey('DefeatAnimationMod')) { $script:Config.DefeatAnimationMod } else { 'OSF Animation' }
 $expected=@(Get-Content (Join-Path $repo 'tests/runtime/cases.json') -Raw | ConvertFrom-Json)
+if ($ShadowsOnly) {
+    $expected=@($expected | Where-Object { $_ -match '^(shadows-|truce-)' -or $_ -in @('healthy-baseline','npc-disposable-fixture','papyrus-registration','healthy-save') })
+}
 $compiler=Join-Path $script:Config.Game 'Tools/Papyrus Compiler/PapyrusCompiler.exe'
 $imports=Join-Path (Split-Path $repo -Parent) 'PapyrusSource'
 $animationProject=Join-Path (Split-Path $repo -Parent) 'OSF Animation'
@@ -75,7 +79,7 @@ function Reset-Fixture {
 # paths above are Defeat-specific; no Animation payload or source is edited.
 function Prepare-AnimationMailbox([string]$LaunchToken) {
     $script:DefeatLaunchToken=$LaunchToken
-    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\'}
+    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly}
 }
 
 try {
@@ -232,7 +236,7 @@ try {
     }
     if ($script:Run) { Finish-RunArtifacts $outcome $message }
     if ($lock) { $lock.Dispose() }
-    $receipt=@{schemaVersion=1;outcome=$outcome;message=$message;sourceHash=$SourceHash;expectedCases=$expected;artifactDirectory=$(if ($script:Run) {$script:Run.path} else {$null})}
+    $receipt=@{schemaVersion=1;outcome=$outcome;message=$message;sourceHash=$SourceHash;scope=$(if ($ShadowsOnly) {'shadows'} else {'full'});expectedCases=$expected;artifactDirectory=$(if ($script:Run) {$script:Run.path} else {$null})}
     if ($ResultPath) { Write-JsonFile ([IO.Path]::GetFullPath($ResultPath)) $receipt }
 }
 exit $code
