@@ -33,8 +33,17 @@ namespace OSFDefeat::RuntimeTests {
             snapshot["updatedAtUtcMs"]=Now(); snapshot["phase"]=phase;
             const auto temporary=directory / "snapshot.tmp";
             { std::ofstream stream(temporary); stream << snapshot.dump(2); if(!stream) throw std::runtime_error("Cannot publish runtime snapshot"); }
-            if(!MoveFileExW(temporary.c_str(),(directory / "snapshot.json").c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))
-                throw std::runtime_error("Cannot replace runtime snapshot");
+            // Readers share deletion, but a filesystem observer can still hold
+            // a transient handle. Keep replacement atomic and bound retries to
+            // 20 ms; one sharing collision must not tear down a valid game run.
+            DWORD error=0;
+            for(int attempt=0;attempt<11;++attempt) {
+                if(MoveFileExW(temporary.c_str(),(directory / "snapshot.json").c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) return;
+                error=GetLastError();
+                if(error!=ERROR_SHARING_VIOLATION && error!=ERROR_ACCESS_DENIED) break;
+                if(attempt<10) Sleep(2);
+            }
+            throw std::runtime_error("Cannot replace runtime snapshot (Win32 "+std::to_string(error)+")");
         }
         void Check(std::string_view name,bool passed) {
             snapshot["cases"].push_back({{"name",name},{"passed",passed}});
