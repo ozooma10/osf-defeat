@@ -133,7 +133,18 @@ EndFunction
 
 Function ShadowsPlayerKill()
     shadow.Kill(Game.GetPlayer())
-    Utility.Wait(2.0)
+    ; Death completion, like ability updates, needs the actor's process running.
+    OSFDefeat.ResumeActorAI(shadow)
+    Int waited = 0
+    While hunt.Nemesis.GetActorReference() == shadow && waited < 50
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    OSFDefeatAcceptanceProbe.Record("shadows-player-kill-dead", shadow.IsDead(), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-player-kill-debuff", !Game.GetPlayer().HasSpell(hunt.PlayerDebuff), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-player-kill-buff", Game.GetPlayer().HasSpell(hunt.PlayerReward), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-player-kill-alias", hunt.Nemesis.GetReference() == None, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-player-kill-loot", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
     Bool ok = !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && Game.GetPlayer().HasSpell(hunt.PlayerReward)
     ok = ok && hunt.Nemesis.GetReference() == None && hunt.IsObjectiveCompleted(10)
     ok = ok && shadow.GetItemCount(testWeapon) == 1 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
@@ -146,7 +157,14 @@ Function ShadowsPlayerKill()
     EndIf
     Bool promoted = hunt.Promote(shadow)
     shadow.Kill(npc)
-    Utility.Wait(2.0)
+    OSFDefeat.ResumeActorAI(shadow)
+    waited = 0
+    While hunt.Nemesis.GetActorReference() == shadow && waited < 50
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    OSFDefeatAcceptanceProbe.Record("shadows-other-kill-promoted", promoted, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-other-kill-dead", shadow.IsDead(), shadow)
     ok = promoted && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && !Game.GetPlayer().HasSpell(hunt.PlayerReward)
     ok = ok && hunt.Nemesis.GetReference() == None
     OSFDefeatAcceptanceProbe.Record("shadows-other-kill", ok, shadow)
