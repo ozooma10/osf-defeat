@@ -24,7 +24,7 @@ xmake test 'osfdefeat-persistence-tests/*'
 # Check this PC's game prerequisites without launching or writing a profile.
 pwsh -NoProfile -File tools/test-runtime.ps1 -Preflight
 
-# Focused staged Minimal Shadows loop (15 assertions, same disposable profile).
+# Focused staged Minimal Shadows loop (28 assertions, same disposable profile).
 pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
 ```
 
@@ -42,7 +42,10 @@ interactive slice-0 test for authored/generated planetary sites, alias names, an
 ship interiors. `tools/build-persistence-spike.ps1` builds its development-only plugin;
 `tools/prepare-persistence-spike.ps1` copies an explicit seed into an isolated profile.
 Its offline build/setup checks do not count as planet persistence acceptance or change
-the ordinary smoke-suite case inventory.
+the ordinary smoke-suite case inventory. The slice-1
+[existing-enemy world probe](world-shadows/README.md) separately requires combat
+seeds for an authored encounter and generated enemy structure. Its build and
+21 isolated-profile preparation checks do not establish world persistence.
 
 ## Native coverage
 
@@ -118,7 +121,7 @@ and an unexpired request bound to the exact process and launch token. Every muta
 on the existing Main update seam or through the real Papyrus VM. The suite has a
 600-second deadline plus bounded runner startup/cleanup waits.
 
-The 53 game assertions include the original nine defeat/recovery checks and these
+The 66 game assertions include the original nine defeat/recovery checks and these
 acceptance scenarios:
 
 - Real console saves and loads, with fresh `.sfs`/`.osf` pairs retained under `saves/`.
@@ -146,9 +149,15 @@ acceptance scenarios:
   truce while the hostile NPC's AI runs. An occupied slot is preserved. A real truce
   save/load checks TRC0/CPT0/PCF0 and the unchanged deadline. Real missed knife swings
   cancel truce before expiry; a separate short truce expires normally. Player/other
-  kill rules, weapon retrieval and clean-load cleanup complete the loop.
+  kill rules, weapon retrieval and clean-load cleanup complete the loop. Exact
+  OMOD metadata (including three legendary slots) is compared across transfer,
+  reload, retrieval and explicit world drop/pickup. The expanded suite checks
+  reference protection overrides and other negative eligibility, a second full
+  defeat while occupied, lower-level reward refusal, missed unarmed/Eon/frag attacks,
+  cooperating scripted attacks, external aftermath stop and early-blackout reload.
+  Natural death drops are accepted only after exact instance-metadata verification.
 
-`-ShadowsOnly` explicitly runs the 11 Shadows cases plus four setup assertions;
+`-ShadowsOnly` explicitly runs the 24 Shadows cases plus four setup assertions;
 its receipt says `scope: shadows`. It does not certify the other 38 full-suite cases.
 The runner privately builds `shadows/` through Spriggit and compiles its scripts.
 Branch diagnostics in the Papyrus observation array are not individual test verdicts;

@@ -21,8 +21,10 @@ by available credits). Weapon theft compares base credit values in this first
 version. The framework snapshots the equipped base before down presentation changes
 it. Theft requires exactly one owned copy, holds it in an alias, and moves that
 inventory item by base form; ambiguous stacks and quest items are skipped. Suit,
-helmet, and boost pack are never taken. Modified-weapon transfer still requires
-live acceptance; base value is not a damage or modification-quality comparison.
+helmet, and boost pack are never taken. The modified/legendary Eon fixture preserves
+every OMOD row through theft, reload, retrieval and forced world pickup.
+Base value is not a damage or modification-quality
+comparison; other weapon families still need coverage.
 
 Essential, protected, unique, quest-aliased, commanded, child, teammate, ghost,
 scene-bound, and more-than-15-levels-higher actors are excluded. Native reservation
@@ -32,10 +34,18 @@ protection override, including cleared overrides.
 The aftermath fades out, passes at least two and less than three hours (the engine
 rounds to hour boundaries), recovers in place and grants a
 30-second truce. The native damage path and player fire/animation callbacks end
-the truce on attack. Missed knife swings, truce save/load and expiry pass in the
-disposable-cell suite; unarmed, ranged and grenade misses still need acceptance.
+the truce on attack. Missed knife, unarmed, Eon and frag attacks, truce save/load
+and expiry pass in the disposable-cell suite. Frag release emits `WeaponFire`. Scripted producers that
+bypass these callbacks must call `EndRecoveryTruce` before attacking.
 Ship interiors and space refuse this loop and recover the framework state before
 requesting normal death. That refusal path also needs a dedicated live fixture.
+
+External quest interruption and an early-blackout save/reload restore recovery
+and controls without another theft/time skip. This requires OSF Animation
+`fcf9714` or later, which repairs its owned input layer after load. The
+[acceptance record](../docs/MINIMAL-SHADOWS-IMPLEMENTATION.md) lists evidence and
+remaining gates; the [world probe](../tests/world-shadows/README.md) is ready for
+existing-enemy saves at an authored combat site and a generated enemy structure.
 
 The plugin has no startup quest or world edits. Its priority-30 consequence starts
 the repeatable aftermath quest, which starts the persistent hunt manager as needed.

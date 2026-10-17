@@ -31,8 +31,11 @@ Truce provides no damage immunity. The timer uses a saved game-day deadline, so 
 does not renew it and advancing game time can expire it. Outgoing health damage, a new
 defeat, `EndRecoveryTruce` or `ForceRecoverAll` ends it. Content must also call
 `EndRecoveryTruce` on fire/attack events to cover misses. The staged Shadows pack shows
-this pattern. Only framework-owned faction membership is removed; pre-existing membership
-is preserved. `TRC0` v1 and the existing `CPT0` record retain truce and ownership across saves.
+this pattern: `WeaponFire` covers the tested Eon and frag release, and `HitFrame`
+covers melee/unarmed misses. Scripted producers bypassing these callbacks must
+explicitly call `EndRecoveryTruce` before their attack. Only framework-owned faction
+membership is removed; pre-existing membership is preserved. `TRC0` v1 and the
+existing `CPT0` record retain truce and ownership across saves.
 
 ## Actor reservation checks
 

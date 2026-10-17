@@ -140,6 +140,6 @@
       "truce-missed-grenade",
       "truce-scripted-attack-contract"
     ],
-    "limits": "Disposable spawned aggressor in a quiet cell; exact modified/legendary OMOD metadata at theft, reload, corpse retrieval and forced world pickup. Existing world enemies, generated structures, natural death drops and ship refusal require separate acceptance."
+    "limits": "Disposable spawned aggressor in a quiet cell; exact modified/legendary OMOD metadata at theft, reload, corpse retrieval and forced world pickup. Missed knife/unarmed/Eon/frag attacks and a cooperating scripted attack are covered. Blackout save/load is same-process before promotion. Existing world enemies, generated structures, actual resets, cold-start blackout, later blackout phases, natural death drops, other weapon families, non-cooperating attack producers and ship/space refusal require separate acceptance."
   }
 ]

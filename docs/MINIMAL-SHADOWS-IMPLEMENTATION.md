@@ -2,102 +2,118 @@
 
 Slice 1 of [CORE-EXPERIENCE.md](CORE-EXPERIENCE.md), implemented as a separate
 [staged pack](../shadows/README.md). Basic Consequences remains the shipped pack.
-The first complete disposable-cell loop passed on 2026-10-16 (UTC receipts dated
-2026-10-17). Broader world acceptance remains open below.
+The disposable-cell acceptance suite passes; existing-enemy world acceptance
+remains open below.
 
 ## Implemented loop
 
 - One persistent actual-aggressor alias, titled **The Unbroken**, with a hunt objective.
-  A second promotion cannot replace an occupied slot or remove its debuff.
+  Another defeat cannot replace an occupied slot, steal again or remove its debuff.
 - **Unbroken** gives the nemesis +40 physical resistance; **Shaken** gives the player
   -20. A player kill earns **Hardened Resolve** (+10) only when the target is at least
   the player's level at death. Another killer clears the debuff without that reward.
   These are pack-owned abilities, not curable vanilla afflictions.
 - Conservative admission excludes essential/protected/unique actors, quest aliases,
   protection overrides, teammates, commanded actors, children, ghosts, scenes and
-  targets more than 15 levels above the player.
+  targets more than 15 levels above the player. Retained alias metadata and even a
+  cleared reference protection override are excluded.
 - Promotion takes 10% of credits, clamped to 25–2,500 and available funds. Weapon
   theft uses the pre-down equipped-base snapshot, requires exactly one owned copy,
   skips quest items, compares base credit value, and moves the inventory item to the
   nemesis. This quality proxy does not evaluate damage or modifications. Suit,
   helmet and boost pack are never taken.
-- A repeatable aftermath fades out, advances at least two and less than three game
-  hours, then recovers in place with a 30-second truce. PassTime rounds to an hour
-  boundary, so the script corrects a short advance with one additional hour. A
-  12,000-second game-clock lease accommodates that skip; a separate 30-second
-  Papyrus timer covers stalled aftermath work and restores the fade.
+- The aftermath fades out, advances at least two and less than three game hours,
+  then recovers in place with a 30-second truce. PassTime rounds to an hour boundary,
+  so the script corrects a short advance with one additional hour. A 12,000-second
+  game-clock lease accommodates the skip; a separate 30-second Papyrus timer covers
+  stalled work. Generation checks invalidate old latent stacks after cancellation.
+  External shutdown or reload during blackout requests recovery and restores the
+  fade, preserving an already-created hunt instead of starting the consequence again.
 - Ship interiors and space refuse this loop, restore framework state, then request
   normal death. This is a staged content-level refusal, not a native domain gate.
 
 `tools/build-shadows.ps1` compiles the scripts, builds and round-trips the nine-record
 ESM with pinned Spriggit, then independently checks record links, aliases, objectives,
-spell magnitudes and VMAD bindings. Output stays under `build/shadows/`; this helper
-does not deploy. The runtime runner installs only into its owned disposable profile.
+spell magnitudes and VMAD bindings. It does not deploy. `-WorldProbe` adds only a test
+quest and identity Actor Value; the default payload excludes both diagnostics.
 
 ## Recovery truce foundation
 
 `RecoverActorWithTruce(actor, seconds)` atomically recovers a defeated actor while
-retaining captive-faction pacification. A finite positive duration up to 3,600 seconds is converted
-at the current time scale into a saved game-day deadline. It does not grant
-damage immunity. Query `IsRecoveryTruceActive` as well as `IsDefeated` to confirm
-the queued request completed. Missing pacification leaves recovery held so the
-existing watchdog remains responsible for releasing the actor.
+retaining captive-faction pacification. A finite positive duration up to 3,600 seconds
+becomes a saved game-day deadline. It does not grant damage immunity. Query
+`IsRecoveryTruceActive` as well as `IsDefeated` to confirm the queued request completed.
+Missing pacification leaves recovery held for the existing watchdog.
 
 Outgoing health damage queues truce cancellation after the original damage write,
-with the existing save-epoch guard. Content must call `EndRecoveryTruce` on fire
-and attack events as well, to cover misses. New defeat and `ForceRecoverAll` end
-the truce. Pre-existing faction memberships are preserved; unresolved actors
-retain cleanup tracking until they resolve. Save record `TRC0` v1 carries actor
-ID, game-day deadline, and faction ownership; `CPT0` retains the exact faction ID.
+with the save-epoch guard. Shadows also watches player fire and graph callbacks for
+misses. Actual frag release emits `WeaponFire`; guessed `ThrowGrenade` callbacks did
+not fire. `HitFrame` covers melee/unarmed misses. Scripted attack producers that
+bypass these events must call `EndRecoveryTruce` explicitly. New defeat and
+`ForceRecoverAll` end the truce. Pre-existing faction memberships are preserved;
+unresolved actors retain cleanup tracking. `TRC0` v1 saves the deadline and ownership;
+`CPT0` retains the exact faction ID. See the [Papyrus API](papyrus-api.md).
 
-`HasQuestAlias` and `HasProtectionOverride` are conservative metadata-presence tests:
-retained alias metadata and cleared reference overrides can still exclude an actor.
-`GetLastPlayerEquippedWeapon` captures the owned primary base before down presentation;
-it is transient handoff context, not an item-instance identifier. See the
-[Papyrus API](papyrus-api.md).
+Loading a saved blackout exposed an OSF Animation input-layer leak: defeat recovery
+completed but movement/fighting stayed disabled. Animation commit `fcf9714` reconciles
+only its owned layer after load, retaining any new-world lock. World profile preparation
+copies the built Animation DLL privately alongside Defeat so it includes this fix.
 
-## Validation
+## Validation — 2026-10-17
 
-- Full regression: **53/53 live assertions**, **83 native cases / 1,014 checks**,
-  all runner/payload/build checks and source-integrity checks passed on revision
-  `00735ee`. Receipt:
-  `build/smoke/20261017-014058-4c36794daabd47d3b906eaf99c67b8d7/summary.json`;
-  game artifacts: `../OSF Test Harness/artifacts/20261017-014106-085-DefeatSmoke`.
-  This includes all 42 pre-existing checks plus the 11 new Shadows/truce checks.
-  Subsequent edits only document these results.
-- Offline: **83 native cases / 1,014 checks**, **97 runner checks**, payload validation,
-  production DLL build and Papyrus compilation passed. Receipt:
-  `build/smoke/20261017-013301-e995c8452c3c4586891cfa3c8957b513/summary.json`.
-- Focused live suite: **15/15 passed** on a fresh locally owned MO2/SFSE session.
-  Receipt: `build/shadows-runtime-13.json`; artifacts:
-  `../OSF Test Harness/artifacts/20261017-013541-719-DefeatSmoke`.
-- The live run verified promotion, objective, both resistance deltas, credits, unique
-  Eon transfer/equipping, blackout time, controls, pacification with active hostile AI,
-  slot preservation, real truce save/load, missed knife-swing cancellation, timer
-  expiry, player reward, other-killer cleanup, weapon retrieval and healthy-load cleanup.
-  Weapon retrieval in this passing run used corpse inventory. The test also permits
-  pickup of the identical aliased reference if the engine drops it; that branch is
-  not yet independently certified.
+- Focused live suite: **28/28 assertions**, fresh owned local MO2/SFSE session.
+  Defeat revision `624ec08`, Animation `fcf9714`; receipt
+  `build/shadows-acceptance-11.json`; artifacts
+  `../OSF Test Harness/artifacts/20261017-052332-928-DefeatSmoke`.
+- Full regression: **66/66 live assertions**, **83 native cases / 1,014 checks**,
+  **97 runner checks**, payload validation, production build and source-integrity
+  checks pass on Defeat `c16498a` with Animation `fcf9714`. Receipt:
+  `build/smoke/20261017-053511-42d736e793ad49edb4bbb3b4ba63dd98/summary.json`;
+  artifacts: `../OSF Test Harness/artifacts/20261017-053519-156-DefeatSmoke`.
+- Animation's **12 engine-free suites** pass (`build/shadows-animation-tests-01.log`).
+- World probe compiles and its 11-record ESM round-trips and verifies. Receipt:
+  `build/shadows-world-02/build.json`. **21 isolated-profile preparation checks** pass;
+  `build/shadows-world-preparation-04.log`. Preparation is not runtime acceptance.
 
-Live iteration caught the down-state replacing the weapon getter with unarmed,
-PassTime advancing less than requested, and suspended test AI preventing ability/death
-processing. Inventory proxies can report no container even after a successful move;
-the test uses actual inventory counts and equipped state. Canonical engine evidence
-is in OSF RE's `gameplay.actor_equipment` module. Failed receipts remain retained.
+The live fixtures cover the ordinary one-slot loop and resistance magnitudes; a
+second lethal defeat while occupied; player reward, other-killer cleanup and a
+lower-level enemy refusing a reward; reference protection overrides, teammate,
+ghost and unrelated-alias rejection; truce save/load/expiry; missed knife, unarmed,
+Eon and frag attacks; a cooperating scripted attack; external quest interruption;
+and an early-blackout save/reload with control, credits, time and empty-hunt checks.
 
-## Acceptance before replacing Basic
+The weapon fixture attaches a suppressor and Instigating, Rapid and Explosive
+legendary slots to one Eon. A read-only, version-gated native probe compares every
+OMOD row, including attachment metadata and duplicates, at baseline, theft,
+real reload, corpse retrieval and explicit player drop/pickup. All match. That last
+step certifies the forced world-pickup path. The focused run compared 24 rows and
+the full run compared 19; each preserved its own exact baseline. A prior full run
+found the weapon absent from corpse inventory and a nearby Eon with a different
+reference from the stolen inventory alias. The revised test now requires exact
+modification data before accepting a natural drop. The passing rerun took the
+corpse path, so the natural-drop branch remains unverified.
+Native-layout and graph-event evidence lives in OSF RE's `gameplay.actor_equipment`,
+`engine.animation_graphs` and `ui.input_enable_layer` modules. Failed iteration
+receipts are retained rather than overwritten.
 
-- Existing world aggressor at an authored encounter and a generated enemy structure:
-  normal appearance, travel/return, reload, longer absence and actual reset behavior.
-  Slice 0 proved an inert surrogate at an authored city and an outdoor natural feature.
-- Modified/legendary weapon preservation and the world-drop retrieval branch.
-- Missed unarmed, ranged and grenade attacks; third-party attack producers.
-- Negative eligibility fixtures, especially reference protection overrides; lower-level
-  player-kill refusal and a second full defeat while the hunt is occupied.
-- Ship/space refusal, saves during blackout, external quest interruption, and visible
-  title/objective/ability presentation in ordinary play.
+## Remaining acceptance before replacing Basic
 
-Next slice remains the wake-up table once this staged loop clears those gates. The
-five-slot library, dropped pack, companion rescue, settings and wider traits belong
-to later slices. Before disabling this test pack, call the hunt's `CancelHunt`, then
-`ForceRecoverAll`, verify cleanup and save. Stolen loot stays where it was transferred.
+- Existing world aggressor at an authored combat encounter and a generated enemy
+  structure: normal full-body appearance, title/journal/abilities, normal planet
+  departure and return, reload/cold restart, long absence and actual reset behavior.
+  The old seeds prove inert surrogates at a city and a natural feature only.
+- Naturally dropped NPC weapon retrieval, other weapon/throwable families and
+  non-cooperating third-party attack producers.
+- Ship/space refusal fixtures and blackout interruption after theft/time advancement.
+  The passing blackout reload is within one process and before promotion.
+
+The [world probe and setup guide](../tests/world-shadows/README.md) are ready. It
+stamps an existing enemy once, relies on the production hunt's alias, observes
+unload/reattach and live cells, and records actual elapsed UT time and any alias
+reset events. It neither suspends AI nor adds another subject alias. A long wait
+alone does not certify a reset. Two new disposable combat saves are still required.
+
+The wake-up table remains the next slice after these world gates. The five-slot
+library, dropped pack, companion rescue, settings and wider traits follow later.
+Before disabling this test pack, call `CancelHunt`, then `ForceRecoverAll`, verify
+cleanup and save. Stolen loot remains where it was transferred.

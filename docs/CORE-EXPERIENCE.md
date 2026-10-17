@@ -218,7 +218,7 @@ and NPC consequence content.
 
 Each slice is playable and testable on its own.
 
-**Implementation status, 2026-10-16:** slice 0 now has a separate
+**Implementation status, 2026-10-17:** slice 0 now has a separate
 [persistence probe and step-by-step fixture guide](../tests/persistence-spike/README.md).
 Its Papyrus compiles, the test ESM builds and round-trips, and the isolated-profile
 preparation checks pass. The [corrected reruns](../tests/persistence-spike/RESULTS-2026-10-16-corrected.md)
@@ -228,12 +228,16 @@ with working controls and exit before/after reload. Identity uses per-instance s
 departure observes alias detach events, and return compares live reference cells.
 **Slice 0's feasibility gate passes for the two tested sites. Minimal Shadows is implemented as a staged pack.**
 The generated seed is an outdoor natural feature, and the actor is an inert surrogate.
-Existing-aggressor promotion at an enemy structure, actual cell reset, and weapon-instance
-transfer still need acceptance coverage. The authored surrogate intermittently rendered
+Existing-aggressor promotion at an enemy structure and actual cell reset still need
+acceptance coverage. Modified/legendary weapon-instance preservation now passes in
+the disposable-cell suite. The authored surrogate intermittently rendered
 only partially despite passing identity/loaded checks; include appearance in that coverage.
 The [slice-1 implementation and acceptance record](MINIMAL-SHADOWS-IMPLEMENTATION.md)
 covers the one-slot hunt, traits, blackout, theft, recovery truce and death cleanup.
-Its focused disposable-cell suite passes all 15 assertions. Basic Consequences remains
+Its expanded focused disposable-cell suite passes all 28 assertions, including
+modified weapons, negative eligibility, repeat defeat, attack misses and interrupted
+blackout recovery. The [existing-enemy world probe](../tests/world-shadows/README.md)
+and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.
 
 0. **Spike: persistence.** Prove that a quest-aliased actor and a placed container survive
