@@ -59,6 +59,9 @@ namespace {
     bool blackoutOnly=false;
     bool weaponsOnly=false;
     bool scriptedOnly=false;
+    bool lifecycleOnly=false;
+    std::size_t lifecycleIndex{};
+    constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","reward-idle"};
     struct ScriptedCase { const char* name; bool endsTruce; };
     constexpr ScriptedCase scriptedCases[]{
         {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},
@@ -399,6 +402,7 @@ void Configure(const Json& config) {
     blackoutOnly=config.value("blackoutOnly",false);
     weaponsOnly=config.value("weaponsOnly",false);
     scriptedOnly=config.value("scriptedOnly",false);
+    lifecycleOnly=config.value("lifecycleOnly",false);
     blackoutCheckpoint=config.value("blackoutCheckpoint",1);
     if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
         heldBlackout=blackoutCheckpoint;
@@ -410,6 +414,80 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
     { std::scoped_lock lock(observationsLock); out["papyrus"]=records; }
+    if(lifecycleOnly) {
+        const auto script=[](std::string_view function,std::string argument={},bool existing=false) { Papyrus(function,argument,existing,"OSFDefeatLifecycleAcceptance"); };
+        switch(phase) {
+        case 0:
+            RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);
+            RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
+            beforeSave=saves; Request(out,"save","osfdefeathealthy"); Next(); break;
+        case 1:
+            if(Wait(Acknowledged(out,directory) && saves>beforeSave,60)) break;
+            Check(out,"lifecycle-healthy-save",DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty());
+            beforeRecords=Sequence(); script("Initialize"); Next(); break;
+        case 2:
+            if(Wait(Recorded("lifecycle-fixture",beforeRecords))) break;
+            Check(out,"lifecycle-fixture",Saw("lifecycle-fixture",beforeRecords)); Next(); break;
+        case 3:
+            out["lifecycleCase"]=lifecycleCases[lifecycleIndex];
+            beforeRecords=Sequence(); script("Prepare",lifecycleCases[lifecycleIndex]); phase=14; phaseAt=Now(); break;
+        case 14: {
+            const auto ready=std::string("lifecycle-ready-")+lifecycleCases[lifecycleIndex];
+            if(Wait(Recorded(ready,beforeRecords))) break;
+            if(!Saw(ready,beforeRecords)) throw std::runtime_error("Lifecycle fixture preparation failed");
+            if(std::string_view(lifecycleCases[lifecycleIndex])=="cancel" && !Truce::Begin(*player,30))
+                throw std::runtime_error("Cannot start cancellation truce");
+            beforeRecords=Sequence(); script("Run",lifecycleCases[lifecycleIndex]); phase=4; phaseAt=Now(); break;
+        }
+        case 4: {
+            const auto name=std::string("lifecycle-")+lifecycleCases[lifecycleIndex];
+            if(Wait(Recorded(name,beforeRecords),45)) break;
+            out["cases"].push_back({{"name",name},{"passed",Saw(name,beforeRecords)}});
+            if(++lifecycleIndex<std::size(lifecycleCases)) { phase=3; phaseAt=Now(); }
+            else { beforeRecords=Sequence(); script("PrepareSave"); Next(); }
+            break;
+        }
+        case 5:
+            if(Wait(Recorded("lifecycle-active-before-save",beforeRecords))) break;
+            Check(out,"lifecycle-active-before-save",Saw("lifecycle-active-before-save",beforeRecords));
+            beforeSave=saves; Request(out,"save","osfdefeatlifecycle"); Next(); break;
+        case 6:
+            if(Wait(Acknowledged(out,directory) && saves>beforeSave,60)) break;
+            beforeLoad=loads; beforeEpoch=RuntimeMutation::CurrentEpoch();
+            Request(out,"load","osfdefeatlifecycle"); Next(); break;
+        case 7:
+            if(Wait(Acknowledged(out,directory) && loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch,60)) break;
+            beforeRecords=Sequence(); script("InspectLoadedActive","",true); Next(); break;
+        case 8:
+            if(Wait(Recorded("lifecycle-loaded-cancel",beforeRecords))) break;
+            out["cases"].push_back({{"name","lifecycle-active-load"},{"passed",Saw("lifecycle-active-load",beforeRecords)}});
+            out["cases"].push_back({{"name","lifecycle-loaded-cancel"},{"passed",Saw("lifecycle-loaded-cancel",beforeRecords)}});
+            beforeSave=saves; Request(out,"save","osfdefeatlifecycleclean"); Next(); break;
+        case 9:
+            if(Wait(Acknowledged(out,directory) && saves>beforeSave,60)) break;
+            beforeLoad=loads; beforeEpoch=RuntimeMutation::CurrentEpoch();
+            Request(out,"load","osfdefeatlifecycleclean"); Next(); break;
+        case 10:
+            if(Wait(Acknowledged(out,directory) && loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch,60)) break;
+            beforeRecords=Sequence(); script("InspectLoadedClean","",true); Next(); break;
+        case 11:
+            if(Wait(Recorded("lifecycle-restart-after-load",beforeRecords))) break;
+            out["cases"].push_back({{"name","lifecycle-cancelled-load"},{"passed",Saw("lifecycle-cancelled-load",beforeRecords)}});
+            out["cases"].push_back({{"name","lifecycle-restart-after-load"},{"passed",Saw("lifecycle-restart-after-load",beforeRecords)}});
+            Request(out,"load","osfdefeathealthy"); Next(); break;
+        case 12:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            beforeRecords=Sequence(); script("InspectCleanup"); Next(); break;
+        case 13:
+            if(Wait(Recorded("lifecycle-cleanup",beforeRecords))) break;
+            Check(out,"lifecycle-cleanup-load",Saw("lifecycle-cleanup",beforeRecords) && DefeatRegistry::Snapshot().empty() &&
+                Truce::Snapshot().empty() && Defeat::SnapshotAISuspensions().empty() && Engine::SnapshotCaptiveFactions().empty());
+            if(std::ranges::any_of(out["cases"],[](const auto& c){return !c.at("passed").template get<bool>();}))
+                throw std::runtime_error("Hunt lifecycle checks failed; see individual cases");
+            return true;
+        }
+        return false;
+    }
     if(scriptedOnly) {
         const auto& trial=scriptedCases[attackIndex];
         out["scriptedCase"]=trial.name;

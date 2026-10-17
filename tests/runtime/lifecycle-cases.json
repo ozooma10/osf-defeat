@@ -1,0 +1,18 @@
+[
+  "healthy-baseline",
+  "lifecycle-healthy-save",
+  "lifecycle-fixture",
+  "lifecycle-cancel",
+  "lifecycle-cancel-idempotent",
+  "lifecycle-alias-loss",
+  "lifecycle-stop",
+  "lifecycle-stopped-promotion",
+  "lifecycle-restart-old-death",
+  "lifecycle-reward-idle",
+  "lifecycle-active-before-save",
+  "lifecycle-active-load",
+  "lifecycle-loaded-cancel",
+  "lifecycle-cancelled-load",
+  "lifecycle-restart-after-load",
+  "lifecycle-cleanup-load"
+]
