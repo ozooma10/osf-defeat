@@ -157,6 +157,7 @@ Function PrepareMissedAttack()
     ; Equip an explicit melee weapon: after theft, the primary getter can retain
     ; a stale empty gun even after UnequipAll. This also avoids stripping armor.
     Weapon knife = Game.GetFormFromFile(0x35A48, "Starfield.esm") as Weapon
+    player.RemoveItem(knife, player.GetItemCount(knife), True)
     player.AddItem(knife, 1, True)
     player.EquipItem(knife, False, True)
     player.DrawWeapon()
@@ -165,6 +166,10 @@ Function PrepareMissedAttack()
     Weapon weaponBase = player.GetEquippedWeapon()
     Bool armed = weaponBase == knife && player.GetItemCount(knife) == 1
     OSFDefeatAcceptanceProbe.Record("shadows-miss-weapon", armed, player)
+    OSFDefeatAcceptanceProbe.Record("shadows-miss-weapon-count", player.GetItemCount(knife) == 1, player, player.GetItemCount(knife))
+    If weaponBase != None
+        OSFDefeatAcceptanceProbe.Record("shadows-miss-equipped", weaponBase == knife, player, weaponBase.GetFormID())
+    EndIf
     OSFDefeatAcceptanceProbe.Record("shadows-miss-controls", Game.IsFightingControlsEnabled(), player)
     OSFDefeatAcceptanceProbe.Record("shadows-miss-truce", OSFDefeat.IsRecoveryTruceActive(player), player)
     OSFDefeatAcceptanceProbe.Record("shadows-miss-ready", armed && Game.IsFightingControlsEnabled() && OSFDefeat.IsRecoveryTruceActive(player), player)
