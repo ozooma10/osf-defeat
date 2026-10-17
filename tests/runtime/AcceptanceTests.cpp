@@ -55,6 +55,15 @@ namespace {
     std::atomic<int> heldBlackout{};
     bool refusalOnly=false;
     bool blackoutOnly=false;
+    bool weaponsOnly=false;
+    constexpr const char* weaponKinds[]{
+        "pistol-eon","rifle-grendel","shotgun-coachman","shotgun-breach",
+        "laser-equinox","particle-inflictor","magpulse","magstorm",
+        "heavy-microgun","heavy-bridger","em-novablast","beam-cutter",
+        "melee-knife","melee-axe","melee-wakizashi","unarmed","bash-eon",
+        "grenade-frag","grenade-impact","grenade-shrapnel","grenade-particle","grenade-incendiary",
+        "mine-frag","mine-inferno","mine-cryo","mine-tesla"
+    };
     std::string refusalDomain="landed";
     int blackoutCheckpoint=1;
     const char* CheckpointName() { return blackoutCheckpoint==2 ? "theft" : "time"; }
@@ -173,22 +182,38 @@ namespace {
             ++loads; return RE::BSEventNotifyControl::kContinue;
         }
     } engineEvents;
-    void Papyrus(std::string_view function,std::string argument={},bool requireExisting=false) {
+    void Papyrus(std::string_view function,std::string argument={},bool requireExisting=false,const char* script=Script) {
         auto* vm=RE::GameVM::GetSingleton()->GetVM(); auto* player=RE::PlayerCharacter::GetSingleton();
         const auto handle=vm->GetObjectHandlePolicy().GetHandleForObject(static_cast<std::uint32_t>(player->GetFormType()),player);
         RE::BSTSmartPointer<RE::BSScript::Object> object;
-        if(!vm->FindBoundObject(handle,Script,false,object,true)) {
+        if(!vm->FindBoundObject(handle,script,false,object,true)) {
             if(requireExisting) throw std::runtime_error("Saved Papyrus acceptance consumer was not restored");
-            if(!vm->CreateObject(Script,object) || !object) throw std::runtime_error("Cannot create Papyrus acceptance consumer");
+            if(!vm->CreateObject(script,object) || !object) throw std::runtime_error("Cannot create Papyrus acceptance consumer");
             RE::BSScript::Internal::VirtualMachine::GetSingleton()->BindObject(object,handle,false);
             RE::BSTSmartPointer<RE::BSScript::Object> bound;
-            if(!vm->FindBoundObject(handle,Script,false,bound,true) || bound.get()!=object.get()) throw std::runtime_error("Cannot bind Papyrus acceptance consumer");
+            if(!vm->FindBoundObject(handle,script,false,bound,true) || bound.get()!=object.get()) throw std::runtime_error("Cannot bind Papyrus acceptance consumer");
         }
         const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-        if(!vm->DispatchMethodCall(handle,Script,RE::BSFixedString(function),[argument](RE::BSScrapArray<RE::BSScript::Variable>& args){
+        if(!vm->DispatchMethodCall(handle,script,RE::BSFixedString(function),[argument](RE::BSScrapArray<RE::BSScript::Variable>& args){
             args.clear(); if(!argument.empty()){args.resize(1);RE::BSScript::PackVariable(args[0],RE::BSFixedString(argument));} return true;
         },callback,0))
             throw std::runtime_error("Papyrus acceptance submission refused");
+    }
+    void WeaponPapyrus(std::string_view function,std::string argument={}) {
+        Papyrus(function,argument,false,"OSFDefeatWeaponAcceptance");
+    }
+    bool Recorded(std::string_view name,std::uint64_t after) {
+        std::scoped_lock lock(observationsLock);
+        return std::ranges::any_of(records,[&](const auto& record) {
+            return record.at("name").template get<std::string>()==name && record.at("sequence").template get<std::uint64_t>()>after;
+        });
+    }
+    void PrepareWeaponCase(RE::Actor& player) {
+        beforeRecords=Sequence();
+        if(!Truce::Begin(player,30)) throw std::runtime_error("Cannot start weapon matrix truce");
+        truceDeadline=Truce::Snapshot()[0].expiresAtDay;
+        WeaponPapyrus("PrepareAttack",weaponKinds[attackIndex]);
+        phase=6; phaseAt=Now();
     }
     void Check(Json& out,std::string_view name,bool passed) {
         out["cases"].push_back({{"name",name},{"passed",passed}});
@@ -250,6 +275,7 @@ bool ExpectsPlayerDeath() { return refusalOnly && (phase==3 || phase==4); }
 void Configure(const Json& config) {
     refusalOnly=config.value("refusalOnly",false);
     blackoutOnly=config.value("blackoutOnly",false);
+    weaponsOnly=config.value("weaponsOnly",false);
     blackoutCheckpoint=config.value("blackoutCheckpoint",1);
     if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
         heldBlackout=blackoutCheckpoint;
@@ -261,6 +287,64 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
     { std::scoped_lock lock(observationsLock); out["papyrus"]=records; }
+    if(weaponsOnly) {
+        out["weaponCase"]=weaponKinds[attackIndex];
+        switch(phase) {
+        case 0:
+            RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);
+            RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
+            Request(out,"save","osfdefeathealthy"); Next(); break;
+        case 1:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            Check(out,"weapons-healthy-save",DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty());
+            WeaponPapyrus("Initialize"); Next(); break;
+        case 2:
+            if(Wait(Recorded("weapons-fixture",0))) break;
+            Check(out,"weapons-fixture",Saw("weapons-fixture"));
+            if(!Truce::Begin(*player,30)) throw std::runtime_error("Cannot start passive control truce");
+            beforeRecords=Sequence(); WeaponPapyrus("PrepareAttack","pistol-eon"); Next(); break;
+        case 3:
+            if(Wait(Recorded("weapons-ready-pistol-eon",beforeRecords))) break;
+            if(!Saw("weapons-ready-pistol-eon",beforeRecords)) throw std::runtime_error("Passive weapon fixture failed");
+            Request(out,"weapon-passive","reload-aim"); Next(); break;
+        case 4:
+            if(Wait(Acknowledged(out,directory))) break;
+            WeaponPapyrus("InspectPassive"); Next(); break;
+        case 5:
+            if(Wait(Recorded("weapons-passive",beforeRecords))) break;
+            Check(out,"weapons-passive-controls",Saw("weapons-passive",beforeRecords) && Truce::IsActive(player->GetFormID()));
+            Truce::End(*player); attackIndex=0; PrepareWeaponCase(*player); break;
+        case 6: {
+            const auto name=std::string("weapons-ready-")+weaponKinds[attackIndex];
+            if(Wait(Recorded(name,beforeRecords))) break;
+            if(!Saw(name,beforeRecords) || !Truce::IsActive(player->GetFormID())) throw std::runtime_error(name);
+            ObserveNextAttack(*player);
+            Request(out,"weapon-attack",weaponKinds[attackIndex]); Next(); break;
+        }
+        case 7:
+            if(Wait(Acknowledged(out,directory))) break;
+            WeaponPapyrus("InspectAttack",weaponKinds[attackIndex]); Next(); break;
+        case 8: {
+            const auto name=std::string("weapons-observed-")+weaponKinds[attackIndex];
+            if(Wait(Recorded(name,beforeRecords))) break;
+            Check(out,std::string("weapons-")+weaponKinds[attackIndex],Saw(name,beforeRecords) &&
+                !Truce::IsActive(player->GetFormID()) && !Engine::HasCaptiveFactionApplied(*player) &&
+                !Engine::IsInCaptiveFaction(*player) && GameTime::NowDay()<truceDeadline);
+            if(attackIndex+1<std::size(weaponKinds)) { ++attackIndex; PrepareWeaponCase(*player); }
+            else { Request(out,"load","osfdefeathealthy"); Next(); }
+            break;
+        }
+        case 9:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            beforeRecords=Sequence(); WeaponPapyrus("InspectCleanup"); Next(); break;
+        case 10:
+            if(Wait(Recorded("weapons-cleanup",beforeRecords))) break;
+            Check(out,"weapons-cleanup-load",Saw("weapons-cleanup",beforeRecords) && DefeatRegistry::Snapshot().empty() &&
+                Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty() && scenes->GetSceneForActor(player)==0);
+            return true;
+        }
+        return false;
+    }
     auto* npc=RE::TESForm::LookupByID<RE::Actor>(npcID.load());
     if(npc) out["npc"]={{"id",npc->GetFormID()},{"defeated",Defeat::IsDefeated(npc)},{"captive",Capture::IsCaptive(npc)},
         {"faction",Engine::IsInCaptiveFaction(*npc)},{"distance",Distance(npc->GetPosition(),player->GetPosition())}};

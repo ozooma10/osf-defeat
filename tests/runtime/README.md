@@ -1,7 +1,37 @@
-# Blackout save/load and ship refusal acceptance
+# Runtime acceptance
 
 These are local, disposable MO2 + SFSE tests. Enemy-world persistence remains a
 separate [world-probe acceptance task](../world-shadows/README.md).
+
+## Run broader weapon coverage
+
+```powershell
+pwsh -NoProfile -File tools/test-runtime.ps1 -WeaponsOnly `
+  -ResultPath build/new-weapons-result.json
+```
+
+This focused suite uses the existing disposable quiet-cell save and uninstrumented
+production Shadows scripts. It creates no target NPC. Its separate inventory is
+`weapon-cases.json`: 26 attack cases plus baseline, save, fixture, passive controls,
+and healthy-load cleanup. The ordinary full suite retains its existing coverage;
+run this matrix separately when changing attack/truce behavior.
+
+Fixtures include Eon, Grendel, Coachman, Breach, Equinox, Va'ruun Inflictor,
+Magpulse, Magstorm, Microgun, Bridger, Novablast, Cutter, three melee weapons,
+unarmed, gun bash, five grenades, and frag/inferno/cryo/Tesla mines. Vanilla form
+IDs/editor IDs come from the installed Starfield.esm WEAP records. Every case
+requires stable truce through equipment setup, actual equipment identity for
+primary weapons, an observed production fire/melee callback, and truce/faction
+cleanup before the deadline. Guns also require ammunition consumption; throwables
+require exactly one item consumed. Cutter uses the fire callback because its
+recharging energy is not ordinary inventory ammunition. Reload/aim input must
+leave truce and ammunition unchanged.
+
+The bounded native graph observer retains callback diagnostics. Explosive cases
+wait six additional seconds after inspection; test health is raised to tolerate
+nearby wall impacts. A real healthy-save reload restores the seed and discards
+equipment, placed mines, and health changes. This proves the tested keyboard/mouse
+attacks, not every OMOD, camera/controller path, or third-party scripted producer.
 
 ## Run blackout coverage
 

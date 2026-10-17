@@ -59,6 +59,25 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','100')
             } else { throw '[blocked] Unexpected attack fixture.' }
         }
+        'weapon-passive' {
+            if ($name -ne 'reload-aim') { throw '[blocked] Unexpected passive weapon action.' }
+            $null=Invoke-Input 'focus'
+            Send-Key 82 100
+            Start-Sleep -Milliseconds 1500
+            $null=Invoke-Input 'click' @('--at-cursor','--button','right','--hold-ms','700')
+        }
+        'weapon-attack' {
+            $null=Invoke-Input 'focus'
+            if ($name -in @('grenade-frag','grenade-impact','grenade-shrapnel','grenade-particle','grenade-incendiary','mine-frag','mine-inferno','mine-cryo','mine-tesla')) {
+                Send-Key 71 200
+            } elseif ($name -eq 'bash-eon') {
+                Send-Key 86 200
+            } elseif ($name -in @('heavy-microgun','magstorm','em-novablast','beam-cutter')) {
+                $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','1800')
+            } elseif ($name -in @('pistol-eon','rifle-grendel','shotgun-coachman','shotgun-breach','laser-equinox','particle-inflictor','magpulse','heavy-bridger','melee-knife','melee-axe','melee-wakizashi','unarmed')) {
+                $null=Invoke-Input 'click' @('--at-cursor','--button','left','--hold-ms','200')
+            } else { throw '[blocked] Unexpected weapon matrix fixture.' }
+        }
         'move' { $null=Invoke-Input 'focus'; Send-Key 87 700 }
         'look' {
             $null=Invoke-Input 'focus'
