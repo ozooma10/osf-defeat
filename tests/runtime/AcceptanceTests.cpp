@@ -134,7 +134,7 @@ namespace {
         return ok;
     }
     bool VerifyDroppedWeapon(VM&,std::uint32_t,std::monostate,RE::TESObjectREFR* reference,RE::TESForm* weapon) {
-        const auto mods=reference && reference->GetBaseObject()==weapon && reference->extraDataList ?
+        const auto mods=reference && reference->GetBaseObject().get()==weapon && reference->extraDataList ?
             ReadInstanceMods(*reference->extraDataList) : std::nullopt;
         std::scoped_lock lock(observationsLock);
         const bool ok=mods && !weaponBaseline.empty() && *mods==weaponBaseline;
