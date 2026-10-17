@@ -53,6 +53,8 @@ namespace {
     bool packDefeatObserved{};
     WeaponMods weaponBaseline;
     std::atomic<int> heldBlackout{};
+    bool refusalOnly=false;
+    std::string refusalDomain="landed";
     int blackoutCheckpoint=1;
     const char* CheckpointName() { return blackoutCheckpoint==2 ? "theft" : "time"; }
     std::string ColdCasePrefix() { return blackoutCheckpoint==1 ? "shadows-blackout" : std::string("shadows-blackout-")+CheckpointName(); }
@@ -120,7 +122,7 @@ namespace {
         for(auto& ch:label) if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
         records.push_back({{"sequence",++sequence},{"name",label},{"ok",ok},
             {"subject",subject?subject->GetFormID():0},{"value",value}});
-        if((label=="fixture" || label=="shadows-ready" || label=="shadows-repeat-ready") && ok && subject) npcID=subject->GetFormID();
+        if((label=="fixture" || label=="shadows-ready" || label=="shadows-repeat-ready" || label=="domain-ready") && ok && subject) npcID=subject->GetFormID();
     }
     bool VerifyWeapon(VM&,std::uint32_t,std::monostate,RE::Actor* owner,RE::TESForm* weapon,RE::BSFixedString checkpoint) {
         const auto mods = owner && weapon ? ReadWeaponMods(*owner,*weapon) : std::nullopt;
@@ -242,7 +244,9 @@ void Bind(VM& vm) {
 }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
+bool ExpectsPlayerDeath() { return refusalOnly && (phase==3 || phase==4); }
 void Configure(const Json& config) {
+    refusalOnly=config.value("refusalOnly",false);
     blackoutCheckpoint=config.value("blackoutCheckpoint",1);
     if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
         heldBlackout=blackoutCheckpoint;
@@ -257,6 +261,51 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     auto* npc=RE::TESForm::LookupByID<RE::Actor>(npcID.load());
     if(npc) out["npc"]={{"id",npc->GetFormID()},{"defeated",Defeat::IsDefeated(npc)},{"captive",Capture::IsCaptive(npc)},
         {"faction",Engine::IsInCaptiveFaction(*npc)},{"distance",Distance(npc->GetPosition(),player->GetPosition())}};
+    if(refusalOnly) {
+        const auto prefix=std::string("shadows-refusal-")+refusalDomain;
+        switch(phase) {
+        case 0:
+            phaseAt=Now();
+            RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);
+            RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
+            Request(out,"save","osfdefeathealthy"); Next(); break;
+        case 1:
+            if(Wait(Acknowledged(out,directory),60)) break;
+            Check(out,"healthy-save",DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
+            std::filesystem::copy_file(Config::RootPath()/"AcceptanceShadows"/"minimal-shadows.json",
+                Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json",std::filesystem::copy_options::overwrite_existing);
+            Consequence::Reload();
+            beforeRecords=Sequence(); Papyrus("PrepareDomain",refusalDomain); Next(); break;
+        case 2:
+            if(Wait(Saw("domain-ready",beforeRecords) && Loaded(npc),90)) break;
+            Check(out,prefix+"-fixture",npc && npc!=player && !player->IsDead());
+            beforeRecords=Sequence(); beforeLoad=loads; beforeEpoch=RuntimeMutation::CurrentEpoch();
+            Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
+            Papyrus("WatchRefusal",refusalDomain); Next(); break;
+        case 3:
+            if(Wait(Saw("domain-refused-"+refusalDomain,beforeRecords) && player->IsDead(),20)) break;
+            Check(out,prefix+"-normal-death",!Defeat::IsDefeated(player) && !Ghost(player) &&
+                !Truce::IsActive(player->GetFormID()) && !Engine::HasCaptiveFactionApplied(*player) &&
+                scenes->GetSceneForActor(player)==0 && DefeatContext::GetLastPlayerConsequenceId()=="osfdefeat.shadows.aftermath");
+            // Vanilla death must reload the most recent healthy save. Observe
+            // the engine event/epoch instead of racing it with console typing.
+            Next(); break;
+        case 4:
+            if(Wait(loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch && !player->IsDead() && !Defeat::IsDefeated(player),45)) break;
+            beforeRecords=Sequence(); Papyrus("InspectRecoveredControls"); Next(); break;
+        case 5:
+            if(Wait(Saw("controls-up",beforeRecords) && scenes->GetSceneForActor(player)==0)) break;
+            if(Now()-phaseAt<3000) break;
+            Check(out,prefix+"-reload-cleanup",DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty() &&
+                Engine::SnapshotCaptiveFactions().empty() && Capture::Snapshot().empty());
+            if(refusalDomain=="landed") {
+                refusalDomain="space"; beforeRecords=Sequence(); Papyrus("PrepareDomain",refusalDomain); phase=2; phaseAt=Now(); break;
+            }
+            std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
+            return true;
+        }
+        return false;
+    }
     if(blackoutColdStart) {
         switch(phase) {
         case 0:

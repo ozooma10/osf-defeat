@@ -5,7 +5,9 @@ param(
     [string]$ResultPath = '',
     [string]$SourceHash = '',
     [switch]$Preflight,
-    [switch]$ShadowsOnly
+    [switch]$ShadowsOnly,
+    [string]$RefusalFixture = '',
+    [string]$PersistenceBuildReceipt = ''
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -24,6 +26,9 @@ if ($missing.Count) { Write-Error "[blocked] Missing OSF Test Harness files in $
 . (Join-Path $Harness 'scripts/Common.ps1')
 . (Join-Path $Harness 'scripts/Environment.ps1')
 . (Join-Path $Harness 'scripts/Reports.ps1')
+$refusalOnly=[bool]$RefusalFixture
+if ($refusalOnly -ne [bool]$PersistenceBuildReceipt) { throw 'RefusalFixture and PersistenceBuildReceipt must be supplied together.' }
+if ($refusalOnly) { $script:Config.FixtureSave=[IO.Path]::GetFullPath($RefusalFixture) }
 $script:Config.TestProfile='OSF Defeat Testing'
 $script:StateRoot=Join-Path $Harness 'state/defeat'
 $script:FixtureRoot=Join-Path $script:StateRoot 'fixture'
@@ -38,6 +43,7 @@ $expected=@(Get-Content (Join-Path $repo 'tests/runtime/cases.json') -Raw | Conv
 if ($ShadowsOnly) {
     $expected=@($expected | Where-Object { $_ -match '^(shadows-|truce-)' -or $_ -in @('healthy-baseline','npc-disposable-fixture','papyrus-registration','healthy-save') })
 }
+if ($refusalOnly) { $expected=@(Get-Content (Join-Path $repo 'tests/runtime/refusal-cases.json') -Raw | ConvertFrom-Json) }
 $compiler=Join-Path $script:Config.Game 'Tools/Papyrus Compiler/PapyrusCompiler.exe'
 $imports=Join-Path (Split-Path $repo -Parent) 'PapyrusSource'
 $animationProject=Join-Path (Split-Path $repo -Parent) 'OSF Animation'
@@ -84,7 +90,7 @@ function Reset-Fixture {
 # paths above are Defeat-specific; no Animation payload or source is edited.
 function Prepare-AnimationMailbox([string]$LaunchToken) {
     $script:DefeatLaunchToken=$LaunchToken
-    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly;blackoutColdStart=$script:BlackoutColdStart;blackoutCheckpoint=$script:BlackoutCheckpoint;weaponBaseline=$script:BlackoutWeaponBaseline}
+    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly;blackoutColdStart=$script:BlackoutColdStart;blackoutCheckpoint=$script:BlackoutCheckpoint;weaponBaseline=$script:BlackoutWeaponBaseline;refusalOnly=$refusalOnly}
 }
 
 try {
@@ -143,11 +149,26 @@ try {
     Copy-Tree (Join-Path $shadowsPayload 'SFSE/OSFDefeat/Consequences/Player') (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows')
     $script:Run.shadowsBuildReceipt=Join-Path $shadowsBuild 'build.json'
     $papyrus=Join-Path $repo 'tests/runtime/papyrus'
+    if (-not $refusalOnly) {
     $gatedSource=Join-Path $script:Run.path 'blackout-test-source/OSFDefeatShadowsAftermath.psc'
     New-BlackoutTestSource (Join-Path $repo 'shadows/Scripts/Source/OSFDefeatShadowsAftermath.psc') $gatedSource
     & $compiler $gatedSource "-i=$papyrus;$(Join-Path $repo 'shadows/Scripts/Source');$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')"
     if ($LASTEXITCODE) { throw '[failed] Blackout checkpoint instrumentation failed to compile.' }
     $script:Run.blackoutInstrumentation=@{source=$gatedSource;sha256=(Get-FileHash -LiteralPath $gatedSource).Hash;phases=@(2,3)}
+    }
+    if ($refusalOnly) {
+        $spike=Read-JsonFile ([IO.Path]::GetFullPath($PersistenceBuildReceipt))
+        if ($spike.outcome -ne 'passed') { throw '[blocked] Persistence fixture build did not pass.' }
+        foreach ($file in $spike.files) {
+            $from=Assert-ChildPath $spike.payload (Join-Path $spike.payload $file.path)
+            if ((Get-FileHash -LiteralPath $from).Hash -cne $file.sha256) { throw '[blocked] Persistence fixture payload hash differs.' }
+            $to=Assert-ChildPath $payload (Join-Path $payload $file.path)
+            if (Test-Path -LiteralPath $to) { throw '[blocked] Persistence fixture conflicts with test payload.' }
+            [IO.Directory]::CreateDirectory((Split-Path $to -Parent)) | Out-Null
+            Copy-Item -LiteralPath $from -Destination $to
+        }
+        $script:Run.persistenceBuildReceipt=[IO.Path]::GetFullPath($PersistenceBuildReceipt)
+    }
     $packScripts=Join-Path $repo 'pack/Scripts/Source'
     & $compiler $papyrus "-i=$papyrus;$(Join-Path $repo 'shadows/Scripts/Source');$packScripts;$(Join-Path $repo 'dist/Scripts/Source');$imports" "-o=$(Join-Path $payload 'Scripts')" "-f=$(Join-Path $imports 'Starfield_Papyrus_Flags.flg')" -all
     if ($LASTEXITCODE) { throw '[failed] Acceptance Papyrus compilation failed.' }
@@ -184,9 +205,10 @@ try {
     [IO.File]::WriteAllLines((Join-Path $profile 'modlist.txt'),(@($mods | ForEach-Object {'+'+$_})+$lines))
     foreach ($list in @('plugins.txt','loadorder.txt')) {
         $path=Join-Path $profile $list
-        $pluginLines=@(if (Test-Path -LiteralPath $path) {Get-Content -LiteralPath $path | Where-Object { $_.TrimStart('*') -notin @('OSFDefeatBasic.esm','OSFDefeatShadows.esm') }})
+        $pluginLines=@(if (Test-Path -LiteralPath $path) {Get-Content -LiteralPath $path | Where-Object { $_.TrimStart('*') -notin @('OSFDefeatBasic.esm','OSFDefeatShadows.esm','OSFDefeatPersistenceSpike.esm') }})
         $pluginLines+=if ($list -eq 'plugins.txt') {'*OSFDefeatBasic.esm'} else {'OSFDefeatBasic.esm'}
         $pluginLines+=if ($list -eq 'plugins.txt') {'*OSFDefeatShadows.esm'} else {'OSFDefeatShadows.esm'}
+        if ($refusalOnly) { $pluginLines+=if ($list -eq 'plugins.txt') {'*OSFDefeatPersistenceSpike.esm'} else {'OSFDefeatPersistenceSpike.esm'} }
         [IO.File]::WriteAllLines($path,[string[]]$pluginLines)
     }
     Set-IniValue (Join-Path $profile 'settings.ini') 'General' 'LocalSaves' 'false'
@@ -202,7 +224,7 @@ try {
     Stop-TestGame
     $cases=@($firstSession.snapshot.cases)
     $sessions=@(@{label='first';identity=$firstSession.identity;launchToken=$firstSession.launchToken})
-    foreach ($checkpoint in @(1,2,3)) {
+    foreach ($checkpoint in @(@(1,2,3) | Where-Object {-not $refusalOnly})) {
         Initialize-DefeatBlackoutRestart $checkpoint $firstSession.snapshot
         Copy-Item -LiteralPath (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows/minimal-shadows.json') -Destination (Join-Path $payload 'SFSE/OSFDefeat/Consequences/Player/zz-acceptance-shadows.json')
         Write-Host "Defeat acceptance: cold restart at blackout checkpoint $checkpoint"
@@ -236,7 +258,7 @@ try {
     }
     if ($script:Run) { Finish-RunArtifacts $outcome $message }
     if ($lock) { $lock.Dispose() }
-    $receipt=@{schemaVersion=1;outcome=$outcome;message=$message;sourceHash=$SourceHash;scope=$(if ($ShadowsOnly) {'shadows'} else {'full'});expectedCases=$expected;artifactDirectory=$(if ($script:Run) {$script:Run.path} else {$null})}
+    $receipt=@{schemaVersion=1;outcome=$outcome;message=$message;sourceHash=$SourceHash;scope=$(if ($refusalOnly) {'ship-space-refusal'} elseif ($ShadowsOnly) {'shadows'} else {'full'});expectedCases=$expected;artifactDirectory=$(if ($script:Run) {$script:Run.path} else {$null})}
     if ($ResultPath) { Write-JsonFile ([IO.Path]::GetFullPath($ResultPath)) $receipt }
 }
 exit $code

@@ -63,7 +63,11 @@ Actor Function NewShadow(Bool lowerLevel = False)
     Return None
 EndFunction
 
-Function ShadowsPrepare(Bool testEligibility = True)
+Function ShadowsPrepare()
+    PrepareShadowsFixture(True)
+EndFunction
+
+Function PrepareShadowsFixture(Bool testEligibility)
     Actor player = Game.GetPlayer()
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
     If hunt == None
@@ -291,7 +295,7 @@ EndFunction
 Function PrepareCheckpoint()
     OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     hunt.CancelHunt()
-    ShadowsPrepare(False)
+    PrepareShadowsFixture(False)
 EndFunction
 
 Function ObserveCheckpoint(String kind)
@@ -717,4 +721,88 @@ Function RebuildNpc()
     ; Deliberately separate the captive from the destination before testing transfer.
     npc.MoveTo(Game.GetPlayer(), 5.0, 0.0, 0.0)
     OSFDefeatAcceptanceProbe.Record("npc-rebuilt", npc.Is3DLoaded(), npc)
+EndFunction
+
+Function PrepareDomain(String kind)
+    Actor player = Game.GetPlayer()
+    hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
+    Quest spike = Game.GetFormFromFile(0x800, "OSFDefeatPersistenceSpike.esm") as Quest
+    SpaceshipReference ship = Game.GetPlayerHomeSpaceShip()
+    If hunt == None || spike == None || ship == None
+        OSFDefeatAcceptanceProbe.Record("domain-fixture-missing", False)
+        Return
+    EndIf
+    ObjectReference marker = (spike.GetAlias(2) as ReferenceAlias).GetReference()
+    If marker == None || marker.GetCurrentShipRef() != ship || !ship.IsLanded() || player.GetCurrentPlanet() != ship.GetCurrentPlanet()
+        OSFDefeatAcceptanceProbe.Record("domain-marker-invalid", False)
+        Return
+    EndIf
+    player.MoveTo(marker)
+    Utility.Wait(2.0)
+    If kind == "space"
+        ship.TakeOff()
+        Int waited = 0
+        While (ship.IsLanded() || !player.IsInSpaceEx(False)) && waited < 600
+            Utility.Wait(0.1)
+            waited += 1
+        EndWhile
+        Utility.Wait(2.0)
+    EndIf
+    Bool domainOK = player.GetCurrentShipRef() == ship && player.GetParentCell().IsInterior()
+    If kind == "landed"
+        domainOK = domainOK && ship.IsLanded() && !player.IsInSpaceEx(False)
+    Else
+        domainOK = domainOK && !ship.IsLanded() && player.IsInSpaceEx(False)
+    EndIf
+    OSFDefeatAcceptanceProbe.Record("domain-ship-landed", ship.IsLanded())
+    OSFDefeatAcceptanceProbe.Record("domain-space", player.IsInSpaceEx(False))
+    OSFDefeatAcceptanceProbe.Record("domain-space-including-dungeons", player.IsInSpaceEx(True))
+    OSFDefeatAcceptanceProbe.Record("domain-on-foot-controls", Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled())
+    If !domainOK
+        OSFDefeatAcceptanceProbe.Record("domain-fixture-invalid", False)
+        Return
+    EndIf
+    hunt.Start()
+    Utility.Wait(0.5)
+    shadow = NewShadow()
+    If shadow == None
+        OSFDefeatAcceptanceProbe.Record("domain-aggressor-missing", False)
+        Return
+    EndIf
+    testWeapon = Game.GetFormFromFile(0x476C4, "Starfield.esm") as Weapon
+    player.RemoveItem(testWeapon, player.GetItemCount(testWeapon), True)
+    player.AddItem(testWeapon, 1, True)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0x14127D, "Starfield.esm") as ObjectMod)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0xF2013, "Starfield.esm") as ObjectMod)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0xFEA04, "Starfield.esm") as ObjectMod)
+    player.AttachModToInventoryItem(testWeapon, Game.GetFormFromFile(0xFA8D6, "Starfield.esm") as ObjectMod)
+    player.EquipItem(testWeapon, False, True)
+    OSFDefeatAcceptanceProbe.VerifyWeapon(player, testWeapon, "baseline")
+    repeatCredits = player.GetItemCount(Game.GetCredits())
+    shadowCredits = shadow.GetItemCount(Game.GetCredits())
+    defeatDay = Utility.GetCurrentGameTime()
+    OSFDefeatAcceptanceProbe.Record("domain-ready", !player.IsDead() && !OSFDefeat.IsDefeated(player) && player.GetEquippedWeapon() == testWeapon, shadow)
+EndFunction
+
+Function WatchRefusal(String kind)
+    Actor player = Game.GetPlayer()
+    OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
+    Int waited = 0
+    While (aftermath.LastResult != "unsupported-domain" || aftermath.IsRunning()) && waited < 100
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    Bool stopped = aftermath.LastResult == "unsupported-domain" && !aftermath.IsRunning() && aftermath.Phase == 0
+    Bool creditsOK = player.GetItemCount(Game.GetCredits()) == repeatCredits && shadow.GetItemCount(Game.GetCredits()) == shadowCredits
+    Bool huntOK = hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && !hunt.IsObjectiveDisplayed(10)
+    huntOK = huntOK && !player.HasSpell(hunt.PlayerDebuff) && !shadow.HasSpell(hunt.NemesisBuff)
+    Bool weaponOK = player.GetItemCount(testWeapon) == 1 && OSFDefeatAcceptanceProbe.VerifyWeapon(player, testWeapon, "refused-" + kind)
+    Float hours = (Utility.GetCurrentGameTime() - defeatDay) * 24.0
+    Bool timeOK = hours >= 0.0 && hours < 0.1
+    OSFDefeatAcceptanceProbe.Record("domain-refusal-stopped", stopped)
+    OSFDefeatAcceptanceProbe.Record("domain-refusal-credits", creditsOK)
+    OSFDefeatAcceptanceProbe.Record("domain-refusal-empty-hunt", huntOK)
+    OSFDefeatAcceptanceProbe.Record("domain-refusal-weapon", weaponOK)
+    OSFDefeatAcceptanceProbe.Record("domain-refusal-no-time-skip", timeOK, None, hours)
+    OSFDefeatAcceptanceProbe.Record("domain-refused-" + kind, stopped && creditsOK && huntOK && weaponOK && timeOK)
 EndFunction

@@ -22,6 +22,7 @@ namespace OSFDefeat::RuntimeTests {
         Json snapshot;
         std::string token, processStart;
         bool initialized=false, running=false, finished=false, shadowsOnly=false, blackoutColdStart=false;
+        bool configRefusalOnly=false;
         bool publishPending=false;
         int phase=0;
         std::int64_t phaseStart{}, deadline{}, publishBlockedAt{};
@@ -76,6 +77,7 @@ namespace OSFDefeat::RuntimeTests {
                 shadowsOnly=config.value("shadowsOnly",false);
                 blackoutColdStart=config.value("blackoutColdStart",false);
                 Acceptance::Configure(config);
+                configRefusalOnly=config.value("refusalOnly",false);
                 directory=config.at("stateDir").get<std::string>(); token=config.at("launchToken").get<std::string>();
                 if(!directory.is_absolute() || token.empty() || !std::filesystem::is_directory(directory)) { directory.clear(); return; }
                 FILETIME created{}, exited{}, kernel{}, user{};
@@ -115,7 +117,7 @@ namespace OSFDefeat::RuntimeTests {
                 snapshot["runId"]=request.at("runId"); snapshot["state"]="running";
                 running=true; deadline=Now()+600000; phaseStart=Now();
                 scenes=OSF::API::RequestSceneAPI();
-                if(shadowsOnly || blackoutColdStart) {
+                if(shadowsOnly || blackoutColdStart || configRefusalOnly) {
                     if(!player || !Engine::HealthAV() || !scenes) throw std::runtime_error("Runtime dependencies unavailable");
                     if(!blackoutColdStart) Check("healthy-baseline",!Defeat::IsDefeated(player));
                     initialHealth=Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV());
@@ -124,7 +126,7 @@ namespace OSFDefeat::RuntimeTests {
             }
             if(Now()>deadline) throw std::runtime_error("Runtime suite deadline expired");
             if(auto* ui=RE::UI::GetSingleton(); ui && (ui->IsMenuOpen("LoadingMenu") || ui->IsMenuOpen("MainMenu"))) { Publish(); return; }
-            if(!player || player->IsDead()) throw std::runtime_error("Player unavailable or dead");
+            if(!player || (player->IsDead() && !Acceptance::ExpectsPlayerDeath())) throw std::runtime_error("Player unavailable or dead");
             const auto elapsed=Now()-phaseStart;
             switch(phase) {
             case 0:
