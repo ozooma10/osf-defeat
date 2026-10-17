@@ -3,6 +3,33 @@
 These are local, disposable MO2 + SFSE tests. Enemy-world persistence remains a
 separate [world-probe acceptance task](../world-shadows/README.md).
 
+## Run hunt lifecycle coverage
+
+```powershell
+pwsh -NoProfile -File tools/test-runtime.ps1 -LifecycleOnly `
+  -ResultPath build/new-lifecycle-result.json
+```
+
+This uses the disposable quiet-cell seed, spawned actors and uninstrumented
+production Shadows scripts. `lifecycle-cases.json` contains 18 assertions for
+cancellation, idempotence, alias loss, external stop, stopped admission, restart,
+stale target death, restarted hostile-spell subscriptions, reward retention and
+explicit reward cleanup. Cleanup must preserve transferred credits and the Eon.
+
+Real checkpoints save/load an active hunt and a cancelled hunt. The saved consumer
+must already exist after loading. Clearing the alias before cancellation then
+proves that independent cleanup ownership survived the save. Test-owned AI is
+resumed before saving; all three retained sidecars require empty framework state.
+The final healthy reload restores controls and checks every cleanup registry.
+Alias-loss injection does not establish real enemy persistence or cell resets.
+This focused mode excludes blackout instrumentation and cold-restart dispatch.
+
+Latest acceptance: **18/18 passed**, Defeat `b5d184a`, receipt
+`build/lifecycle-06.json`, artifacts
+`OSF Test Harness/artifacts/20261017-212507-872-DefeatSmoke`.
+See the [implementation record](../../docs/MINIMAL-SHADOWS-IMPLEMENTATION.md#hunt-lifecycle-cleanup-2026-10-17)
+for the reproduced failures, fixes and broader regression status.
+
 ## Run scripted attack compatibility
 
 ```powershell

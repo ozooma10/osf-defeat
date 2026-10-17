@@ -29,6 +29,9 @@ pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
 
 # Scripted attacks, attribution controls, and healthy-load cleanup (23 assertions).
 pwsh -NoProfile -File tools/test-runtime.ps1 -ScriptedOnly
+
+# Hunt cancellation, shutdown/restart, and save/load cleanup (18 assertions).
+pwsh -NoProfile -File tools/test-runtime.ps1 -LifecycleOnly
 ```
 
 `-Mode debug` selects debug instead of releasedbg. `-Harness 'D:\...\OSF Test Harness'`

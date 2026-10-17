@@ -24,7 +24,7 @@ inventory item by base form; ambiguous stacks and quest items are skipped. Suit,
 helmet, and boost pack are never taken. The modified/legendary Eon fixture preserves
 every OMOD row through theft, reload, retrieval and forced world pickup.
 Base value is not a damage or modification-quality
-comparison; other weapon families still need coverage.
+comparison; theft preservation for other weapon families still needs coverage.
 
 Essential, protected, unique, quest-aliased, commanded, child, teammate, ghost,
 scene-bound, and more-than-15-levels-higher actors are excluded. Native reservation
@@ -33,12 +33,14 @@ protection override, including cleared overrides.
 
 The aftermath fades out, passes at least two and less than three hours (the engine
 rounds to hour boundaries), recovers in place and grants a
-30-second truce. The native damage path and player fire/animation callbacks end
-the truce on attack. Missed knife, unarmed, Eon and frag attacks, truce save/load
-and expiry pass in the disposable-cell suite. Frag release emits `WeaponFire`. Scripted producers that
-bypass these callbacks must call `EndRecoveryTruce` before attacking.
+30-second truce. Native damage/discharge observers and player fire, animation and
+hostile-spell callbacks end the truce on attack. The broader weapon and scripted
+matrices cover the tested attack families, explicit remote-cast blame and controls.
+Truce save/load and expiry pass in the disposable-cell suite. Anonymous damage and
+custom producers outside those paths must call `EndRecoveryTruce` before attacking.
 Ship interiors and space refuse this loop and recover the framework state before
-requesting normal death. That refusal path also needs a dedicated live fixture.
+requesting normal death. Landed and orbital on-foot refusal and automatic reload
+pass in the disposable Frontier fixture; piloting and hostile boarding remain open.
 
 External quest interruption and an early-blackout save/reload restore recovery
 and controls without another theft/time skip. This requires OSF Animation
@@ -49,5 +51,12 @@ existing-enemy saves at an authored combat site and a generated enemy structure.
 
 The plugin has no startup quest or world edits. Its priority-30 consequence starts
 the repeatable aftermath quest, which starts the persistent hunt manager as needed.
-Before disabling a tested installation, call the hunt quest's `CancelHunt` and
-the framework's `ForceRecoverAll`, then save. Stolen loot stays in the NPC inventory.
+The hunt retains a saved cleanup reference even if its alias disappears. External
+shutdown removes owned abilities, unregisters events, stops its timer and resets
+the stopped journal; starting it again restores attack subscriptions. Alias loss
+lifts the wound without granting a kill reward. Explicit `CancelHunt` also removes
+the earned reward and truce; requests during a mutation remain queued.
+
+Once the blackout has ended, call the hunt quest's `CancelHunt` and the framework's
+`ForceRecoverAll` before disabling a tested installation. Verify that owned effects,
+aliases and truce are gone, then save. Stolen loot stays where it was transferred.

@@ -9,6 +9,12 @@ remains open below.
 
 - One persistent actual-aggressor alias, titled **The Unbroken**, with a hunt objective.
   Another defeat cannot replace an occupied slot, steal again or remove its debuff.
+- The hunt retains its own actor reference for cleanup after aliases disappear.
+  Cancellation removes owned abilities, aliases, the objective and truce without
+  moving stolen loot. Requests received during a mutation remain queued. External
+  shutdown also stops subscriptions/timers and resets the stopped quest's journal;
+  restarting re-registers player attack callbacks. Alias loss abandons the hunt
+  without awarding a kill or removing an earlier earned reward.
 - **Unbroken** gives the nemesis +40 physical resistance; **Shaken** gives the player
   -20. A player kill earns **Hardened Resolve** (+10) only when the target is at least
   the player's level at death. Another killer clears the debuff without that reward.
@@ -68,7 +74,12 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
 
 ## Validation — 2026-10-17
 
-- Full regression: **78/78 live assertions**, four owned local MO2/SFSE
+- Hunt lifecycle: **18/18 live assertions**, Defeat `b5d184a`, uninstrumented
+  production Shadows scripts. Receipt `build/lifecycle-06.json`; artifacts
+  `../OSF Test Harness/artifacts/20261017-212507-872-DefeatSmoke`.
+  The current full rerun passes all offline checks but is blocked on screenshot
+  allocation under the desktop's memory commit limit; details below.
+- Previous full regression: **78/78 live assertions**, four owned local MO2/SFSE
   processes, **85 native cases / 1,031 checks**, **132 runner checks**, payload
   validation, production build and source-integrity checks pass. Defeat `ca53475`,
   CommonLib `ebc14f7`, Animation `fcf9714`; receipt `build/scripted-full-01/summary.json`;
@@ -259,6 +270,53 @@ blame; run 03 proved actual health-write attribution. Run 04 passed 21 cases, th
 run 05 added and passed the two object-source controls. None of the failed runs is
 counted as a suite pass. Basic remains the shipped pack; Shadows remains staged.
 
+## Hunt lifecycle cleanup — 2026-10-17
+
+The quiet-cell lifecycle suite passes **18/18 assertions**, using spawned actors
+and real save/load checkpoints. Defeat `b5d184a`, receipt `build/lifecycle-06.json`,
+artifacts `OSF Test Harness/artifacts/20261017-212507-872-DefeatSmoke`; owned PID
+46512, creation FILETIME `134367459325878084`. The source remained unchanged during
+the run, and the owned game closed normally.
+
+The original hunt leaked its NPC ability and player wound when the alias was
+cleared or the quest stopped. `OnQuestShutdown` receives already-empty aliases,
+so the hunt now saves the actor whose ability it owns independently of the alias.
+Its timer clears an orphaned hunt, while explicit cancellation and shutdown also
+remove the earned reward and recovery truce. Cancellation requests made while
+promotion/death handling is busy are retained until that mutation finishes.
+Existing active saves can adopt their live alias when the new ownership field is
+empty; this does not reconstruct actors from saves whose old alias was already lost.
+
+The engine ignores objective setters on a stopped quest. A retained diagnostic
+run proved that force-hide and mark-failed calls leave the objective unchanged,
+while `Quest.Reset()` clears it and leaves the quest stopped. Production now resets
+only after owned-state cleanup finishes. Explicit cleanup of a completed hunt
+also resets completion/failure flags before hiding its objective.
+
+Coverage includes active cancellation with a truce, repeated cancellation, alias
+loss, external shutdown, refusal to promote while stopped, a fresh hunt surviving
+the old target's death, and an actual hostile-spell callback after restart.
+A credited kill's reward survives idle monitoring and explicit cleanup removes it.
+An active hunt survives a real load; its saved actor reference still cleans the
+NPC after the alias is deliberately cleared. A cancelled hunt remains clean after
+another save/load, and another promotion succeeds. Credit and stolen Eon counts
+remain unchanged by cleanup. Final healthy reload requires working controls and
+empty defeat, AI-suspension, truce and captive-faction registries. Alias clearing
+here is fault injection, not evidence of a world-cell reset or enemy persistence.
+
+Earlier iterations are retained: run 01 exposed alias/shutdown leaks and an omitted
+checkpoint allowlist entry; run 02 exposed test-owned AI state in a supposedly
+clean checkpoint; runs 03–04 isolated stopped journal state. Run 05 established
+the reset behavior and restart callback, then was blocked by capture allocation.
+These do not count as suite passes. Run 06 passes without diagnostic recovery.
+
+Current full-regression attempts `build/lifecycle-full-01` and `-02` pass **85 native
+cases / 1,031 assertions**, **132 runner checks**, payload validation and production
+build. Their live runs are **blocked**, not passed. The capture helper's new
+diagnostics (Harness `e1ef35a`) identify GPU readback allocation with only
+16,306,176 bytes of available system commit despite about 7 GB of free physical RAM.
+Full runtime acceptance of this lifecycle revision remains pending memory headroom.
+
 ## Remaining acceptance before replacing Basic
 
 - Existing world aggressor at an authored combat encounter and a generated enemy
@@ -278,5 +336,7 @@ alone does not certify a reset. Two new disposable combat saves are still requir
 
 The wake-up table remains the next slice after these world gates. The five-slot
 library, dropped pack, companion rescue, settings and wider traits follow later.
-Before disabling this test pack, call `CancelHunt`, then `ForceRecoverAll`, verify
-cleanup and save. Stolen loot remains where it was transferred.
+Once the blackout has ended, call `CancelHunt`, then `ForceRecoverAll` before
+disabling this test pack. Verify cleared aliases, owned abilities and truce before
+saving: cancellation can be queued behind an active mutation. Stolen loot remains
+where it was transferred.

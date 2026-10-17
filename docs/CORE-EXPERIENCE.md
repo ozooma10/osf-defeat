@@ -253,6 +253,12 @@ blame handling; hostile spell callbacks are also covered. Healing, NPC attacks,
 missing blame and invalid-source controls preserve the player's truce. Anonymous
 `DamageValue` still requires explicit `EndRecoveryTruce` integration. The 31-case
 weapon matrix and full 78-case regression pass with the compatibility changes.
+A separate hunt-lifecycle matrix passes 18 assertions for cancellation, alias
+loss, shutdown, restarted attack subscriptions, reward cleanup and real save/load
+checkpoints. The hunt retains an independent cleanup reference and resets the
+stopped quest's journal after removing owned state. The full rerun after these
+lifecycle changes passes offline checks; live completion is pending resolution
+of the desktop memory commit limit documented in the acceptance record.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.
