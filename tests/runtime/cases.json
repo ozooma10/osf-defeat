@@ -56,5 +56,9 @@
   "shadows-negative-eligibility",
   "shadows-modified-weapon-reload",
   "shadows-modified-weapon-retrieval",
-  "shadows-modified-world-drop"
+  "shadows-modified-world-drop",
+  "shadows-repeat-defeat",
+  "shadows-lower-level-no-reward",
+  "shadows-blackout-interrupted",
+  "shadows-blackout-save-load"
 ]

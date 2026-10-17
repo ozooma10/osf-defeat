@@ -1,6 +1,6 @@
 # Dot-sourced after the existing harness helpers. These are fixed acceptance actions.
 function Invoke-DefeatConsole([string]$Command) {
-    if ($Command -notmatch '^(save|load) osfdefeat(healthy|down|clean|truce)$') { throw '[blocked] Unexpected acceptance console command.' }
+    if ($Command -notmatch '^(save|load) osfdefeat(healthy|down|clean|truce|blackout)$') { throw '[blocked] Unexpected acceptance console command.' }
     $null=Invoke-Input 'focus'
     Send-Key 192 200
     try {
@@ -31,7 +31,7 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             Invoke-DefeatConsole "save $name"
             $null=Wait-Observed "Defeat persistence save callback $name" {Read-JsonFile (Join-Path $script:DefeatMailbox 'snapshot.json')} {param($s) $s.engine.saveCallbacks -gt $Snapshot.engine.saveCallbacks} 30
             $null=Wait-Observed "real save pair $name" { (Test-Path -LiteralPath $save) -and (Test-Path -LiteralPath $sidecar) } {param($s) $s} 30
-            $expected=if ($name -eq 'osfdefeatdown') { @{DFT0=2;CPT0=1;CAP0=1;PCF0=1} } elseif ($name -eq 'osfdefeattruce') { @{CPT0=1;TRC0=1;PCF0=1} } else { @{} }
+            $expected=if ($name -eq 'osfdefeatdown') { @{DFT0=2;CPT0=1;CAP0=1;PCF0=1} } elseif ($name -eq 'osfdefeattruce') { @{CPT0=1;TRC0=1;PCF0=1} } elseif ($name -eq 'osfdefeatblackout') { @{DFT0=1;PCF0=1} } else { @{} }
             $inspection=Read-DefeatCosave $sidecar $expected
             $evidence=Join-Path $script:Run.path "saves/$name"
             [IO.Directory]::CreateDirectory($evidence) | Out-Null
@@ -42,7 +42,7 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             $null=Save-Capture $name
         }
         'load' {
-            if ($name -notin @('osfdefeathealthy','osfdefeatdown','osfdefeattruce')) { throw '[blocked] Unexpected acceptance load.' }
+            if ($name -notin @('osfdefeathealthy','osfdefeatdown','osfdefeattruce','osfdefeatblackout')) { throw '[blocked] Unexpected acceptance load.' }
             Invoke-DefeatConsole "load $name"
             # Do not require gameplay immediately: the native suite also requires a new
             # TESLoadGameEvent and persistence epoch before advancing after this receipt.

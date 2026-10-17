@@ -60,7 +60,7 @@ namespace {
         for(auto& ch:label) if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
         records.push_back({{"sequence",++sequence},{"name",label},{"ok",ok},
             {"subject",subject?subject->GetFormID():0},{"value",value}});
-        if((label=="fixture" || label=="shadows-ready") && ok && subject) npcID=subject->GetFormID();
+        if((label=="fixture" || label=="shadows-ready" || label=="shadows-repeat-ready") && ok && subject) npcID=subject->GetFormID();
     }
     bool VerifyWeapon(VM&,std::uint32_t,std::monostate,RE::Actor* owner,RE::TESForm* weapon,RE::BSFixedString checkpoint) {
         const auto mods = owner && weapon ? ReadWeaponMods(*owner,*weapon) : std::nullopt;
@@ -371,15 +371,15 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 35:
         if(Wait(!Truce::IsActive(player->GetFormID()),10)) break;
         Check(out,"truce-timer-expiry",!Engine::HasCaptiveFactionApplied(*player) && !Defeat::IsDefeated(player));
-        Papyrus("ShadowsPlayerKill"); Next(); break;
+        Papyrus("PrepareRepeatDefeat"); phase=39; phaseAt=Now(); break;
     case 36:
-        if(Wait(Saw("shadows-player-reward") && Saw("shadows-other-kill"),30)) break;
+        if(Wait(Saw("shadows-player-reward") && Saw("shadows-other-kill") && Saw("shadows-lower-level-no-reward"),45)) break;
         Check(out,"shadows-player-kill-reward",Saw("shadows-player-reward"));
         Check(out,"shadows-other-kill-clears-debuff",Saw("shadows-other-kill"));
         Check(out,"shadows-modified-weapon-retrieval",Saw("weapon-mods-retrieved"));
         Check(out,"shadows-modified-world-drop",Saw("shadows-world-drop") && Saw("weapon-mods-world-pickup"));
-        std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
-        Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); Next(); break;
+        Check(out,"shadows-lower-level-no-reward",Saw("shadows-lower-level-no-reward"));
+        beforeRecords=Sequence(); Papyrus("PrepareBlackout"); phase=42; phaseAt=Now(); break;
     case 37:
         if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
         Check(out,"shadows-cleanup-load",Truce::Snapshot().empty() && Engine::SnapshotCaptiveFactions().empty());
@@ -387,6 +387,46 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     case 38:
         if(Wait(Saw("shadows-miss-ready"),10)) break;
         Request(out,"attack-miss","melee"); phase=34; phaseAt=Now(); break;
+    case 39:
+        if(Wait(Saw("shadows-repeat-ready") && Loaded(npc))) break;
+        packDefeatObserved=false;
+        Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc); Next(); break;
+    case 40:
+        if(Defeat::IsDefeated(player) && DefeatContext::GetLastPlayerConsequenceId()=="osfdefeat.shadows.aftermath") packDefeatObserved=true;
+        if(Wait(packDefeatObserved && !Defeat::IsDefeated(player) && Truce::IsActive(player->GetFormID()) && scenes->GetSceneForActor(player)==0,30)) break;
+        Papyrus("InspectRepeatDefeat"); Next(); break;
+    case 41:
+        if(Wait(Saw("shadows-repeat-defeat"))) break;
+        Check(out,"shadows-repeat-defeat",Saw("shadows-repeat-defeat"));
+        Truce::End(*player);
+        Papyrus("ShadowsPlayerKill"); phase=36; phaseAt=Now(); break;
+    case 42:
+        if(Wait(Saw("shadows-repeat-ready",beforeRecords) && Loaded(npc))) break;
+        Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
+        Papyrus("WatchBlackout","interrupt"); Next(); break;
+    case 43:
+        if(Wait(Saw("shadows-blackout-interrupted") && !Defeat::IsDefeated(player))) break;
+        Check(out,"shadows-blackout-interrupted",Saw("shadows-blackout-interrupted"));
+        Truce::End(*player);
+        beforeRecords=Sequence(); Papyrus("PrepareBlackout"); Next(); break;
+    case 44:
+        if(Wait(Saw("shadows-repeat-ready",beforeRecords) && Loaded(npc))) break;
+        Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
+        Papyrus("WatchBlackout","save"); Next(); break;
+    case 45:
+        if(Wait(Saw("shadows-blackout-ready"))) break;
+        Request(out,"save","osfdefeatblackout"); Next(); break;
+    case 46:
+        if(Wait(Acknowledged(out,directory),60)) break;
+        Request(out,"load","osfdefeatblackout"); Next(); break;
+    case 47:
+        if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
+        Papyrus("InspectLoadedBlackout"); Next(); break;
+    case 48:
+        if(Wait(Saw("shadows-blackout-loaded"))) break;
+        Check(out,"shadows-blackout-save-load",Saw("shadows-blackout-loaded"));
+        std::filesystem::remove(Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json"); Consequence::Reload();
+        Defeat::ForceRecoverAll(); Request(out,"load","osfdefeathealthy"); phase=37; phaseAt=Now(); break;
     }
     return false;
 }

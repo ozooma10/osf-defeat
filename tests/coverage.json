@@ -130,7 +130,11 @@
       "shadows-negative-eligibility",
       "shadows-modified-weapon-reload",
       "shadows-modified-weapon-retrieval",
-      "shadows-modified-world-drop"
+      "shadows-modified-world-drop",
+      "shadows-repeat-defeat",
+      "shadows-lower-level-no-reward",
+      "shadows-blackout-interrupted",
+      "shadows-blackout-save-load"
     ],
     "limits": "Disposable spawned aggressor in a quiet cell; exact modified/legendary OMOD metadata at theft, reload, corpse retrieval and forced world pickup. Existing world enemies, generated structures, natural death drops and ship refusal require separate acceptance."
   }

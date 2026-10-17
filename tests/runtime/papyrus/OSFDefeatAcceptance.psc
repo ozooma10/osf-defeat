@@ -16,8 +16,10 @@ Float playerResistance
 Float shadowResistance
 Float defeatDay
 Int shadowCredits
+Actor repeatAggressor
+Int repeatCredits
 
-Actor Function NewShadow()
+Actor Function NewShadow(Bool lowerLevel = False)
     Int[] bases = new Int[10]
     bases[0] = 0x270255
     bases[1] = 0x270254
@@ -34,7 +36,11 @@ Actor Function NewShadow()
         Actor candidate = Game.GetPlayer().PlaceAtMe(Game.GetFormFromFile(bases[i], "Starfield.esm"), 1, False, True, False) as Actor
         If candidate != None
             OSFDefeatAcceptanceProbe.Record("shadow-candidate-level", True, candidate, candidate.GetLevel())
-            If candidate.GetLevel() >= Game.GetPlayer().GetLevel() && hunt.Eligible(candidate)
+            Bool levelMatch = candidate.GetLevel() >= Game.GetPlayer().GetLevel()
+            If lowerLevel
+                levelMatch = candidate.GetLevel() < Game.GetPlayer().GetLevel()
+            EndIf
+            If levelMatch && hunt.Eligible(candidate)
                 candidate.Enable()
                 candidate.MoveTo(Game.GetPlayer(), 8.0, 0.0, 0.0)
                 OSFDefeat.SuspendActorAI(candidate)
@@ -201,6 +207,78 @@ Function ShadowsPlayerKill()
     ok = promoted && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && !Game.GetPlayer().HasSpell(hunt.PlayerReward)
     ok = ok && hunt.Nemesis.GetReference() == None
     OSFDefeatAcceptanceProbe.Record("shadows-other-kill", ok, shadow)
+    shadow = NewShadow(True)
+    If shadow == None
+        OSFDefeatAcceptanceProbe.Record("shadows-lower-level-no-reward", False)
+        Return
+    EndIf
+    promoted = hunt.Promote(shadow)
+    shadow.Kill(Game.GetPlayer())
+    OSFDefeat.ResumeActorAI(shadow)
+    waited = 0
+    While hunt.Nemesis.GetActorReference() == shadow && waited < 50
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    OSFDefeatAcceptanceProbe.Record("shadows-lower-level-no-reward", promoted && shadow.IsDead() && hunt.Nemesis.GetReference() == None && !Game.GetPlayer().HasSpell(hunt.PlayerReward) && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff), shadow, shadow.GetLevel())
+EndFunction
+
+Function PrepareRepeatDefeat()
+    repeatCredits = Game.GetPlayer().GetItemCount(Game.GetCredits())
+    repeatAggressor = NewShadow()
+    OSFDefeatAcceptanceProbe.Record("shadows-repeat-ready", repeatAggressor != None, repeatAggressor)
+EndFunction
+
+Function InspectRepeatDefeat()
+    Bool ok = hunt.Nemesis.GetActorReference() == shadow && Game.GetPlayer().HasSpell(hunt.PlayerDebuff)
+    ok = ok && Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits && shadow.GetItemCount(testWeapon) == 1
+    ok = ok && !OSFDefeat.IsDefeated(Game.GetPlayer()) && OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer())
+    OSFDefeatAcceptanceProbe.Record("shadows-repeat-defeat", ok, shadow)
+    OSFDefeat.ResumeActorAI(repeatAggressor)
+    repeatAggressor.Disable()
+    repeatAggressor.Delete()
+EndFunction
+
+Function PrepareBlackout()
+    hunt.CancelHunt()
+    repeatAggressor = NewShadow()
+    repeatCredits = Game.GetPlayer().GetItemCount(Game.GetCredits())
+    defeatDay = Utility.GetCurrentGameTime()
+    OSFDefeatAcceptanceProbe.Record("shadows-repeat-ready", repeatAggressor != None, repeatAggressor)
+EndFunction
+
+Function WatchBlackout(String mode)
+    OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
+    Int waited = 0
+    While aftermath.Phase != 1 && waited < 50
+        Utility.Wait(0.05)
+        waited += 1
+    EndWhile
+    Bool wasBlack = aftermath.Phase == 1 && OSFDefeat.IsDefeated(Game.GetPlayer())
+    If mode == "interrupt"
+        aftermath.Stop()
+        Utility.Wait(3.0)
+        Bool ok = wasBlack && aftermath.LastResult == "interrupted" && !aftermath.IsRunning()
+        ok = ok && !OSFDefeat.IsDefeated(Game.GetPlayer()) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
+        ok = ok && hunt.Nemesis.GetReference() == None && Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits
+        ok = ok && Utility.GetCurrentGameTime() - defeatDay < 0.01
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-interrupted", ok)
+        OSFDefeat.ResumeActorAI(repeatAggressor)
+        repeatAggressor.Disable()
+        repeatAggressor.Delete()
+    Else
+        OSFDefeatAcceptanceProbe.Record("shadows-blackout-ready", wasBlack)
+    EndIf
+EndFunction
+
+Function InspectLoadedBlackout()
+    Utility.Wait(3.0)
+    OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
+    Bool ok = aftermath.LastResult == "loaded-blackout" && !aftermath.IsRunning()
+    ok = ok && !OSFDefeat.IsDefeated(Game.GetPlayer()) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
+    ok = ok && hunt.Nemesis.GetReference() == None && Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits
+    ok = ok && Utility.GetCurrentGameTime() - defeatDay < 0.01
+    OSFDefeatAcceptanceProbe.Record("shadows-blackout-loaded", ok)
 EndFunction
 
 Function PrepareMissedAttack()
@@ -242,6 +320,8 @@ Function ShadowsNegativeEligibility()
     Bool clearedOverride = OSFDefeat.HasProtectionOverride(candidate) && !hunt.Eligible(candidate)
     OSFDefeatAcceptanceProbe.Record("shadows-protected-reference", protectedRef, candidate)
     OSFDefeatAcceptanceProbe.Record("shadows-cleared-protection-override", clearedOverride, candidate)
+    OSFDefeat.ResumeActorAI(candidate)
+    Utility.Wait(0.1)
     candidate.Disable()
     candidate.Delete()
     candidate = NewShadow()
@@ -259,6 +339,8 @@ Function ShadowsNegativeEligibility()
     hunt.StolenWeapon.ForceRefTo(candidate)
     Bool aliased = OSFDefeat.HasQuestAlias(candidate) && !hunt.Eligible(candidate)
     hunt.StolenWeapon.Clear()
+    OSFDefeat.ResumeActorAI(candidate)
+    Utility.Wait(0.1)
     candidate.Disable()
     candidate.Delete()
     OSFDefeatAcceptanceProbe.Record("shadows-negative-eligibility", ok && protectedRef && clearedOverride && ghost && teammate && aliased)
