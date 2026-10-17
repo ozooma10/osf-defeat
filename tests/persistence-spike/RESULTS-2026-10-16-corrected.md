@@ -1,11 +1,12 @@
 # Slice 0 corrected probe results — 2026-10-16
 
-Runtime work is in progress. This report supersedes the identity and naming conclusions
+The corrected reruns are complete. This report supersedes the identity and naming conclusions
 in the [version 1 report](RESULTS-2026-10-16.md), which remains historical evidence.
-The generated fixture has survived two normal planet round trips, away-save reloads,
-a 48-local-hour wait, and another cold restart. Its landed-ship marker checks also
-pass before and after reload. The authored version 4 rerun has passed its first normal
-return and naming checks; its repeated wait/return and ship checks are in progress.
+Both fixtures survived cold restart, two normal planet round trips, away-save reloads,
+and a 48-local-hour wait. Alias names and journal substitution work. Landed-ship marker
+transfers pass before and after reload, including movement, camera, and normal exit.
+This passes slice 0's feasibility gate for alias-held references at the two tested sites,
+with the rendering caveat and coverage limits below. Minimal Shadows is the next slice.
 
 ## Corrections and evidence
 
@@ -47,9 +48,9 @@ restamped to manufacture a persistence pass.
 | Actor title and journal substitution | Persistence Subject, including after normal return | Persistence Subject, including after normal return |
 | Observed departure | 3/3, version 4; both detached, both 3D unloaded | 3/3 in versions 3 and 4; both detached, both 3D unloaded |
 | Normal return after away-save reload | 10/10; trip 1, 0.806087 UT hours | 10/10 under version 4; trip 1, 7.318182 UT hours |
-| Repeat after 48 local hours away | Pending | 10/10; trip 2, 33.212162 elapsed UT hours |
+| Repeat after 48 local hours away | 10/10; trip 2, 26.372629 elapsed UT hours | 10/10; trip 2, 33.212162 elapsed UT hours |
 | Override request / reload | Alias title remains Persistence Subject; scanner and journal correct after reload | Actor and scanner objective retain Persistence Subject before/after reload |
-| Ship marker identity / MoveTo with final probe | Pending | 3/3 before and after reload; movement, camera, exit hatch work |
+| Ship marker identity / MoveTo with final probe | 3/3 before and after reload; movement, camera, exit hatch work | 3/3 before and after reload; movement, camera, exit hatch work |
 
 Generated trip 1 used the original Jemison Landing Area [Explored] icon, followed by
 walking approximately 340 m back to the fixture. Version 3's diagnostic return passed
@@ -73,16 +74,31 @@ The authored fixture was created fresh under version 4 at New Atlantis. Its orig
 stamps, 3811903 and 7811903, survived reload and cold restart while its dynamic IDs
 changed. The first normal Gagarin departure passed at 19:34:26, followed by an away-save
 reload and return through New Atlantis [Explored]. CheckReturn passed at 19:43:45.
-The subject rendered only partially after the cold load and first return despite a
+The second departure passed at 19:53:47. Two 24-local-hour waits on the Gagarin bench
+were followed by save/load there and another return through New Atlantis [Explored].
+CheckReturn passed at 20:02:10, with the same stamps and unchanged pack position.
+The normal wait UI reports 13 UT hours per 24 local hours on Gagarin; these are 48
+local-hour observations, not 48 UT hours or proof that a cell-reset threshold elapsed.
+The captured Frontier marker (stamp 11811903) passed all three transfer assertions at
+20:15:38 and, after save/load outside the ship, 20:19:22. Movement, camera, and the normal
+New Atlantis exit hatch worked after both transfers. The console was closed and the
+delayed checks completed before any movement. The final save is spikev4authcomplete.
+
+The subject rendered only partially after the cold load and both returns despite a
 successful Is3DLoaded check. Its full body appeared after the override-save reload;
 no replacement, enable toggle, or relocation was used to obtain that result. This visual
-caveat is separate from the passing identity, inventory, name, and objective checks.
+caveat remains unresolved and is separate from the passing identity, inventory, name,
+and objective checks. Production actor promotion must include a visual acceptance check.
 
 The generated seed is the outdoor Ecological Consortium natural-feature area. This does
 not cover an enemy building/interior, promotion of an encounter's existing actor, actual
 cell reset, arbitrary ship layouts, or weapon instance modifications. The subject is
 an inert, ghosted, freshly created surrogate. The pack and subject are held only by
 quest aliases; the experiment does not prove persistence of an unreferenced whole site.
+Use these findings to proceed with one-slot Minimal Shadows, then validate an existing
+aggressor at a generated enemy structure before broadening the supported locations.
+Keep actual reset behavior, weapon-instance transfer, and longer nemesis lifetimes as
+explicit acceptance work; this probe does not certify them.
 
 ## Local evidence index
 
@@ -99,8 +115,19 @@ blanket scenario pass. Build receipts deliberately retain `runtimeVerified: fals
 | `20261016-212300-114-Persistence-generated` | Version 3 cold restart, normal departure, away save/reload, original landing icon and walk back; native-return-cell-errors.log |
 | `20261016-221302-030-Persistence-generated` | Version 4 replay pass, name/override captures, two 24-hour waits, away reload, trip 2 pass, ship checks; generated-return48-markers.png, generated-ship-reload-stationary.png; closed normally |
 | `20261016-231138-519-Persistence-authored` | Fresh version 4 baseline, negative controls, planted save and reload; closed normally |
-| `20261016-231612-655-Persistence-authored` | Version 4 cold restart, first Gagarin departure/away reload/normal return; authored-override-reload-scanner.png and authored-override-reload-journal.png; remaining checks in progress |
+| `20261016-231612-655-Persistence-authored` | Version 4 cold restart, two Gagarin departures/away reloads/normal returns, two 24-hour waits, override and ship checks; authored-return48-markers.png, authored-return48-pack.png, authored-override-reload-scanner.png, authored-override-reload-journal.png, authored-ship-reload-stationary.png, authored-ship-reload-controls.png, authored-ship-reload-exit.png; closed normally |
 
 Final profile setup index: `build/persistence-spike/setup-v4-20261016-221241/profiles.json`.
 Original user seeds and their sidecars remain the authored Save4 and generated Save5
-identified in the first report. Final integrity audit is pending session completion.
+identified in the first report. The final audit passed 102 checks, recorded locally in
+`build/persistence-spike/runtime/20261016-corrected-final-integrity.json`: original seeds
+and sidecars, private seed copies, all six version 2–4 profile payloads, final source
+hashes, source Default profile/user settings, and restored session profile INIs match
+their recorded hashes. Temporary runtime helpers are removed, Starfield is stopped,
+and the harness runner lock is released. Private profiles and evidence saves are retained.
+
+The final main Papyrus logs contain no probe native-call errors. The generated replay
+has the expected warning that version 3's removed originCell variable was skipped.
+Other game/mod warnings remain in the archived logs; this is not a clean-log claim for
+the entire loaded mod list. Earlier native-cell errors and the generated ship operator
+failure remain preserved as diagnostic evidence.

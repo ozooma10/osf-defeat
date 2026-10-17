@@ -1,8 +1,10 @@
 # Core experience slice 0: persistence spike
 
-Status: version 4 corrects the identity oracle, cell tracking, and alias text storage;
-fresh-profile runtime acceptance is pending. The [first run's findings](RESULTS-2026-10-16.md)
-remain historical evidence. This is a separate development plugin, never part of `pack/`
+Status: the [corrected reruns](RESULTS-2026-10-16-corrected.md) pass slice 0's feasibility
+gate at New Atlantis and the generated Ecological Consortium natural-feature area.
+Coverage limits and an intermittent authored-subject rendering issue are recorded there.
+The [first run's findings](RESULTS-2026-10-16.md) remain historical evidence.
+This is a separate development plugin, never part of `pack/`
 or `dist/`. It does not register a consequence or require the Defeat DLL.
 
 The ordinary 42-case runtime suite uses a quiet cell. Its save/load passes cannot answer
@@ -189,6 +191,10 @@ The probe checks that the same home ship is landed on the player's planet before
 `MoveTo`. Arrival must be in the captured interior cell, in the correct ship, and near the
 marker. Check movement, camera, and that the exit door works. Keep before/after saves and
 screenshots. Repeat after a save/load with the marker captured.
+`MoveTo` may leave the console open through loading. Close it and remain stationary
+until all three `ship-move-*` assertions are logged; then test movement and the door.
+Otherwise the console pauses the delayed check, and walking before it resumes can
+produce an operator-caused position failure.
 
 This proves movement **to a known interior marker** only. Automatic discovery of a safe
 interior destination, different ship layouts, docking, orbit, and boarding combat remain
@@ -206,17 +212,18 @@ does not certify a planet trip, a cold restart, or visual results by itself.
 | Observation | Authored | Generated |
 | --- | --- | --- |
 | Same actor/pack and inventories after reload | 10/10 assertions pass | 10/10 assertions pass |
-| Same actor/pack after cold process restart | 2 raw-ID assertions fail | 3 raw-ID/cell assertions fail |
-| Departure observed with original cell detached | Blocked on Gagarin, including reload | Not run; cell-ID check needs repair |
-| Original site re-entered after away-save/reload | Not completed | Not completed |
-| Repeated trip after recorded wait | Not run | Not run |
-| Alias title and objective text/targets | Journal `[...]`; actor name pending | Journal `[...]`; actor name pending |
-| Message override behavior after reload | Not run | Journal still `[...]`; actor name pending |
+| Same actor/pack after cold process restart | 10/10; identity stamps survive ID remapping | 10/10; identity stamps survive ID remapping |
+| Departure observed through both alias detach events and unloaded 3D | Pass on both trips | Pass on both trips |
+| Original site re-entered after away-save/reload | 10/10 | 10/10; version 3 fixture replayed under version 4 |
+| Repeated trip after recorded wait | 10/10 after 48 local hours; 26.372629 UT hours elapsed | 10/10 after 48 local hours; 33.212162 UT hours elapsed |
+| Alias title and objective text/targets | Persistence Subject; journal/scanner/targets work | Persistence Subject; journal/scanner/targets work |
+| Message override behavior after reload | Alias title remains Persistence Subject | Alias title remains Persistence Subject |
 | Landed ship MoveTo and controls/exit | Pass before/after reload | Pass before/after reload |
 
-See the [results and evidence index](RESULTS-2026-10-16.md) for limits and next work.
-Raw dynamic IDs changed after restart while inventories and pack position survived;
-these assertion failures alone do not establish lost objects or a lost generated site.
+See the [corrected results and evidence index](RESULTS-2026-10-16-corrected.md) for build
+provenance, individual attempts, and limits. The authored subject sometimes rendered
+only partially despite loaded 3D; reload restored its full body, but the issue recurred
+on return. A passing identity check alone does not certify its appearance.
 
 The actor is a fresh non-forced-persistent surrogate with AI disabled to prevent roaming;
 this does not yet certify promoting an encounter's existing actor or surviving an actual
@@ -224,9 +231,11 @@ cell reset. The pack tests alias-held container/inventory persistence, not weapo
 mods. Record these limits with any positive result. If a generated site is lost, keep
 slice 1 gated on a design that does not strand stolen items or an incurable debuff there.
 
-When both location runs answer the gate, implement **Minimal Shadows** next: one nemesis,
+Both location runs answer the narrow feasibility gate. Implement **Minimal Shadows** next: one nemesis,
 one title/buff/debuff/reward, weapon and credit transfer, blackout, hunt objective, and the
-post-recovery truce. Expand to five slots only after that complete loop works.
+post-recovery truce. Validate promotion of an existing aggressor at a generated enemy
+structure and its appearance before broadening location support. Expand to five slots
+only after that complete loop works.
 
 `cqf 04000800 Cleanup` removes only references matching their original base and
 identity stamp, including after ID remapping; a mismatch is refused and logged.

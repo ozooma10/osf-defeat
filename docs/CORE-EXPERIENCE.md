@@ -221,13 +221,17 @@ Each slice is playable and testable on its own.
 **Implementation status, 2026-10-16:** slice 0 now has a separate
 [persistence probe and step-by-step fixture guide](../tests/persistence-spike/README.md).
 Its Papyrus compiles, the test ESM builds and round-trips, and the isolated-profile
-preparation checks pass. [Both profiles have now been exercised in game](../tests/persistence-spike/RESULTS-2026-10-16.md):
-baseline/reload checks and movement to a captured landed-ship interior passed, including
-controls and exit after reload. Cold-restart raw-ID assertions and journal alias text
-failed; the authored departure check stayed blocked after landing on Gagarin. Correct
-the probe's identity/cell tracking and naming, then complete planet-return/wait checks.
-**Slice 0 remains open.** The Basic Consequences pack remains the shipped content;
-slice 1 has not started.
+preparation checks pass. The [corrected reruns](../tests/persistence-spike/RESULTS-2026-10-16-corrected.md)
+pass cold restart, two normal planet round trips with away-save reloads, a 48-local-hour
+wait, alias names/journal substitution, and movement to a captured landed-ship interior
+with working controls and exit before/after reload. Identity uses per-instance stamps;
+departure observes alias detach events, and return compares live reference cells.
+**Slice 0's feasibility gate passes for the two tested sites. Minimal Shadows is next.**
+The generated seed is an outdoor natural feature, and the actor is an inert surrogate.
+Existing-aggressor promotion at an enemy structure, actual cell reset, and weapon-instance
+transfer still need acceptance coverage. The authored surrogate intermittently rendered
+only partially despite passing identity/loaded checks; include appearance in that coverage.
+The Basic Consequences pack remains the shipped content; slice 1 has not started.
 
 0. **Spike: persistence.** Prove that a quest-aliased actor and a placed container survive
    leaving and returning to a planet, in both an authored location and a procedurally
@@ -249,9 +253,11 @@ slice 1 has not started.
 
 - **Name.** "Shadows of Starfield" signals the inspiration clearly. Whether to use it
   publicly, given the Warner Bros. patent and Shadow of Skyrim's care around it, is your call.
-- **Persistence in generated sites.** Slice 0 decides it. If generated sites do not survive,
-  the hunt must happen before the player leaves the planet, or the nemesis must be anchored
-  to a persistent location, without becoming an "escape and re-encounter."
+- **Persistence in generated sites.** Slice 0 passed for alias-held references at an outdoor
+  natural feature across normal planet travel and a 48-local-hour wait. Enemy structures,
+  existing aggressors, and actual cell reset remain unproven. If those locations are lost,
+  the hunt must happen before departure or use a persistent location without becoming an
+  "escape and re-encounter."
 - **Space and ship interiors.** Passthrough to vanilla death is the safe start. Waking aboard
   your own docked ship after a boarding fight is a possible later tier.
 - **Time skip.** 2 hours is safe for quest timers. 6–8 sells the blackout better.
