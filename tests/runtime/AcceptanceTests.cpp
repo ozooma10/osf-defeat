@@ -16,6 +16,7 @@
 #include "RE/V/VirtualMachine.h"
 #include "RE/P/PlayerCamera.h"
 #include "RE/N/NiNode.h"
+#include "RE/B/BSInputEnableManager.h"
 #include "WeaponEvidence.h"
 #include <mutex>
 #include <variant>
@@ -59,6 +60,25 @@ namespace {
     std::atomic<std::uint64_t> graphEpoch{},graphUntil{};
     std::atomic<unsigned> graphCount{};
     std::int64_t Now() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
+    Json InputLayers() {
+        // Read-only .244 layout from OSF RE ui.input_enable_layer. Attribute a
+        // blocked control to its owner instead of forcibly enabling all inputs.
+        Json result=Json::array();
+        auto* manager=RE::BSInputEnableManager::GetSingleton();
+        if(!manager) return result;
+        RE::BSAutoLock lock(manager->m_layerLock);
+        if(manager->m_layerCount>128 || manager->m_layerPoolCount!=manager->m_layerCount ||
+            manager->m_layerNameCount!=manager->m_layerCount || !manager->m_layers ||
+            !manager->m_layerEventFlags || !manager->m_layerNames) return result;
+        for(std::uint32_t i=0;i<manager->m_layerCount;++i) {
+            const auto* layer=manager->m_layers[i];
+            if(!layer) continue;
+            const auto refs=*reinterpret_cast<const std::uint32_t*>(reinterpret_cast<const char*>(layer)+4);
+            if(refs>1) result.push_back({{"id",i},{"refs",refs},{"name",manager->m_layerNames[i].c_str()},
+                {"userMask",std::uint32_t(manager->m_layerEventFlags[i])},{"otherMask",std::uint32_t(manager->m_layerEventFlags[i]>>32)}});
+        }
+        return result;
+    }
     std::uint32_t ObserveGraph(void* receiver,const void* event,void* source) {
         // Read-only .244 seam proven in OSF RE engine.animation_graphs and
         // Multiplayer AnimationSourceProbe. Borrow only event+8's fixed string.
@@ -458,6 +478,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Request(out,"load","osfdefeatblackout"); Next(); break;
     case 47:
         if(Wait(Acknowledged(out,directory) && !Defeat::IsDefeated(player),60)) break;
+        out["blackoutReloadInputLayers"]=InputLayers();
         Papyrus("InspectLoadedBlackout"); Next(); break;
     case 48:
         if(Wait(Saw("shadows-blackout-loaded"))) break;
