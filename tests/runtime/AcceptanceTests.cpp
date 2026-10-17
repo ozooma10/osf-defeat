@@ -122,6 +122,7 @@ namespace {
         for(auto& ch:label) if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
         records.push_back({{"sequence",++sequence},{"name",label},{"ok",ok},
             {"subject",subject?subject->GetFormID():0},{"value",value}});
+        if(label.starts_with("domain-player-") && subject) records.back()["nativeDeadBit"]=subject->IsDead();
         if((label=="fixture" || label=="shadows-ready" || label=="shadows-repeat-ready" || label=="domain-ready") && ok && subject) npcID=subject->GetFormID();
     }
     bool VerifyWeapon(VM&,std::uint32_t,std::monostate,RE::Actor* owner,RE::TESForm* weapon,RE::BSFixedString checkpoint) {
@@ -283,7 +284,8 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
             Papyrus("WatchRefusal",refusalDomain); Next(); break;
         case 3:
-            if(Wait(Saw("domain-refused-"+refusalDomain,beforeRecords) && player->IsDead(),20)) break;
+            if(Wait(Saw("domain-refused-"+refusalDomain,beforeRecords) &&
+                (Saw("domain-player-death",beforeRecords) || Saw("domain-player-dead",beforeRecords)),20)) break;
             Check(out,prefix+"-normal-death",!Defeat::IsDefeated(player) && !Ghost(player) &&
                 !Truce::IsActive(player->GetFormID()) && !Engine::HasCaptiveFactionApplied(*player) &&
                 scenes->GetSceneForActor(player)==0 && DefeatContext::GetLastPlayerConsequenceId()=="osfdefeat.shadows.aftermath");

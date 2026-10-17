@@ -795,8 +795,18 @@ Function PrepareDomain(String kind)
     repeatCredits = player.GetItemCount(Game.GetCredits())
     shadowCredits = shadow.GetItemCount(Game.GetCredits())
     defeatDay = Utility.GetCurrentGameTime()
+    RegisterForRemoteEvent(player, "OnDying")
+    RegisterForRemoteEvent(player, "OnDeath")
     OSFDefeatAcceptanceProbe.Record("domain-ready", !player.IsDead() && !OSFDefeat.IsDefeated(player) && player.GetEquippedWeapon() == testWeapon, shadow)
 EndFunction
+
+Event Actor.OnDying(Actor sender, ObjectReference killer)
+    OSFDefeatAcceptanceProbe.Record("domain-player-dying", sender == Game.GetPlayer(), sender)
+EndEvent
+
+Event Actor.OnDeath(Actor sender, ObjectReference killer)
+    OSFDefeatAcceptanceProbe.Record("domain-player-death", sender == Game.GetPlayer(), sender)
+EndEvent
 
 Function WatchRefusal(String kind)
     Actor player = Game.GetPlayer()
@@ -806,6 +816,12 @@ Function WatchRefusal(String kind)
         Utility.Wait(0.1)
         waited += 1
     EndWhile
+    waited = 0
+    While !player.IsDead() && waited < 30
+        Utility.Wait(0.1)
+        waited += 1
+    EndWhile
+    OSFDefeatAcceptanceProbe.Record("domain-player-dead", player.IsDead(), player)
     Bool stopped = aftermath.LastResult == "unsupported-domain" && !aftermath.IsRunning() && aftermath.Phase == 0
     Bool creditsOK = player.GetItemCount(Game.GetCredits()) == repeatCredits && shadow.GetItemCount(Game.GetCredits()) == shadowCredits
     Bool huntOK = hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && !hunt.IsObjectiveDisplayed(10)
