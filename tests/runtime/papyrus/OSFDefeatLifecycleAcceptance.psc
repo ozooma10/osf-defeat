@@ -92,6 +92,17 @@ Bool Function LootUnchanged()
     Return Game.GetPlayer().GetItemCount(Game.GetCredits()) == playerCredits && target.GetItemCount(Game.GetCredits()) == targetCredits && Game.GetPlayer().GetItemCount(weaponBase) == 0 && target.GetItemCount(weaponBase) == 1
 EndFunction
 
+Function ObserveCleanup(String label)
+    OSFDefeatAcceptanceProbe.Record(label + "-alias", hunt.Nemesis.GetReference() == None)
+    OSFDefeatAcceptanceProbe.Record(label + "-weapon-alias", hunt.StolenWeapon.GetReference() == None)
+    OSFDefeatAcceptanceProbe.Record(label + "-buff", !target.HasSpell(hunt.NemesisBuff), target)
+    OSFDefeatAcceptanceProbe.Record(label + "-debuff", !Game.GetPlayer().HasSpell(hunt.PlayerDebuff))
+    OSFDefeatAcceptanceProbe.Record(label + "-reward", !Game.GetPlayer().HasSpell(hunt.PlayerReward))
+    OSFDefeatAcceptanceProbe.Record(label + "-objective", !hunt.IsObjectiveDisplayed(10))
+    OSFDefeatAcceptanceProbe.Record(label + "-truce", !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer()))
+    OSFDefeatAcceptanceProbe.Record(label + "-loot", LootUnchanged(), target)
+EndFunction
+
 Function Prepare(String kind)
     Bool ready = True
     If kind != "cancel-idempotent" && kind != "stopped-promotion"
@@ -134,7 +145,13 @@ Function Run(String kind)
                 ok = Clean() && LootUnchanged() && !hunt.IsObjectiveCompleted(10)
             ElseIf kind == "stop"
                 hunt.Stop()
-                Utility.Wait(2.0)
+                ; Stop queues OnQuestShutdown; wait for its bounded completion.
+                Int waited = 0
+                While (!Clean() || hunt.IsRunning()) && waited < 50
+                    Utility.Wait(0.2)
+                    waited += 1
+                EndWhile
+                ObserveCleanup("lifecycle-stop-observed")
                 ok = !hunt.IsRunning() && Clean() && LootUnchanged()
             ElseIf kind == "restart-old-death"
                 ok = previous != None && previous != target
@@ -156,13 +173,19 @@ Function Run(String kind)
 EndFunction
 
 Function PrepareSave()
-    OSFDefeatAcceptanceProbe.Record("lifecycle-active-before-save", FreshHunt(), target)
+    Bool ready = FreshHunt()
+    OSFDefeat.ResumeActorAI(target)
+    Utility.Wait(0.5)
+    OSFDefeatAcceptanceProbe.Record("lifecycle-active-before-save", ready && Active() && !OSFDefeat.IsActorAISuspended(target), target)
 EndFunction
 
 Function InspectLoadedActive()
     Utility.Wait(6.0)
     OSFDefeatAcceptanceProbe.Record("lifecycle-active-load", Active() && LootUnchanged(), target)
+    ; Prove saved ownership can clean the actor even after the alias disappears.
+    hunt.Nemesis.Clear()
     hunt.CancelHunt()
+    ObserveCleanup("lifecycle-loaded-observed")
     OSFDefeatAcceptanceProbe.Record("lifecycle-loaded-cancel", Clean() && LootUnchanged(), target)
 EndFunction
 
