@@ -354,6 +354,11 @@ Function InspectLoadedBlackout()
     Bool ok = aftermath.LastResult == "loaded-blackout" && !aftermath.IsRunning()
     OSFDefeatAcceptanceProbe.Record("shadows-loaded-result-" + aftermath.LastResult, ok)
     OSFDefeatAcceptanceProbe.Record("shadows-loaded-credits", Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits, Game.GetPlayer(), Game.GetPlayer().GetItemCount(Game.GetCredits()))
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-recovered", !OSFDefeat.IsDefeated(Game.GetPlayer()))
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-movement", Game.IsMovementControlsEnabled())
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-fighting", Game.IsFightingControlsEnabled())
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-empty-hunt", hunt.Nemesis.GetReference() == None)
+    OSFDefeatAcceptanceProbe.Record("shadows-loaded-time", Utility.GetCurrentGameTime() - defeatDay < 0.01, None, Utility.GetCurrentGameTime() - defeatDay)
     ok = ok && !OSFDefeat.IsDefeated(Game.GetPlayer()) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
     ok = ok && hunt.Nemesis.GetReference() == None && Game.GetPlayer().GetItemCount(Game.GetCredits()) == repeatCredits
     ok = ok && Utility.GetCurrentGameTime() - defeatDay < 0.01
