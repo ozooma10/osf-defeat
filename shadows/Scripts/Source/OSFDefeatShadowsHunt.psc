@@ -128,9 +128,21 @@ Function TakeLoot(Actor candidate, Weapon weaponBase)
         StolenWeapon.Clear()
         Return
     EndIf
-    ; Transfer the reference, preserving its instance data, never recreate its base.
-    Int moved = player.RemoveItem(item, 1, True, candidate)
-    If moved == 1
+    ; AddItem(reference) uses the engine's reference-transfer path (also used by
+    ; vanilla TestSteveCQuestScript), preserving this instance and its alias.
+    ; RemoveItem(reference, ..., destination) can refuse the newly aliased item.
+    If item.GetContainer() != player
+        LastTheftStatus = 6
+        StolenWeapon.Clear()
+        Return
+    EndIf
+    candidate.AddItem(item, 1, True)
+    Int attempts = 0
+    While item.GetContainer() != candidate && attempts < 10
+        Utility.Wait(0.1)
+        attempts += 1
+    EndWhile
+    If item.GetContainer() == candidate && player.GetItemCount(weaponBase) == 0
         LastTheftStatus = 7
         candidate.EquipItem(item, False, True)
     Else

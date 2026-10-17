@@ -113,6 +113,8 @@ Function ShadowsInspect()
     ok = ok && hunt.IsObjectiveDisplayed(10) && shadow.HasSpell(hunt.NemesisBuff) && player.HasSpell(hunt.PlayerDebuff)
     ok = ok && player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
     ok = ok && stolen != None && stolen.GetContainer() == shadow && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
+    ok = ok && shadow.GetEquippedWeapon() == testWeapon
+    ok = ok && OSFDefeat.IsRecoveryTruceActive(player) && player.GetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue) >= healthBefore
     ok = ok && Utility.GetCurrentGameTime() - defeatDay >= 0.083
     ok = ok && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled()
     OSFDefeatAcceptanceProbe.Record("shadows-aftermath", ok, shadow)
