@@ -1,4 +1,5 @@
 Scriptname OSFDefeatAcceptanceProbe Hidden Native
+Bool Function VerifySpellHostility(Spell value, Bool papyrusHostile) global native
 Function Record(String name, Bool ok, Actor subject = None, Float value = 0.0) global native
 Bool Function VerifyDeathState(Actor subject, Bool papyrusDead, Bool expectedDead, String checkpoint) global native
 Bool Function VerifyWeapon(Actor owner, Form weapon, String checkpoint) global native

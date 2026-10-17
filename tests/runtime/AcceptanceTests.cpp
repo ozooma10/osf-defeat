@@ -18,6 +18,7 @@
 #include "RE/P/PlayerCamera.h"
 #include "RE/N/NiNode.h"
 #include "RE/B/BSInputEnableManager.h"
+#include "RE/S/SpellItem.h"
 #include "WeaponEvidence.h"
 #include <mutex>
 #include <variant>
@@ -62,7 +63,9 @@ namespace {
     constexpr ScriptedCase scriptedCases[]{
         {"native-attributed",true},{"native-restore",false},{"native-nonhealth",false},
         {"papyrus-anonymous",false},{"papyrus-cooperative",true},{"incoming-spell",false},
-        {"spell-cast",true},{"spell-remote",true},{"combat-spell",true},{"spell-heal",false},{"combat-spell-heal",false},
+        {"spell-cast",true},{"spell-remote",true},{"spell-remote-npc",false},
+        {"spell-remote-anonymous",false},{"spell-remote-heal",false},{"spell-remote-invalid",false},
+        {"combat-spell",true},{"spell-heal",false},{"combat-spell-heal",false},
         {"weapon-fire-player",true},{"weapon-fire-npc",false}
     };
     constexpr const char* weaponKinds[]{
@@ -347,6 +350,15 @@ namespace {
         using Fn=void(*)(RE::ActorValueOwner*,RE::ACTOR_VALUE_MODIFIER,const RE::ActorValueInfo&,float,RE::TESObjectREFR*);
         REL::Relocation<Fn> fn{REL::ID{101587}}; fn(&Engine::AVOwnerOf(*actor),RE::ACTOR_VALUE_MODIFIER::kDamage,*Engine::HealthAV(),delta,aggressor);
     }
+    bool VerifySpellHostility(VM&,std::uint32_t,std::monostate,RE::SpellItem* spell,bool expected) {
+        if(!spell) return false;
+        const auto offset=reinterpret_cast<const char*>(&spell->hostileCount)-reinterpret_cast<const char*>(spell);
+        const bool passed=offset==0x138 && (spell->hostileCount>0)==expected;
+        std::scoped_lock lock(observationsLock);
+        records.push_back({{"sequence",++sequence},{"name","scripted-native-hostility"},{"ok",passed},
+            {"subject",spell->GetFormID()},{"offset",offset},{"count",spell->hostileCount},{"papyrusHostile",expected}});
+        return passed;
+    }
     bool ApplyScriptedDamage(VM&,std::uint32_t,std::monostate,RE::Actor* target,RE::Actor* source,int kind) {
         if(!target || !source || kind<0 || kind>2) return false;
         auto* gauge=kind==2 ? RE::TESForm::LookupByID<RE::ActorValueInfo>(0x2E3) : Engine::HealthAV();
@@ -358,6 +370,7 @@ namespace {
     }
 }
 void Bind(VM& vm) {
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifySpellHostility",&VerifySpellHostility,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","ApplyScriptedDamage",&ApplyScriptedDamage,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","HoldBlackout",&HoldBlackout,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false);
@@ -367,6 +380,18 @@ void Bind(VM& vm) {
 }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
+void ObservedRemoteCast(std::uint32_t spell,std::uint32_t blame,bool hostile) {
+    if(!scriptedOnly) return;
+    std::scoped_lock lock(observationsLock);
+    records.push_back({{"sequence",++sequence},{"name","scripted-native-remote"},{"ok",true},
+        {"subject",blame},{"spell",spell},{"hostile",hostile}});
+}
+void ObservedHealthWrite(std::uint32_t victim,std::uint32_t source,float delta) {
+    if(!scriptedOnly || (victim!=0x14 && victim!=npcID.load())) return;
+    std::scoped_lock lock(observationsLock);
+    if(records.size()<2048) records.push_back({{"sequence",++sequence},{"name","scripted-health-write"},
+        {"ok",true},{"victim",victim},{"source",source},{"delta",delta}});
+}
 bool ExpectsPlayerDeath() { return refusalOnly && (phase==3 || phase==4); }
 void Configure(const Json& config) {
     refusalOnly=config.value("refusalOnly",false);
@@ -413,8 +438,23 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             const auto observation=std::string("scripted-observed-")+trial.name;
             if(Wait(Recorded(observation,beforeRecords))) break;
             const bool weapon=std::string_view(trial.name).starts_with("weapon-fire-");
+            const bool remote=std::string_view(trial.name).starts_with("spell-remote");
+            const bool invalid=std::string_view(trial.name)=="spell-remote-invalid";
+            const FormID blame=std::string_view(trial.name)=="spell-remote-npc" ? npcID.load() :
+                std::string_view(trial.name)=="spell-remote-anonymous" ? 0 : player->GetFormID();
+            bool remoteObserved=false;
+            if(remote) {
+                const bool healing=std::string_view(trial.name)=="spell-remote-heal";
+                std::scoped_lock lock(observationsLock);
+                remoteObserved=std::ranges::any_of(records,[&](const auto& r) {
+                    return r.value("sequence",0ULL)>beforeRecords && r.value("name","")=="scripted-native-remote" &&
+                        r.value("subject",0U)==blame && r.value("spell",0U)==(healing?0x1E1171U:0x29AAE9U) &&
+                        r.value("hostile",false)!=healing;
+                });
+            }
             const FormID shooter=std::string_view(trial.name)=="weapon-fire-npc" ? npcID.load() : player->GetFormID();
             const bool passed=Saw(observation,beforeRecords) && (!weapon || Saw("scripted-native-fire",beforeRecords,shooter)) &&
+                (!remote || (invalid ? !Recorded("scripted-native-remote",beforeRecords) : remoteObserved)) &&
                 Truce::IsActive(player->GetFormID())!=trial.endsTruce &&
                 Engine::HasCaptiveFactionApplied(*player)!=trial.endsTruce && Engine::IsInCaptiveFaction(*player)!=trial.endsTruce &&
                 GameTime::NowDay()<truceDeadline;

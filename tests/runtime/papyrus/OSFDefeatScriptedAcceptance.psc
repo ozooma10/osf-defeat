@@ -42,7 +42,8 @@ Function Initialize()
     Utility.Wait(2.0)
     OSFDefeatAcceptanceProbe.Record("scripted-damage-hostile", damageSpell.IsHostile())
     OSFDefeatAcceptanceProbe.Record("scripted-healing-hostile", healingSpell.IsHostile())
-    OSFDefeatAcceptanceProbe.Record("scripted-fixture", target.Is3DLoaded() && !target.IsDead() && !OSFDefeat.IsActorAISuspended(target), target)
+    Bool hostilityMatches = OSFDefeatAcceptanceProbe.VerifySpellHostility(damageSpell, damageSpell.IsHostile()) && OSFDefeatAcceptanceProbe.VerifySpellHostility(healingSpell, healingSpell.IsHostile())
+    OSFDefeatAcceptanceProbe.Record("scripted-fixture", hostilityMatches && target.Is3DLoaded() && !target.IsDead() && !OSFDefeat.IsActorAISuspended(target), target)
 EndFunction
 
 Event ObjectReference.OnSpellCast(ObjectReference sender, Form spellCast)
@@ -83,6 +84,14 @@ Function Run(String kind)
         damageSpell.Cast(player, target)
     ElseIf kind == "spell-remote"
         damageSpell.RemoteCast(target, player, target)
+    ElseIf kind == "spell-remote-npc"
+        damageSpell.RemoteCast(target, target, player)
+    ElseIf kind == "spell-remote-anonymous"
+        damageSpell.RemoteCast(target, None, target)
+    ElseIf kind == "spell-remote-heal"
+        healingSpell.RemoteCast(target, player, target)
+    ElseIf kind == "spell-remote-invalid"
+        damageSpell.RemoteCast(None, player, target)
     ElseIf kind == "combat-spell"
         player.DoCombatSpellApply(damageSpell, target)
     ElseIf kind == "spell-heal"
@@ -102,8 +111,12 @@ Function Run(String kind)
         effect = targetDelta > 0.1
     ElseIf kind == "native-nonhealth"
         effect = targetDelta == 0.0 && playerDelta == 0.0
-    ElseIf kind == "incoming-spell"
+    ElseIf kind == "incoming-spell" || kind == "spell-remote-npc"
         effect = playerDelta < -0.1
+    ElseIf kind == "spell-remote-heal"
+        effect = targetDelta > 0.1
+    ElseIf kind == "spell-remote-invalid"
+        effect = playerDelta == 0.0 && targetDelta == 0.0
     ElseIf kind == "spell-heal" || kind == "combat-spell-heal"
         effect = playerDelta > 0.1
     ElseIf kind == "weapon-fire-player" || kind == "weapon-fire-npc"

@@ -18,6 +18,9 @@
 
 #include "REL/ASM.h"
 #include "REL/Utility.h"
+#ifdef OSF_DEFEAT_TESTING
+#include "AcceptanceTests.h"
+#endif
 
 namespace OSFDefeat::PlayerDefeat
 {
@@ -374,6 +377,13 @@ namespace OSFDefeat::PlayerDefeat
             // Capture IDs before the engine call; never carry a raw actor/reference into a task.
             const FormID aggressorId = action != AfterDamage::kNone && a_ref ? a_ref->GetFormID() : 0;
             g_original(a_owner, a_modifier, a_info, a_delta, a_ref);
+#ifdef OSF_DEFEAT_TESTING
+            if (a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && IsLethalGauge(a_info)) {
+                const auto* observed = ActorFromAVOwner(a_owner);
+                RuntimeTests::Acceptance::ObservedHealthWrite(observed ? observed->GetFormID() : 0,
+                    a_ref ? a_ref->GetFormID() : 0, a_delta);
+            }
+#endif
 
             if (breakTruce) {
                 Truce::QueueEndForAttack(attackingId, epoch);
