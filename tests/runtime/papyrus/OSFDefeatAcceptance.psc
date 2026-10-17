@@ -181,8 +181,12 @@ Function ShadowsPlayerKill()
     OSFDefeatAcceptanceProbe.Record("shadows-dropped-weapon", dropped != None, shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-dropped-identity", dropped != None && dropped == stolen, shadow)
     If shadow.GetItemCount(testWeapon) == 1
+        OSFDefeatAcceptanceProbe.Record("shadows-retrieval-corpse", True)
         shadow.RemoveItem(testWeapon, 1, True, Game.GetPlayer())
-    ElseIf dropped != None && dropped == stolen
+    ElseIf dropped != None && OSFDefeatAcceptanceProbe.VerifyDroppedWeapon(dropped, testWeapon)
+        ; Death can materialize a different reference from the inventory alias.
+        ; Require the exact modified instance data before accepting that drop.
+        OSFDefeatAcceptanceProbe.Record("shadows-retrieval-natural-drop", True)
         dropped.Activate(Game.GetPlayer())
     EndIf
     Utility.Wait(0.5)

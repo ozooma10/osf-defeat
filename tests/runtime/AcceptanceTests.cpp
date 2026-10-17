@@ -133,6 +133,15 @@ namespace {
             {"owner",owner?owner->GetFormID():0},{"mods",mods ? Json(*mods) : Json(nullptr)}});
         return ok;
     }
+    bool VerifyDroppedWeapon(VM&,std::uint32_t,std::monostate,RE::TESObjectREFR* reference,RE::TESForm* weapon) {
+        const auto mods=reference && reference->GetBaseObject()==weapon && reference->extraDataList ?
+            ReadInstanceMods(*reference->extraDataList) : std::nullopt;
+        std::scoped_lock lock(observationsLock);
+        const bool ok=mods && !weaponBaseline.empty() && *mods==weaponBaseline;
+        records.push_back({{"sequence",++sequence},{"name","weapon-mods-natural-drop"},{"ok",ok},
+            {"reference",reference?reference->GetFormID():0},{"mods",mods?Json(*mods):Json(nullptr)}});
+        return ok;
+    }
     bool Saw(std::string_view name,std::uint64_t after=0,FormID subject=0) {
         std::scoped_lock lock(observationsLock);
         for(const auto& record:records) if(record.at("name").get<std::string>()==name && record.at("sequence").get<std::uint64_t>()>after &&
@@ -222,6 +231,7 @@ namespace {
 void Bind(VM& vm) {
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","Record",&Record,std::nullopt,false);
     vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyWeapon",&VerifyWeapon,std::nullopt,false);
+    vm.BindNativeMethod("OSFDefeatAcceptanceProbe","VerifyDroppedWeapon",&VerifyDroppedWeapon,std::nullopt,false);
 }
 void Reattached(std::uint32_t actor) { if(actor==npcID.load()) ++reattachments; }
 void Saved() { ++saves; }
