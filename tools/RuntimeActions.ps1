@@ -1,6 +1,6 @@
 # Dot-sourced after the existing harness helpers. These are fixed acceptance actions.
 function Invoke-DefeatConsole([string]$Command) {
-    if ($Command -notmatch '^(save|load) osfdefeat(healthy|down|clean|truce|blackout|theft|time)$') { throw '[blocked] Unexpected acceptance console command.' }
+    if ($Command -notmatch '^(save|load) osfdefeat(healthy|down|clean|truce|blackout|theft|time|lifecycle|lifecycleclean)$') { throw '[blocked] Unexpected acceptance console command.' }
     $null=Invoke-Input 'focus'
     Send-Key 192 200
     try {
@@ -42,7 +42,7 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             $null=Save-Capture $name
         }
         'load' {
-            if ($name -notin @('osfdefeathealthy','osfdefeatdown','osfdefeattruce','osfdefeatblackout','osfdefeattheft','osfdefeattime')) { throw '[blocked] Unexpected acceptance load.' }
+            if ($name -notin @('osfdefeathealthy','osfdefeatdown','osfdefeattruce','osfdefeatblackout','osfdefeattheft','osfdefeattime','osfdefeatlifecycle','osfdefeatlifecycleclean')) { throw '[blocked] Unexpected acceptance load.' }
             Invoke-DefeatConsole "load $name"
             # Do not require gameplay immediately: the native suite also requires a new
             # TESLoadGameEvent and persistence epoch before advancing after this receipt.
