@@ -294,7 +294,9 @@ EndFunction
 
 Function PrepareCheckpoint()
     OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
-    hunt.CancelHunt()
+    If hunt != None
+        hunt.CancelHunt()
+    EndIf
     ; PCF0 persists AI suspensions. Release the previous disposable subjects
     ; before seeding this checkpoint so its sidecar contains only this actor.
     If shadow != None
@@ -349,9 +351,15 @@ Function InspectLoadedCheckpoint(String kind)
         Bool creditsOK = player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
         Bool huntOK = hunt.Nemesis.GetActorReference() == shadow && hunt.IsObjectiveDisplayed(10)
         huntOK = huntOK && player.HasSpell(hunt.PlayerDebuff) && shadow.HasSpell(hunt.NemesisBuff)
-        Bool weaponOK = stolen != None && stolen.GetContainer() == shadow && stolen.GetBaseObject() == testWeapon
+        ; MakeAliasedRefFromInventory proxies can have no GetContainer even
+        ; while the real instance is owned. Inspect actual inventory OMODs.
+        Bool modsOK = OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "loaded-" + kind)
+        Bool weaponOK = stolen != None && stolen.GetBaseObject() == testWeapon
         weaponOK = weaponOK && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
-        weaponOK = weaponOK && OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "loaded-" + kind)
+        weaponOK = weaponOK && modsOK
+        OSFDefeatAcceptanceProbe.Record("checkpoint-weapon-alias", stolen != None && stolen.GetBaseObject() == testWeapon)
+        OSFDefeatAcceptanceProbe.Record("checkpoint-player-weapon-count", player.GetItemCount(testWeapon) == 0, player, player.GetItemCount(testWeapon))
+        OSFDefeatAcceptanceProbe.Record("checkpoint-nemesis-weapon-count", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
         Bool recovered = !OSFDefeat.IsDefeated(player) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled()
         Bool stopped = aftermath.LastResult == "loaded-blackout" && !aftermath.IsRunning()
         Float extraHours = (Utility.GetCurrentGameTime() - checkpointDay) * 24.0

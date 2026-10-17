@@ -6,6 +6,7 @@ param(
     [string]$SourceHash = '',
     [switch]$Preflight,
     [switch]$ShadowsOnly,
+    [switch]$BlackoutOnly,
     [string]$RefusalFixture = '',
     [string]$PersistenceBuildReceipt = ''
 )
@@ -27,6 +28,7 @@ if ($missing.Count) { Write-Error "[blocked] Missing OSF Test Harness files in $
 . (Join-Path $Harness 'scripts/Environment.ps1')
 . (Join-Path $Harness 'scripts/Reports.ps1')
 $refusalOnly=[bool]$RefusalFixture
+if ($refusalOnly -and $BlackoutOnly) { throw 'Select either refusal or blackout fixtures.' }
 if ($refusalOnly -ne [bool]$PersistenceBuildReceipt) { throw 'RefusalFixture and PersistenceBuildReceipt must be supplied together.' }
 if ($refusalOnly) { $script:Config.FixtureSave=[IO.Path]::GetFullPath($RefusalFixture) }
 $script:Config.TestProfile='OSF Defeat Testing'
@@ -42,6 +44,9 @@ $animationMod=if ($script:Config.ContainsKey('DefeatAnimationMod')) { $script:Co
 $expected=@(Get-Content (Join-Path $repo 'tests/runtime/cases.json') -Raw | ConvertFrom-Json)
 if ($ShadowsOnly) {
     $expected=@($expected | Where-Object { $_ -match '^(shadows-|truce-)' -or $_ -in @('healthy-baseline','npc-disposable-fixture','papyrus-registration','healthy-save') })
+}
+if ($BlackoutOnly) {
+    $expected=@($expected | Where-Object { $_ -match '^shadows-blackout-(theft|time)-' -or $_ -in @('healthy-baseline','npc-disposable-fixture','papyrus-registration','healthy-save','shadows-cleanup-load') })
 }
 if ($refusalOnly) { $expected=@(Get-Content (Join-Path $repo 'tests/runtime/refusal-cases.json') -Raw | ConvertFrom-Json) }
 $compiler=Join-Path $script:Config.Game 'Tools/Papyrus Compiler/PapyrusCompiler.exe'
@@ -90,7 +95,7 @@ function Reset-Fixture {
 # paths above are Defeat-specific; no Animation payload or source is edited.
 function Prepare-AnimationMailbox([string]$LaunchToken) {
     $script:DefeatLaunchToken=$LaunchToken
-    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=[bool]$ShadowsOnly;blackoutColdStart=$script:BlackoutColdStart;blackoutCheckpoint=$script:BlackoutCheckpoint;weaponBaseline=$script:BlackoutWeaponBaseline;refusalOnly=$refusalOnly}
+    Write-JsonFile (Join-Path $payload 'SFSE/Plugins/OSFDefeatTest.json') @{stateDir=$script:DefeatMailbox;launchToken=$LaunchToken;savePath=$script:SaveRoot+'\';shadowsOnly=([bool]$ShadowsOnly -or [bool]$BlackoutOnly);blackoutOnly=[bool]$BlackoutOnly;blackoutColdStart=$script:BlackoutColdStart;blackoutCheckpoint=$script:BlackoutCheckpoint;weaponBaseline=$script:BlackoutWeaponBaseline;refusalOnly=$refusalOnly}
 }
 
 try {
@@ -224,7 +229,7 @@ try {
     Stop-TestGame
     $cases=@($firstSession.snapshot.cases)
     $sessions=@(@{label='first';identity=$firstSession.identity;launchToken=$firstSession.launchToken})
-    foreach ($checkpoint in @(@(1,2,3) | Where-Object {-not $refusalOnly})) {
+    foreach ($checkpoint in @(@(1,2,3) | Where-Object {-not $refusalOnly -and (-not $BlackoutOnly -or $_ -gt 1)})) {
         Initialize-DefeatBlackoutRestart $checkpoint $firstSession.snapshot
         Copy-Item -LiteralPath (Join-Path $payload 'SFSE/OSFDefeat/AcceptanceShadows/minimal-shadows.json') -Destination (Join-Path $payload 'SFSE/OSFDefeat/Consequences/Player/zz-acceptance-shadows.json')
         Write-Host "Defeat acceptance: cold restart at blackout checkpoint $checkpoint"
@@ -258,7 +263,7 @@ try {
     }
     if ($script:Run) { Finish-RunArtifacts $outcome $message }
     if ($lock) { $lock.Dispose() }
-    $receipt=@{schemaVersion=1;outcome=$outcome;message=$message;sourceHash=$SourceHash;scope=$(if ($refusalOnly) {'ship-space-refusal'} elseif ($ShadowsOnly) {'shadows'} else {'full'});expectedCases=$expected;artifactDirectory=$(if ($script:Run) {$script:Run.path} else {$null})}
+    $receipt=@{schemaVersion=1;outcome=$outcome;message=$message;sourceHash=$SourceHash;scope=$(if ($refusalOnly) {'ship-space-refusal'} elseif ($BlackoutOnly) {'blackout-checkpoints'} elseif ($ShadowsOnly) {'shadows'} else {'full'});expectedCases=$expected;artifactDirectory=$(if ($script:Run) {$script:Run.path} else {$null})}
     if ($ResultPath) { Write-JsonFile ([IO.Path]::GetFullPath($ResultPath)) $receipt }
 }
 exit $code

@@ -54,6 +54,7 @@ namespace {
     WeaponMods weaponBaseline;
     std::atomic<int> heldBlackout{};
     bool refusalOnly=false;
+    bool blackoutOnly=false;
     std::string refusalDomain="landed";
     int blackoutCheckpoint=1;
     const char* CheckpointName() { return blackoutCheckpoint==2 ? "theft" : "time"; }
@@ -248,6 +249,7 @@ void Saved() { ++saves; }
 bool ExpectsPlayerDeath() { return refusalOnly && (phase==3 || phase==4); }
 void Configure(const Json& config) {
     refusalOnly=config.value("refusalOnly",false);
+    blackoutOnly=config.value("blackoutOnly",false);
     blackoutCheckpoint=config.value("blackoutCheckpoint",1);
     if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
         heldBlackout=blackoutCheckpoint;
@@ -493,7 +495,12 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Check(out,shadowsOnly ? "healthy-save" : "pack-cleanup-load",DefeatRegistry::Snapshot().empty() && Capture::Snapshot().empty());
         std::filesystem::copy_file(Config::RootPath()/"AcceptanceShadows"/"minimal-shadows.json",
             Config::RootPath()/"Consequences"/"Player"/"zz-acceptance-shadows.json",std::filesystem::copy_options::overwrite_existing);
-        Consequence::Reload(); Papyrus("ShadowsPrepare"); Next(); break;
+        Consequence::Reload();
+        if(blackoutOnly) {
+            blackoutCheckpoint=2; heldBlackout=2;
+            beforeRecords=Sequence(); Papyrus("PrepareCheckpoint"); phase=55; phaseAt=Now(); break;
+        }
+        Papyrus("ShadowsPrepare"); Next(); break;
     case 29:
         if(Wait(Saw("shadows-ready") && Loaded(npc),30)) break;
         Check(out,"shadows-eligible-fixture",npc && npc!=player);
