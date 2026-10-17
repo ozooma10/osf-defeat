@@ -118,23 +118,42 @@ Bool Function IsCurrent(Int run)
     Return active && generation == run && IsRunning()
 EndFunction
 
-Function AbortAftermath(String reason)
+Bool Function AbortAftermath(String reason)
     If !active
-        Return
+        Return False
     EndIf
     ; Invalidate resumed latent stacks before requesting cleanup. They must not
     ; steal again, skip time, fade, or stop a later instance of this quest.
     active = False
     generation += 1
+    Int cleanup = generation
     Phase = 0
     LastResult = reason
     CancelTimer(1)
     UnregisterForRemoteEvent(Game.GetPlayer(), "OnPlayerLoadGame")
-    If OSFDefeat.IsDefeated(Game.GetPlayer())
-        OSFDefeat.RecoverActorWithTruce(Game.GetPlayer(), TruceSeconds)
-        OSFDefeat.ScheduleAutomaticRecovery(Game.GetPlayer(), 2.0)
-    EndIf
     Game.FadeOutGame(False, True, 0.0, 0.5)
+    Actor player = Game.GetPlayer()
+    Int tries = 0
+    ; OnPlayerLoadGame can arrive before native persistence is applied on Main,
+    ; especially on a cold start. Invalidate the saved stack immediately, then
+    ; wait briefly for its down-state rather than mistaking an empty registry
+    ; during load for completed recovery. Later-phase saves may already be up.
+    While reason == "loaded-blackout" && generation == cleanup && !OSFDefeat.IsDefeated(player) && tries < 50
+        Utility.Wait(0.1)
+        tries += 1
+    EndWhile
+    tries = 0
+    While generation == cleanup && OSFDefeat.IsDefeated(player) && tries < 50
+        ; The task queue is disabled during load. A refused submission is not
+        ; recovery; retry until observed up, with the existing fallback timer.
+        If OSFDefeat.RecoverActorWithTruce(player, TruceSeconds)
+            OSFDefeat.ScheduleAutomaticRecovery(player, 2.0)
+        EndIf
+        Utility.Wait(0.1)
+        tries += 1
+    EndWhile
+    ; A newer aftermath owns cleanup now. Its caller must not Stop that quest.
+    Return generation == cleanup
 EndFunction
 
 Event OnQuestShutdown()
@@ -144,8 +163,9 @@ EndEvent
 Event OnTimer(Int timerID)
     ; Real-time safety net independent of the PassTime-adjusted defeat lease.
     If timerID == 1 && active
-        AbortAftermath("timeout")
-        Stop()
+        If AbortAftermath("timeout")
+            Stop()
+        EndIf
     EndIf
 EndEvent
 
@@ -153,7 +173,8 @@ Event Actor.OnPlayerLoadGame(Actor sender)
     ; A save can resume before or after theft. Do not replay an uncertain phase.
     ; Keep any already-promoted hunt/loot and finish recovery exactly once.
     If active
-        AbortAftermath("loaded-blackout")
-        Stop()
+        If AbortAftermath("loaded-blackout")
+            Stop()
+        EndIf
     EndIf
 EndEvent
