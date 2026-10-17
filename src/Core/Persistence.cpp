@@ -11,6 +11,7 @@
 #include "Core/PlayerDefeat.h"
 #include "Core/Presentation.h"
 #include "Core/RuntimeMutation.h"
+#include "Core/Truce.h"
 #include "Core/Eligibility.h"
 #include "Engine/Engine.h"
 #include "External/OSFPersistenceAPI.h"
@@ -31,6 +32,8 @@ namespace OSFDefeat::Persistence
         constexpr std::uint32_t kRecOwnedCaptiveFaction = OSF_PERSISTENCE_FOURCC('C', 'P', 'T', '0');
         constexpr std::uint32_t kRecCaptureRelationship = OSF_PERSISTENCE_FOURCC('C', 'A', 'P', '0');
         constexpr std::uint32_t kRecAISuspension = OSF_PERSISTENCE_FOURCC('P', 'C', 'F', '0');
+        constexpr std::uint32_t kRecTruce = OSF_PERSISTENCE_FOURCC('T', 'R', 'C', '0');
+        constexpr std::uint32_t kTruceVersion = 1;
         constexpr std::uint32_t kDefeatedVersion = 2;
         constexpr std::uint32_t kOwnedCaptiveFactionVersion = 1;
         constexpr std::uint32_t kCaptureRelationshipVersion = 2;
@@ -75,6 +78,7 @@ namespace OSFDefeat::Persistence
             std::vector<OwnedCaptiveFactionRecord> ownedCaptiveFactions;
             std::vector<PersistedCaptureRelationship> captureRelationships;
             std::vector<AISuspensionRecord> aiSuspensions;
+            std::vector<Truce::Record> truces;
         };
 
         std::uint8_t         g_clientContext{};
@@ -252,6 +256,25 @@ namespace OSFDefeat::Persistence
             return true;
         }
 
+        bool SaveTruces(OSFRecordWriterV1* a_writer, const std::vector<Truce::Record>& a_records)
+        {
+            if (a_records.empty()) {
+                return true;
+            }
+            if (!a_writer->OpenRecord(a_writer, kRecTruce, kTruceVersion) ||
+                !WriteValue(a_writer, static_cast<std::uint32_t>(a_records.size()))) {
+                return false;
+            }
+            for (const auto& record : a_records) {
+                const std::uint8_t owned = record.ownsFaction ? 1 : 0;
+                if (!WriteValue(a_writer, record.actorId) || !WriteValue(a_writer, record.expiresAtDay) ||
+                    !WriteValue(a_writer, owned)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         std::uint8_t OSF_PERSISTENCE_CALL Save(void*, OSFRecordWriterV1* a_writer)
         {
             try {
@@ -266,7 +289,8 @@ namespace OSFDefeat::Persistence
                 const auto captureRelationships = Capture::Snapshot();
                 const auto aiSuspensions = Defeat::SnapshotAISuspensions();
                 if (!SaveDefeated(a_writer, defeated) || !SaveOwnedCaptiveFactions(a_writer, ownedCaptiveFactions) ||
-                    !SaveCaptureRelationships(a_writer, captureRelationships) || !SaveAISuspensions(a_writer, aiSuspensions)) {
+                    !SaveCaptureRelationships(a_writer, captureRelationships) || !SaveAISuspensions(a_writer, aiSuspensions) ||
+                    !SaveTruces(a_writer, Truce::Snapshot())) {
                     REX::ERROR("[OSFDefeat] failed writing OSF persistence records");
                     return 0;
                 }
@@ -438,6 +462,30 @@ namespace OSFDefeat::Persistence
             return a_length == 0;
         }
 
+        bool ReadTruces(OSFRecordReaderV1* a_reader, std::uint32_t a_length, LoadedState& a_state)
+        {
+            std::uint32_t count{};
+            constexpr std::uint32_t kEntrySize = sizeof(FormID) + sizeof(float) + sizeof(std::uint8_t);
+            if (!ReadValue(a_reader, a_length, count) || count > a_length / kEntrySize) {
+                return false;
+            }
+            for (std::uint32_t i = 0; i < count; ++i) {
+                Truce::Record record;
+                FormID saved{};
+                std::uint8_t owned{};
+                if (!ReadValue(a_reader, a_length, saved) || !ReadValue(a_reader, a_length, record.expiresAtDay) ||
+                    !ReadValue(a_reader, a_length, owned) || owned > 1 ||
+                    !std::isfinite(record.expiresAtDay) || record.expiresAtDay < 0) {
+                    return false;
+                }
+                record.ownsFaction = owned != 0;
+                if (ResolveRequired(a_reader, saved, record.actorId)) {
+                    a_state.truces.push_back(record);
+                }
+            }
+            return a_length == 0;
+        }
+
         void ApplyLoadedState(LoadedState a_state, std::uint64_t a_epoch)
         {
             if (!RuntimeMutation::IsCurrent(a_epoch)) {
@@ -456,6 +504,9 @@ namespace OSFDefeat::Persistence
             for (const auto& record : a_state.captureRelationships) {
                 Capture::RestoreCapture(record.captiveId, record.captorId, record.capturedDay,
                     record.removeOwnedFactionOnRelease);
+            }
+            for (const auto& record : a_state.truces) {
+                Truce::Restore(record);
             }
             for (const auto& record : a_state.aiSuspensions) {
                 Defeat::RestoreAISuspension(record.actorId, record.wasAIEnabled);
@@ -487,6 +538,8 @@ namespace OSFDefeat::Persistence
                         ok = ReadCaptureRelationships(a_reader, version, length, state);
                     } else if (type == kRecAISuspension && version == kAISuspensionVersion) {
                         ok = ReadAISuspensions(a_reader, length, state);
+                    } else if (type == kRecTruce && version == kTruceVersion) {
+                        ok = ReadTruces(a_reader, length, state);
                     }
                     if (!ok) {
                         REX::ERROR("[OSFDefeat] corrupt persistence record type {:#010x} version {}", type, version);

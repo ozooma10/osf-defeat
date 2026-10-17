@@ -86,3 +86,14 @@ TEST(recent_attackers_exclude_nonhostile_dead_distant_and_nonactor_sources) {
     Hit(w.player,-1,&w.enemy); Hit(w.player,-100,&w.enemy); w.Drain();
     CHECK(DefeatContext::GetLastPlayerRecentHostileAttackers()==std::vector<RE::Actor*>({&w.enemy}));
 }
+TEST(outgoing_damage_breaks_truce_after_engine_write_and_obeys_load_epoch) {
+    RE::Actor attacker(1), victim(2); Add(attacker); Add(victim);
+    CHECK(Defeat::DefeatActor(&attacker,nullptr)); CHECK(Defeat::RecoverActor(&attacker,true,30));
+    onOriginalDamage = [&]() { CHECK(Truce::IsActive(1)); };
+    Hit(victim,-1,&attacker); CHECK(Truce::IsActive(1));
+    RE::BSService::TaskQueue::GetSingleton()->Drain(); CHECK(!Truce::IsActive(1));
+    CHECK(!Engine::HasCaptiveFactionApplied(attacker));
+    CHECK(Defeat::DefeatActor(&attacker,nullptr)); CHECK(Defeat::RecoverActor(&attacker,true,30));
+    Hit(victim,-1,&attacker); (void)RuntimeMutation::AdvanceEpoch();
+    RE::BSService::TaskQueue::GetSingleton()->Drain(); CHECK(Truce::IsActive(1));
+}

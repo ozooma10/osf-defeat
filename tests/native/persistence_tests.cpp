@@ -75,6 +75,31 @@ TEST(registration_refuses_missing_or_unready_host) {
     TestEngine::moduleAvailable=false; Persistence::Register(); CHECK(!client.save);
     TestEngine::moduleAvailable=true; Connect();
 }
+TEST(truce_round_trip_remaps_actor_and_retains_original_deadline) {
+    Connect(); RE::Actor actor(1), remapped(101); Add(actor); Add(remapped);
+    CHECK(Defeat::DefeatActor(&actor,nullptr)); CHECK(Defeat::RecoverActor(&actor,true,30));
+    const auto deadline=Truce::Snapshot()[0].expiresAtDay;
+    Archive a; CHECK(a.Save()); CHECK(a.records.size()==2);
+    CHECK(a.records[1].type==OSF_PERSISTENCE_FOURCC('T','R','C','0') && a.records[1].version==1);
+    Revert(); CHECK(Truce::Snapshot().empty()); a.remap[1]=101; CHECK(a.Load());
+    CHECK(Truce::Snapshot().empty()); Drain(); CHECK(Truce::IsActive(101)); CHECK(!Truce::IsActive(1));
+    CHECK(Truce::Snapshot()[0].expiresAtDay==deadline); CHECK(Engine::HasCaptiveFactionApplied(remapped));
+    calendar.day=deadline; Recovery::Tick(); CHECK(!Truce::IsActive(101)); CHECK(!Engine::HasCaptiveFactionApplied(remapped));
+    Archive clean; CHECK(clean.Save()); CHECK(clean.records.empty());
+}
+TEST(truce_corruption_is_rejected_and_old_save_clears_truce) {
+    Connect(); RE::Actor actor(1); Add(actor); CHECK(Defeat::DefeatActor(&actor,nullptr));
+    CHECK(Defeat::RecoverActor(&actor,true,30)); Archive original; CHECK(original.Save()); Revert();
+    for(std::size_t length=0;length<original.records[1].bytes.size();++length) {
+        Archive a; a.records=original.records; a.records[1].bytes.resize(length);
+        CHECK(!a.Load()); Drain(); CHECK(Truce::Snapshot().empty()); CHECK(Engine::SnapshotCaptiveFactions().empty());
+    }
+    Archive a; a.records=original.records; Set(a.records[1],8,std::numeric_limits<float>::quiet_NaN()); CHECK(!a.Load());
+    a.records=original.records; a.records[1].bytes.back()=2; CHECK(!a.Load());
+    a.records=original.records; a.missing.insert(1); CHECK(a.Load()); Drain(); CHECK(Truce::Snapshot().empty());
+    CHECK(original.Load()); Drain(); CHECK(Truce::IsActive(1));
+    Archive old; Revert(); CHECK(old.Load()); Drain(); CHECK(Truce::Snapshot().empty());
+}
 TEST(empty_save_emits_no_records_and_invalid_interfaces_fail) {
     Connect(); Archive a; CHECK(a.Save()); CHECK(a.records.empty());
     CHECK(!client.save(client.context,nullptr)); CHECK(!client.load(client.context,nullptr));

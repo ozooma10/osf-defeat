@@ -9,6 +9,7 @@
 #include "Core/Presentation.h"
 #include "Core/Persistence.h"
 #include "Core/RuntimeMutation.h"
+#include "Core/Truce.h"
 #include "REL/THook.h"
 
 #ifdef OSF_DEFEAT_TESTING
@@ -193,6 +194,7 @@ namespace OSFDefeat::Recovery
     void Tick()
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+        Truce::Tick();
         const float now = GameTime::NowDay();
         const float watchdogSeconds = Config::WatchdogSeconds();
         for (const auto actorId : DefeatRegistry::Snapshot()) {

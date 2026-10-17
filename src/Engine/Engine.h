@@ -18,7 +18,8 @@ namespace OSFDefeat::Engine
 	// Core callers validate actor/record and hold RuntimeMutation::Mutex before entry.
 	// Dispatch by actor: the player gets the essential + target-drop recipe, NPCs the per-actor one.
 	void ApplyDownState(RE::Actor& a_actor, ActiveDefeat& a_defeat);
-	void RestoreState(RE::Actor& a_actor, const ActiveDefeat& a_defeat);
+	void RestoreState(RE::Actor& a_actor, const ActiveDefeat& a_defeat, bool a_preserveFaction = false);
+	void StopCombat(RE::Actor& a_actor);
 
 	// Captive-faction non-hostility, exposed on demand for content ("surrender to base"): adds a_actor to the configured captiveFaction so hostiles treat them as non-hostile.
 	bool ApplyCaptiveFaction(RE::Actor& a_actor);

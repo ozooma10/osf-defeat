@@ -7,7 +7,7 @@
 namespace OSFDefeat::Defeat
 {
 	bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause = DefeatCause::kScripted);
-	bool RecoverActor(RE::Actor* a_actor, bool a_resumeAI);
+	bool RecoverActor(RE::Actor* a_actor, bool a_resumeAI, float a_truceSeconds = 0.0f);
 
 	// How a defeated actor went down; kNone when not defeated.
 	[[nodiscard]] DefeatCause GetDefeatCause(const RE::Actor* a_victim);

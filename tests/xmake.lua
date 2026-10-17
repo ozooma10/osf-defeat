@@ -8,7 +8,7 @@ target("osfdefeat-test-core")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", {public = true})
     add_files("../src/Core/DefeatRegistry.cpp", "../src/Core/Config.cpp",
         "../src/Core/Conditions.cpp", "../src/Core/Consequence.cpp",
-        "../src/Core/Defeat.cpp", "../src/Core/Recovery.cpp", "../src/Core/Capture.cpp",
+        "../src/Core/Truce.cpp", "../src/Core/Defeat.cpp", "../src/Core/Recovery.cpp", "../src/Core/Capture.cpp",
         "../src/Core/Persistence.cpp", "../src/Core/RuntimeMutation.cpp",
         "../src/Core/Eligibility.cpp", "../src/Core/Decision.cpp",
         "../src/Core/DefeatContext.cpp", "../src/Core/Events.cpp", "native/Doubles.cpp", "native/DamageDriver.cpp")

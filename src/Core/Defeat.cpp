@@ -7,6 +7,7 @@
 #include "Core/GameTime.h"
 #include "Core/Presentation.h"
 #include "Core/RuntimeMutation.h"
+#include "Core/Truce.h"
 #include "Engine/Engine.h"
 
 namespace OSFDefeat::Defeat
@@ -31,6 +32,7 @@ namespace OSFDefeat::Defeat
             return false;
         }
 
+        Truce::End(*a_victim);
         data->cause = a_cause;
         Engine::ApplyDownState(*a_victim, *data);
         REX::INFO("[OSFDefeat] registered defeated actor {:08X} (aggressor {:08X})", id, aggressorId);
@@ -43,7 +45,7 @@ namespace OSFDefeat::Defeat
         return true;
     }
 
-    bool RecoverActor(RE::Actor* a_actor, bool a_resumeAI)
+    bool RecoverActor(RE::Actor* a_actor, bool a_resumeAI, float a_truceSeconds)
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
         if (!a_actor) {
@@ -56,11 +58,15 @@ namespace OSFDefeat::Defeat
             return false;
         }
 
+        if (!std::isfinite(a_truceSeconds) || a_truceSeconds < 0 ||
+            (a_truceSeconds > 0 && !Truce::Begin(*a_actor, a_truceSeconds))) {
+            return false;
+        }
         const FormID aggressorId = data->aggressor;
         // Remove under the mutation lock before engine calls or notifications can re-enter.
         // Repeated recovery then finds no active record and has nothing to restore twice.
         DefeatRegistry::Remove(id);
-        Engine::RestoreState(*a_actor, *data);
+        Engine::RestoreState(*a_actor, *data, a_truceSeconds > 0);
         if (a_actor->IsPlayerRef()) {
             Presentation::ClearPlayerDown();  // stop the cower + release the lock + restore camera
         }
@@ -81,6 +87,7 @@ namespace OSFDefeat::Defeat
     std::size_t ForceRecoverAll()
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+        Truce::EndAll();
         std::size_t recovered = 0;
         for (const auto id : DefeatRegistry::Snapshot()) {
             if (auto* const actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
@@ -249,6 +256,7 @@ namespace OSFDefeat::Defeat
     void ResetRuntimeState()
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
+        Truce::Reset();
         DefeatRegistry::Clear();
         std::unique_lock lock{ g_aiSuspensionsLock };
         g_aiSuspensions.clear();

@@ -15,6 +15,7 @@
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
 #include "Core/Recovery.h"
+#include "Core/Truce.h"
 #include "Core/RuntimeMutation.h"
 #include "Core/Eligibility.h"
 #include "Engine/Engine.h"
@@ -80,6 +81,26 @@ namespace OSFDefeat::Papyrus
             return QueueActorOperation(a_actor, [a_resumeAI](RE::Actor* a_resolvedActor) {
                 Defeat::RecoverActor(a_resolvedActor, a_resumeAI);
             });
+        }
+
+        bool RecoverActorWithTruce(std::monostate, RE::Actor* a_actor, float a_seconds)
+        {
+            if (!std::isfinite(a_seconds) || a_seconds <= 0 || a_seconds > 3600) {
+                return false;
+            }
+            return QueueActorOperation(a_actor, [a_seconds](RE::Actor* actor) {
+                Defeat::RecoverActor(actor, true, a_seconds);
+            });
+        }
+
+        bool EndRecoveryTruce(std::monostate, RE::Actor* a_actor)
+        {
+            return QueueActorOperation(a_actor, [](RE::Actor* actor) { Truce::End(*actor); });
+        }
+
+        bool IsRecoveryTruceActive(std::monostate, RE::Actor* a_actor)
+        {
+            return a_actor && Truce::IsActive(a_actor->GetFormID());
         }
 
         bool SuspendActorAI(std::monostate, RE::Actor* a_actor)
@@ -416,6 +437,9 @@ namespace OSFDefeat::Papyrus
         constexpr std::string_view kClass = "OSFDefeat";
         vm->BindNativeMethod(kClass, "DefeatActor", &DefeatActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RecoverActor", &RecoverActor, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "RecoverActorWithTruce", &RecoverActorWithTruce, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "EndRecoveryTruce", &EndRecoveryTruce, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsRecoveryTruceActive", &IsRecoveryTruceActive, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RescueActor", &RecoverActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SuspendActorAI", &SuspendActorAI, std::nullopt, false);
         vm->BindNativeMethod(kClass, "ResumeActorAI", &ResumeActorAI, std::nullopt, false);

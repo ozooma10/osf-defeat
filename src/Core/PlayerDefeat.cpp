@@ -11,6 +11,7 @@
 #include "Core/DefeatRegistry.h"
 #include "Core/QuestHandoff.h"
 #include "Core/Recovery.h"
+#include "Core/Truce.h"
 #include "Core/RuntimeMutation.h"
 #include "Core/Eligibility.h"
 #include "Engine/Engine.h"
@@ -288,6 +289,11 @@ namespace OSFDefeat::PlayerDefeat
             RE::BSService::TaskQueue* tasks = nullptr;
             FormID victimId = 0;
             const auto epoch = RuntimeMutation::CurrentEpoch();
+            // Outgoing health damage ends the attacker's truce even when NPC auto-defeat
+            // is disabled. Only IDs cross the worker/game-thread boundary.
+            const FormID attackingId = a_ref && a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage &&
+                a_delta < 0.0f && IsLethalGauge(a_info) ? a_ref->GetFormID() : 0;
+            const bool breakTruce = attackingId && Truce::IsActive(attackingId);
 
             if (a_modifier == RE::ACTOR_VALUE_MODIFIER::kDamage && a_delta < 0.0f && IsLethalGauge(a_info)) {
                 if (IsPlayerAVOwner(a_owner)) {
@@ -369,6 +375,17 @@ namespace OSFDefeat::PlayerDefeat
             const FormID aggressorId = action != AfterDamage::kNone && a_ref ? a_ref->GetFormID() : 0;
             g_original(a_owner, a_modifier, a_info, a_delta, a_ref);
 
+            if (breakTruce) {
+                if (auto* queue = RuntimeMutation::GetTaskQueue()) {
+                    queue->AddTask([attackingId, epoch]() {
+                        if (RuntimeMutation::IsCurrent(epoch)) {
+                            if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(attackingId)) {
+                                Truce::End(*actor);
+                            }
+                        }
+                    });
+                }
+            }
             switch (action) {
             case AfterDamage::kPlayerDefeat:
                 QueueBegin(*tasks, aggressorId, DefeatCause::kHealth, epoch);

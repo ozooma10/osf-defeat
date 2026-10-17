@@ -181,7 +181,15 @@ namespace OSFDefeat::Engine
         }
     }
 
-    void RestoreState(RE::Actor& a_actor, const ActiveDefeat& a_defeat)
+    void StopCombat(RE::Actor& a_actor)
+    {
+        a_actor.StopCombat();
+        if (auto* lists = RE::ProcessLists::GetSingleton()) {
+            lists->StopCombatAndAlarmOnActor(&a_actor);
+        }
+    }
+
+    void RestoreState(RE::Actor& a_actor, const ActiveDefeat& a_defeat, bool a_preserveFaction)
     {
         RestoreHealthToMax(a_actor);
         RestoreOwnedState(a_actor, a_defeat.priorState, a_actor.IsPlayerRef());
@@ -190,7 +198,9 @@ namespace OSFDefeat::Engine
         // resolved value 0"). AI resumes on the next think after SetAIEnabled(true); a forced package
         // re-eval isn't required for recovery. Re-add only once 150640 is RE-proven for the live build.
         // Remove exactly the faction we added, preserving pre-existing memberships even if config changed.
-        RemoveCaptiveFaction(a_actor);
+        if (!a_preserveFaction) {
+            RemoveCaptiveFaction(a_actor);
+        }
     }
 
     bool ApplyCaptiveFaction(RE::Actor& a_actor)

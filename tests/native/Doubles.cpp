@@ -12,9 +12,10 @@ namespace OSFDefeat::Engine {
         ++Test::downCalls;
         if (!data.priorState.valid) { data.priorState.valid = true; data.priorState.aiEnabled = actor.boolBits.enabled; }
     }
-    void RestoreState(RE::Actor& actor, const ActiveDefeat&) {
+    void StopCombat(RE::Actor&) {}
+    void RestoreState(RE::Actor& actor, const ActiveDefeat&, bool preserveFaction) {
         ++Test::restoreCalls;
-        RemoveCaptiveFaction(actor);
+        if (!preserveFaction) RemoveCaptiveFaction(actor);
         if (Test::onRestore) Test::onRestore(actor);
     }
     bool IsCaptiveFactionAvailable() { return Test::factionAvailable; }

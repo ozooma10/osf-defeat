@@ -30,6 +30,15 @@ Scriptname OSFDefeat Native Hidden
 Bool Function DefeatActor(Actor akVictim, Actor akAggressor = None) global native
 Bool Function RecoverActor(Actor akActor, Bool abResumeAI = True) global native
 
+; Recover with captive-faction pacification for 1..3600 seconds at the current
+; time scale. Persists as a game-time deadline. Returns queue acceptance; poll
+; !IsDefeated and IsRecoveryTruceActive before fading in. If pacification cannot
+; be applied, recovery stays held for the watchdog. Outgoing health damage ends
+; the truce; content must also call EndRecoveryTruce on fire/attack events for misses.
+Bool Function RecoverActorWithTruce(Actor akActor, Float afSeconds = 30.0) global native
+Bool Function IsRecoveryTruceActive(Actor akActor) global native
+Bool Function EndRecoveryTruce(Actor akActor) global native
+
 ; Legacy recovery name retained for source and binary compatibility. Prefer RecoverActor.
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
 

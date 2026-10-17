@@ -58,3 +58,34 @@ TEST(unresolved_automatic_recovery_retries_when_actor_returns) {
     calendar.day=DefeatRegistry::Get(1)->autoRecoverAtDay; Recovery::Tick(); CHECK(DefeatRegistry::Contains(1));
     Add(actor); Recovery::Tick(); CHECK(!DefeatRegistry::Contains(1));
 }
+TEST(truce_recovery_preserves_pacification_until_deadline) {
+    RE::Actor actor(1); Add(actor); CHECK(Capture::CaptureActor(&actor,nullptr));
+    onRestore = [&](RE::Actor& a) { CHECK(Truce::IsActive(a.id)); CHECK(Engine::HasCaptiveFactionApplied(a)); };
+    CHECK(Defeat::RecoverActor(&actor,true,30)); CHECK(!Defeat::IsDefeated(&actor));
+    CHECK(!Capture::IsCaptive(&actor)); CHECK(Truce::IsActive(1));
+    const auto deadline=Truce::Snapshot()[0].expiresAtDay;
+    calendar.day=deadline-0.00001f; Recovery::Tick(); CHECK(Truce::IsActive(1));
+    calendar.day=deadline; Recovery::Tick(); CHECK(!Truce::IsActive(1));
+    CHECK(!Engine::HasCaptiveFactionApplied(actor)); CHECK(!Truce::End(actor));
+}
+TEST(truce_invalid_or_unavailable_recovery_keeps_defeat_owned) {
+    RE::Actor actor(1); Add(actor); CHECK(Defeat::DefeatActor(&actor,nullptr));
+    for(float value : {-1.0f,3601.0f,std::numeric_limits<float>::quiet_NaN()}) CHECK(!Defeat::RecoverActor(&actor,true,value));
+    factionAvailable=false; CHECK(!Defeat::RecoverActor(&actor,true,30));
+    factionAvailable=true; factionApplyWorks=false; CHECK(!Defeat::RecoverActor(&actor,true,30));
+    CHECK(Defeat::IsDefeated(&actor)); CHECK(restoreCalls==0); CHECK(Truce::Snapshot().empty());
+}
+TEST(truce_preserves_unowned_membership_and_cleans_up_on_new_defeat) {
+    RE::Actor actor(1); Add(actor); preexistingFactions.insert(1);
+    CHECK(Defeat::DefeatActor(&actor,nullptr)); CHECK(Defeat::RecoverActor(&actor,true,30));
+    CHECK(!Truce::Snapshot()[0].ownsFaction); CHECK(Truce::End(actor)); CHECK(Engine::IsInCaptiveFaction(actor));
+    preexistingFactions.clear(); CHECK(Defeat::DefeatActor(&actor,nullptr)); CHECK(Defeat::RecoverActor(&actor,true,30));
+    CHECK(Defeat::DefeatActor(&actor,nullptr)); CHECK(!Truce::IsActive(1)); CHECK(!Engine::HasCaptiveFactionApplied(actor));
+}
+TEST(truce_emergency_cleanup_retries_unresolved_actor_and_healthy_cleanup) {
+    RE::Actor actor(1); CHECK(Defeat::DefeatActor(&actor,nullptr)); CHECK(Defeat::RecoverActor(&actor,true,30));
+    CHECK(Defeat::ForceRecoverAll()==0); CHECK(Truce::IsActive(1)); CHECK(Truce::Snapshot()[0].expiresAtDay==0);
+    Add(actor); Recovery::Tick(); CHECK(!Truce::IsActive(1)); CHECK(!Engine::HasCaptiveFactionApplied(actor));
+    CHECK(Defeat::DefeatActor(&actor,nullptr)); CHECK(Defeat::RecoverActor(&actor,true,30));
+    Defeat::ForceRecoverAll(); CHECK(Truce::Snapshot().empty()); CHECK(Engine::SnapshotCaptiveFactions().empty());
+}

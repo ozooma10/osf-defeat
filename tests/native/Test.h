@@ -9,6 +9,7 @@
 #include "Core/Events.h"
 #include "Core/PlayerDefeat.h"
 #include "Core/Recovery.h"
+#include "Core/Truce.h"
 #include "Core/RuntimeMutation.h"
 #include "Engine/Engine.h"
 #include <nlohmann/json.hpp>
