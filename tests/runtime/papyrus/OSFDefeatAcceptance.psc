@@ -63,7 +63,7 @@ Actor Function NewShadow(Bool lowerLevel = False)
     Return None
 EndFunction
 
-Function ShadowsPrepare()
+Function ShadowsPrepare(Bool testEligibility = True)
     Actor player = Game.GetPlayer()
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
     If hunt == None
@@ -72,7 +72,9 @@ Function ShadowsPrepare()
     EndIf
     hunt.Start()
     Utility.Wait(0.5)
-    ShadowsNegativeEligibility()
+    If testEligibility
+        ShadowsNegativeEligibility()
+    EndIf
     shadow = NewShadow()
     If shadow == None
         OSFDefeatAcceptanceProbe.Record("shadows-ready", False, player, player.GetLevel())
@@ -289,7 +291,7 @@ EndFunction
 Function PrepareCheckpoint()
     OSFDefeat.EndRecoveryTruce(Game.GetPlayer())
     hunt.CancelHunt()
-    ShadowsPrepare()
+    ShadowsPrepare(False)
 EndFunction
 
 Function ObserveCheckpoint(String kind)
