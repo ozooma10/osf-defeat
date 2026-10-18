@@ -375,6 +375,19 @@ successful rerun completes full regression for the lifecycle changes, but it doe
 not establish the cause of run 03's earlier negative observation. That failure and
 the memory-aborted runs remain retained.
 
+## Loot boundary suite (2026-10-17)
+
+`tools/test-runtime.ps1 -LootOnly` adds 22 expected assertions using the existing
+quiet-cell seed. Ten credit cases cover zero, insufficient funds, the minimum,
+fractional truncation and the cap. Further cases check unarmed/missing/duplicate
+weapons, equal/better enemy weapons, empty/existing ammunition and equipped
+mining suit/helmet/boost-pack preservation. Component observations retain both
+actors' final credit counts, promotion, theft status, ammunition and armor
+results. The final healthy-save reload checks aliases, abilities, controls and
+native owned registries. Production gameplay is unchanged. Runtime acceptance
+is pending; the native acceptance DLL and all six Papyrus consumers compile,
+132 runner checks pass, and preflight finds all prerequisites.
+
 ## Remaining acceptance before replacing Basic
 
 - Existing world aggressor at an authored combat encounter and a generated enemy

@@ -60,6 +60,14 @@ namespace {
     bool weaponsOnly=false;
     bool scriptedOnly=false;
     bool lifecycleOnly=false;
+    bool lootOnly=false;
+    std::size_t lootIndex{};
+    constexpr const char* lootCases[]{
+        "credits-0","credits-1","credits-24","credits-25","credits-26",
+        "credits-249","credits-259","credits-24999","credits-25000","credits-25010",
+        "unarmed","missing-weapon","duplicate-weapon","equal-weapon","better-weapon",
+        "ammo-empty","ammo-present","armor"
+    };
     std::size_t lifecycleIndex{};
     constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","restart-attack","reward-idle","reward-cancel"};
     struct ScriptedCase { const char* name; bool endsTruce; };
@@ -403,6 +411,7 @@ void Configure(const Json& config) {
     weaponsOnly=config.value("weaponsOnly",false);
     scriptedOnly=config.value("scriptedOnly",false);
     lifecycleOnly=config.value("lifecycleOnly",false);
+    lootOnly=config.value("lootOnly",false);
     blackoutCheckpoint=config.value("blackoutCheckpoint",1);
     if(config.value("blackoutColdStart",false) && blackoutCheckpoint>1) {
         heldBlackout=blackoutCheckpoint;
@@ -414,6 +423,53 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
     out["acceptancePhase"]=phase;
     out["engine"]={{"saveCallbacks",saves.load()},{"loaded",loads.load()},{"epoch",RuntimeMutation::CurrentEpoch()},{"npcReattachments",reattachments.load()}};
     { std::scoped_lock lock(observationsLock); out["papyrus"]=records; }
+    if(lootOnly) {
+        const auto script=[](std::string_view function,std::string argument={}) { Papyrus(function,argument,false,"OSFDefeatLootAcceptance"); };
+        switch(phase) {
+        case 0:
+            RE::SaveLoadEvent::GetEventSource()->RegisterSink(&engineEvents);
+            RE::TESLoadGameEvent::GetEventSource()->RegisterSink(&engineEvents);
+            beforeSave=saves; Request(out,"save","osfdefeathealthy"); Next(); break;
+        case 1:
+            if(Wait(Acknowledged(out,directory) && saves>beforeSave,60)) break;
+            Check(out,"loot-healthy-save",DefeatRegistry::Snapshot().empty() && Truce::Snapshot().empty());
+            beforeRecords=Sequence(); script("Initialize"); Next(); break;
+        case 2:
+            if(Wait(Recorded("loot-fixture",beforeRecords))) break;
+            Check(out,"loot-fixture",Saw("loot-fixture",beforeRecords)); Next(); break;
+        case 3:
+            out["lootCase"]=lootCases[lootIndex];
+            beforeRecords=Sequence(); script("Prepare",lootCases[lootIndex]); Next(); break;
+        case 4: {
+            const auto ready=std::string("loot-ready-")+lootCases[lootIndex];
+            if(Wait(Recorded(ready,beforeRecords))) break;
+            if(!Saw(ready,beforeRecords)) throw std::runtime_error("Loot fixture preparation failed");
+            beforeRecords=Sequence(); script("Run",lootCases[lootIndex]); Next(); break;
+        }
+        case 5: {
+            const auto name=std::string("loot-")+lootCases[lootIndex];
+            if(Wait(Recorded(name,beforeRecords))) break;
+            out["cases"].push_back({{"name",name},{"passed",Saw(name,beforeRecords)}});
+            if(++lootIndex<std::size(lootCases)) { phase=3; phaseAt=Now(); }
+            else {
+                beforeLoad=loads; beforeEpoch=RuntimeMutation::CurrentEpoch();
+                Request(out,"load","osfdefeathealthy"); Next();
+            }
+            break;
+        }
+        case 6:
+            if(Wait(Acknowledged(out,directory) && loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch,60)) break;
+            beforeRecords=Sequence(); script("InspectCleanup"); Next(); break;
+        case 7:
+            if(Wait(Recorded("loot-cleanup",beforeRecords))) break;
+            Check(out,"loot-cleanup-load",Saw("loot-cleanup",beforeRecords) && DefeatRegistry::Snapshot().empty() &&
+                Truce::Snapshot().empty() && Defeat::SnapshotAISuspensions().empty() && Engine::SnapshotCaptiveFactions().empty());
+            if(std::ranges::any_of(out["cases"],[](const auto& c){return !c.at("passed").template get<bool>();}))
+                throw std::runtime_error("Loot checks failed; see individual cases");
+            return true;
+        }
+        return false;
+    }
     if(lifecycleOnly) {
         const auto script=[](std::string_view function,std::string argument={},bool existing=false) { Papyrus(function,argument,existing,"OSFDefeatLifecycleAcceptance"); };
         switch(phase) {

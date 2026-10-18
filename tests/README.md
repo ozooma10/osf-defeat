@@ -32,7 +32,20 @@ pwsh -NoProfile -File tools/test-runtime.ps1 -ScriptedOnly
 
 # Hunt cancellation, shutdown/restart, and save/load cleanup (18 assertions).
 pwsh -NoProfile -File tools/test-runtime.ps1 -LifecycleOnly
+
+# Credit boundaries, weapon refusal, ammunition, armor, and cleanup (22 assertions).
+pwsh -NoProfile -File tools/test-runtime.ps1 -LootOnly
 ```
+
+The focused loot suite uses spawned, restrained ordinary actors in the existing
+quiet-cell seed. It checks exact credit conservation from zero funds through the
+2,500 cap, missing/duplicate/unarmed weapon refusal, the equal/better base-value
+gate, one-round provisioning without taking player ammunition, and retained
+equipped mining suit/helmet/boost pack. Each case retains component observations
+and reports recorded negatives immediately. A real healthy-save reload checks
+owned-state cleanup. The suite uses the production hunt unchanged, with no
+blackout suspension gates or cold restarts; it does not certify world enemies,
+quest-item refusal, or other weapon families' instance preservation.
 
 `-Mode debug` selects debug instead of releasedbg. `-Harness 'D:\...\OSF Test Harness'`
 selects a different local checkout. `-OutputDirectory` must name a new directory; failed
