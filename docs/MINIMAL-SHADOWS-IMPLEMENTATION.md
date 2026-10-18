@@ -77,8 +77,14 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
 - Hunt lifecycle: **18/18 live assertions**, Defeat `b5d184a`, uninstrumented
   production Shadows scripts. Receipt `build/lifecycle-06.json`; artifacts
   `../OSF Test Harness/artifacts/20261017-212507-872-DefeatSmoke`.
-  The current full rerun passes all offline checks but is blocked on screenshot
-  allocation under the desktop's memory commit limit; details below.
+- Shadows regression after lifecycle changes: **40/40 live assertions**, four
+  owned local game processes, Defeat `fe6b129`; receipt
+  `build/lifecycle-shadows-07.json`; artifacts
+  `../OSF Test Harness/artifacts/20261018-022512-325-DefeatSmoke`.
+  Full regression remains incomplete: one lower-level reward assertion failed
+  without detailed observations, then the next full run aborted during desktop
+  memory pressure. The focused rerun passes that assertion; its original cause
+  remains unconfirmed. Details below.
 - Previous full regression: **78/78 live assertions**, four owned local MO2/SFSE
   processes, **85 native cases / 1,031 checks**, **132 runner checks**, payload
   validation, production build and source-integrity checks pass. Defeat `ca53475`,
@@ -310,12 +316,41 @@ clean checkpoint; runs 03–04 isolated stopped journal state. Run 05 establishe
 the reset behavior and restart callback, then was blocked by capture allocation.
 These do not count as suite passes. Run 06 passes without diagnostic recovery.
 
-Current full-regression attempts `build/lifecycle-full-01` and `-02` pass **85 native
+Earlier full-regression attempts `build/lifecycle-full-01` and `-02` pass **85 native
 cases / 1,031 assertions**, **132 runner checks**, payload validation and production
 build. Their live runs are **blocked**, not passed. The capture helper's new
 diagnostics (Harness `e1ef35a`) identify GPU readback allocation with only
 16,306,176 bytes of available system commit despite about 7 GB of free physical RAM.
-Full runtime acceptance of this lifecycle revision remains pending memory headroom.
+After WizTree closed normally, `build/lifecycle-full-03` passed 55 live assertions
+before the lower-level kill's aggregate observation returned false. The player
+reward, other-killer cleanup, and exact modified-weapon retrieval observations
+passed. The runner incorrectly reported the negative result as a missing-callback
+timeout; test-only commit `fe6b129` now distinguishes that recorded failure and
+retains separate promotion, death, alias, reward and debuff observations. No
+production behavior changed. The failed run is retained at
+`OSF Test Harness/artifacts/20261018-021843-957-DefeatSmoke` (PID 56112, creation
+FILETIME `134367635627463424`). Its underlying cause is not established.
+
+The focused `-ShadowsOnly` rerun on `fe6b129` passes **40/40 assertions**, including
+all five new lower-level observations, same-process blackout loads and three cold
+restarts. Receipt `build/lifecycle-shadows-07.json`; artifacts
+`OSF Test Harness/artifacts/20261018-022512-325-DefeatSmoke`. The four owned process
+identities are retained in `runtime-sessions.json`: 48600 / `134367639456041448`,
+29956 / `134367641501819264`, 58012 / `134367642073959329`, and 52796 /
+`134367642685168540`. Source-integrity checks pass and each game closes normally.
+This pass does not explain the previous aggregate failure.
+
+The following full attempt, `build/lifecycle-full-04`, passes the same offline
+checks but aborts after 31 live assertions. Its PowerShell process exits with
+stack overflow (`0xC00000FD`); a simultaneous read-only PowerShell invocation also
+fails allocating double-mapped memory. The last snapshot still says `running`,
+and no final runtime receipt was written, so neither snapshot nor summary counts
+as acceptance. Retained artifacts:
+`OSF Test Harness/artifacts/20261018-023229-847-DefeatSmoke`, PID 55748, creation
+FILETIME `134367643756387650`. The game is no longer running; a normal-close
+receipt was not produced. Windows reports a 2,349 MiB pagefile and approximately
+7 GiB of available system commit after the game exits. Full runtime acceptance
+remains pending additional desktop memory headroom.
 
 ## Remaining acceptance before replacing Basic
 
