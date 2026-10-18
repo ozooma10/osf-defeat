@@ -397,6 +397,14 @@ player ammunition, weapon counts and the enemy's equipped base. The preceding
 `build/loot-01.json` is a blocked launch because an unrelated game was running.
 Neither attempt is complete acceptance; no production change is inferred.
 
+Run 03 (`build/loot-03.json`, artifacts
+`OSF Test Harness/artifacts/20261018-033234-894-DefeatSmoke`) reproduces preparation
+failure with all other setup components passing: adding the two Eons supplied
+32 additional rounds, raising the player's fixture ammunition from 37 to 69.
+The fixture now normalizes ammunition after all weapon additions/equipment and
+also verifies the intended player copy count and equipped base before promotion.
+The exact 37-round before/after oracle is retained; production is unchanged.
+
 ## Remaining acceptance before replacing Basic
 
 - Existing world aggressor at an authored combat encounter and a generated enemy

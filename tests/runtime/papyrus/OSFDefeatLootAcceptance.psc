@@ -101,7 +101,6 @@ Function Prepare(String kind)
     SetCount(target, grendel, 0)
     SetCount(player, grendel, 0)
     SetCount(player, eon, 1)
-    SetCount(player, ammunition, 37)
     SetCount(target, ammunition, 0)
     funds = 1000
     expectedTaken = 100
@@ -172,6 +171,9 @@ Function Prepare(String kind)
         player.EquipItem(helmet, False, True)
         player.EquipItem(pack, False, True)
     EndIf
+    ; AddItem on a weapon can also grant its loaded ammunition (the duplicate
+    ; fixture added 32 rounds). Normalize after ALL weapon additions/equipment.
+    SetCount(player, ammunition, 37)
     Utility.Wait(1.0)
     playerWeapons = player.GetItemCount(eon)
     targetWeapons = target.GetItemCount(eon)
@@ -181,6 +183,18 @@ Function Prepare(String kind)
     targetHelmets = target.GetItemCount(helmet)
     targetPacks = target.GetItemCount(pack)
     Bool ready = hunt.IsRunning() && hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && hunt.Eligible(target) && player.GetItemCount(Game.GetCredits()) == funds && player.GetItemCount(ammunition) == 37
+    If kind == "missing-weapon"
+        ready = ready && playerWeapons == 0
+    ElseIf kind == "duplicate-weapon"
+        ready = ready && playerWeapons == 2 && player.GetEquippedWeapon() == eon
+    Else
+        ready = ready && playerWeapons == 1
+        If lostWeapon != None
+            ready = ready && player.GetEquippedWeapon() == eon
+        Else
+            ready = ready && !player.IsEquipped(eon)
+        EndIf
+    EndIf
     If kind == "equal-weapon"
         ready = ready && target.GetEquippedWeapon() == eon && targetWeapons == 1
     ElseIf kind == "better-weapon"
