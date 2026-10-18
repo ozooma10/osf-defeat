@@ -405,6 +405,15 @@ The fixture now normalizes ammunition after all weapon additions/equipment and
 also verifies the intended player copy count and equipped base before promotion.
 The exact 37-round before/after oracle is retained; production is unchanged.
 
+Run 04 (`build/loot-04.json`, artifacts
+`OSF Test Harness/artifacts/20261018-033547-152-DefeatSmoke`) passes the duplicate
+refusal, then stops at equal-weapon setup: the suspended enemy still reports
+the unowned fists base (`0x1F4`) after `EquipItem`. The fixture now resumes its
+restrained actor and requests a draw before checking equipment for the value
+gate, and after successful-theft attempts before checking stolen equipment.
+The equipped-base assertions remain required; target inventory counts are also
+retained as preparation diagnostics.
+
 ## Remaining acceptance before replacing Basic
 
 - Existing world aggressor at an authored combat encounter and a generated enemy

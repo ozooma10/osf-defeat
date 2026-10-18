@@ -174,6 +174,12 @@ Function Prepare(String kind)
     ; AddItem on a weapon can also grant its loaded ammunition (the duplicate
     ; fixture added 32 rounds). Normalize after ALL weapon additions/equipment.
     SetCount(player, ammunition, 37)
+    If expectedStatus == 3
+        ; Suspended actors retain their prior equipped getter until AI updates.
+        ; Keep the disposable actor restrained while allowing equipment to settle.
+        OSFDefeat.ResumeActorAI(target)
+        target.DrawWeapon()
+    EndIf
     Utility.Wait(1.0)
     playerWeapons = player.GetItemCount(eon)
     targetWeapons = target.GetItemCount(eon)
@@ -216,6 +222,8 @@ Function Prepare(String kind)
     OSFDefeatAcceptanceProbe.Record(setup + "-credits", player.GetItemCount(Game.GetCredits()) == funds, player, player.GetItemCount(Game.GetCredits()))
     OSFDefeatAcceptanceProbe.Record(setup + "-player-ammo", player.GetItemCount(ammunition) == 37, player, player.GetItemCount(ammunition))
     OSFDefeatAcceptanceProbe.Record(setup + "-player-weapons", True, player, playerWeapons)
+    OSFDefeatAcceptanceProbe.Record(setup + "-target-eons", True, target, targetWeapons)
+    OSFDefeatAcceptanceProbe.Record(setup + "-target-grendels", True, target, target.GetItemCount(grendel))
     Weapon equipped = target.GetEquippedWeapon()
     If equipped != None
         OSFDefeatAcceptanceProbe.Record(setup + "-target-weapon-form", True, target, equipped.GetFormID())
@@ -235,7 +243,11 @@ EndFunction
 Function Run(String kind)
     Actor player = Game.GetPlayer()
     Bool promoted = hunt.Promote(target, lostWeapon)
-    Utility.Wait(0.5)
+    If expectedStatus == 7
+        OSFDefeat.ResumeActorAI(target)
+        target.DrawWeapon()
+    EndIf
+    Utility.Wait(1.0)
     String label = "loot-observed-" + kind
     Bool active = promoted && hunt.Nemesis.GetActorReference() == target && target.HasSpell(hunt.NemesisBuff) && player.HasSpell(hunt.PlayerDebuff) && hunt.IsObjectiveDisplayed(10)
     Bool creditsOk = player.GetItemCount(Game.GetCredits()) == funds - expectedTaken && target.GetItemCount(Game.GetCredits()) == targetCredits + expectedTaken
