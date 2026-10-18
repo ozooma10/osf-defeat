@@ -257,10 +257,12 @@ A separate hunt-lifecycle matrix passes 18 assertions for cancellation, alias
 loss, shutdown, restarted attack subscriptions, reward cleanup and real save/load
 checkpoints. The hunt retains an independent cleanup reference and resets the
 stopped quest's journal after removing owned state. A subsequent Shadows regression
-passes all 40 assertions across four game processes. Full regression passes offline
-checks but remains incomplete: one lower-level reward observation failed and did
-not reproduce in the focused rerun, then the next full run aborted during desktop
-memory pressure. The acceptance record retains both failures and the diagnostics.
+passes all 40 assertions across four game processes. The final full regression
+passes 78 live assertions, 85 native cases / 1,031 checks, 132 runner checks and
+source-integrity validation (`build/lifecycle-full-05/summary.json`). An earlier
+lower-level reward failure did not reproduce in either rerun; its cause remains
+unconfirmed. The acceptance record retains it, the diagnostics and the runs
+aborted during desktop memory pressure.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.

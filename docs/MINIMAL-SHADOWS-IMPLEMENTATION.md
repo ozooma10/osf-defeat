@@ -81,15 +81,14 @@ copies the built Animation DLL privately alongside Defeat so it includes this fi
   owned local game processes, Defeat `fe6b129`; receipt
   `build/lifecycle-shadows-07.json`; artifacts
   `../OSF Test Harness/artifacts/20261018-022512-325-DefeatSmoke`.
-  Full regression remains incomplete: one lower-level reward assertion failed
-  without detailed observations, then the next full run aborted during desktop
-  memory pressure. The focused rerun passes that assertion; its original cause
-  remains unconfirmed. Details below.
-- Previous full regression: **78/78 live assertions**, four owned local MO2/SFSE
+- Full regression after lifecycle changes: **78/78 live assertions**, four owned local MO2/SFSE
   processes, **85 native cases / 1,031 checks**, **132 runner checks**, payload
-  validation, production build and source-integrity checks pass. Defeat `ca53475`,
-  CommonLib `ebc14f7`, Animation `fcf9714`; receipt `build/scripted-full-01/summary.json`;
-  artifacts: `../OSF Test Harness/artifacts/20261017-155650-810-DefeatSmoke`.
+  validation, production build and source-integrity checks pass. Defeat `0141bb6`,
+  Harness `93c05e9`, CommonLib `ebc14f7`, Animation `fcf9714`; receipt
+  `build/lifecycle-full-05/summary.json`; artifacts:
+  `../OSF Test Harness/artifacts/20261018-025908-209-DefeatSmoke`.
+  An earlier lower-level reward assertion failed without detailed observations;
+  both the focused and full reruns pass it. Its original cause remains unconfirmed.
 - Focused post-theft/post-time suite: **13/13 assertions**, three fresh processes,
   Defeat `aa1c7c9`. Receipt `build/shadows-checkpoints-05.json`; artifacts
   `../OSF Test Harness/artifacts/20261017-133250-510-DefeatSmoke`.
@@ -352,9 +351,29 @@ FILETIME `134367643756387650`. The game is no longer running; final cleanup
 did not produce a receipt. `post-abort-recovery/` retains the latest logs, the
 aborted run's owner identity and a separate recovery note; the verified stale
 owner file was retired without changing the original reports.
-Windows reports a 2,349 MiB pagefile and approximately
-7 GiB of available system commit after the game exits. Full runtime acceptance
-remains pending additional desktop memory headroom.
+Windows reported a 2,349 MiB pagefile and approximately
+7 GiB of available system commit after the game exited.
+
+The final full rerun passes **78/78 live assertions**, **85 native cases / 1,031
+checks**, **132 runner checks**, payload validation, production build and source
+integrity. Defeat `0141bb6` (production hunt unchanged from `b5d184a`), Harness
+`93c05e9`, CommonLib `ebc14f7`, Animation `fcf9714`; receipt
+`build/lifecycle-full-05/summary.json` and runtime receipt in the same directory.
+Artifacts: `OSF Test Harness/artifacts/20261018-025908-209-DefeatSmoke`. The first
+session passes 72 assertions; each of three cold restarts adds recovery and cleanup
+assertions. `runtime-sessions.json` records distinct owned process identities:
+43612 / `134367659741204820`, 45300 / `134367663379247143`, 6008 /
+`134367663959289585`, and 22672 / `134367664577930770`. The harness stops each owned
+game, and no game remains running after completion.
+
+Before this rerun, Discord had exited and Edge's window had closed; Edge's
+background processes remained. Available system commit measured about 19 GiB.
+No capture requirements or gameplay assertions were relaxed. All five detailed
+lower-level observations pass again, and the modified Eon's 30 OMOD rows match
+its pre-theft baseline through reload, retrieval and player drop/pickup. This
+successful rerun completes full regression for the lifecycle changes, but it does
+not establish the cause of run 03's earlier negative observation. That failure and
+the memory-aborted runs remain retained.
 
 ## Remaining acceptance before replacing Basic
 

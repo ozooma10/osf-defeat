@@ -27,6 +27,12 @@ This focused mode excludes blackout instrumentation and cold-restart dispatch.
 Latest acceptance: **18/18 passed**, Defeat `b5d184a`, receipt
 `build/lifecycle-06.json`, artifacts
 `OSF Test Harness/artifacts/20261017-212507-872-DefeatSmoke`.
+The subsequent full regression passes **78/78 assertions** on Defeat `0141bb6`;
+receipt `build/lifecycle-full-05/summary.json`. The separate Shadows regression
+passes **40/40**, receipt `build/lifecycle-shadows-07.json`. An earlier lower-level
+kill observation failed and did not reproduce in either rerun; the fixture now
+records promotion, death, alias, reward and debuff separately, and the runner
+reports a recorded negative as an assertion failure rather than a timeout.
 See the [implementation record](../../docs/MINIMAL-SHADOWS-IMPLEMENTATION.md#hunt-lifecycle-cleanup-2026-10-17)
 for the reproduced failures, fixes and broader regression status.
 
