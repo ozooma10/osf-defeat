@@ -384,9 +384,9 @@ weapons, equal/better enemy weapons, empty/existing ammunition and equipped
 mining suit/helmet/boost-pack preservation. Component observations retain both
 actors' final credit counts, promotion, theft status, ammunition and armor
 results. The final healthy-save reload checks aliases, abilities, controls and
-native owned registries. Production gameplay is unchanged. Runtime acceptance
-is pending; the native acceptance DLL and all six Papyrus consumers compile,
-132 runner checks pass, and preflight finds all prerequisites.
+native owned registries. Production gameplay is unchanged. Initial offline
+validation compiled the native acceptance DLL and all six Papyrus consumers,
+passed 132 runner checks, and found all prerequisites in preflight.
 
 The first live attempt (`build/loot-02.json`, artifacts
 `OSF Test Harness/artifacts/20261018-032918-867-DefeatSmoke`) passes 15 assertions,
@@ -413,6 +413,25 @@ restrained actor and requests a draw before checking equipment for the value
 gate, and after successful-theft attempts before checking stolen equipment.
 The equipped-base assertions remain required; target inventory counts are also
 retained as preparation diagnostics.
+
+The final run passes **22/22 live assertions**, including duplicate, equal and
+better-weapon refusal; a single round supplied to an empty enemy inventory;
+existing enemy ammunition unchanged; all 37 player rounds retained; and the
+mining suit, helmet and boost pack still owned and equipped after weapon theft.
+The real healthy-save reload clears aliases, abilities and native owned state
+and restores controls. Receipt: `build/loot-05.json`; artifacts:
+`OSF Test Harness/artifacts/20261018-033923-330-DefeatSmoke`. Defeat `75c43ec`,
+Harness `93c05e9`, Animation `fcf9714`, CommonLib `ebc14f7`; source hash
+`DB69DA3866F6A041395A141B4170AE2968B7A2FBA090241AC9E4A66BE1FA908A`.
+The single owned session was PID 16772, creation FILETIME `134367683882228606`.
+Source/dependency integrity checks pass, and the harness stopped the owned game.
+No game remains running. All three completed unsuccessful runs remain retained.
+
+These changes fix the new fixture's setup, not production gameplay. The prior
+78-case full regression remains the latest full run; this focused suite adds
+loot boundary coverage without claiming a new full regression. Quest-item
+refusal and instance preservation for other weapon families remain separate
+coverage gaps, alongside the world gates below.
 
 ## Remaining acceptance before replacing Basic
 

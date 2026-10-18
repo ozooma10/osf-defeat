@@ -24,7 +24,7 @@ xmake test 'osfdefeat-persistence-tests/*'
 # Check this PC's game prerequisites without launching or writing a profile.
 pwsh -NoProfile -File tools/test-runtime.ps1 -Preflight
 
-# Focused staged Minimal Shadows loop (32 assertions, including a cold restart).
+# Focused staged Minimal Shadows loop (40 assertions, including three cold restarts).
 pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
 
 # Scripted attacks, attribution controls, and healthy-load cleanup (23 assertions).
@@ -46,6 +46,11 @@ and reports recorded negatives immediately. A real healthy-save reload checks
 owned-state cleanup. The suite uses the production hunt unchanged, with no
 blackout suspension gates or cold restarts; it does not certify world enemies,
 quest-item refusal, or other weapon families' instance preservation.
+The 22-case suite passes at Defeat `75c43ec`; retained receipt:
+`build/loot-05.json`. Its fixture normalizes player ammunition after weapon
+additions and lets restrained enemies update their equipment before asserting
+the equipped base. The earlier setup failures and component diagnostics remain
+in the [acceptance record](../docs/MINIMAL-SHADOWS-IMPLEMENTATION.md).
 
 `-Mode debug` selects debug instead of releasedbg. `-Harness 'D:\...\OSF Test Harness'`
 selects a different local checkout. `-OutputDirectory` must name a new directory; failed

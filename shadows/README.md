@@ -25,6 +25,10 @@ helmet, and boost pack are never taken. The modified/legendary Eon fixture prese
 every OMOD row through theft, reload, retrieval and forced world pickup.
 Base value is not a damage or modification-quality
 comparison; theft preservation for other weapon families still needs coverage.
+The focused `-LootOnly` suite passes 22 assertions covering exact credit bounds,
+unarmed/missing/duplicate weapons, equal/better enemy weapons, ammunition
+preservation and equipped mining suit/helmet/boost-pack retention. It uses the
+existing quiet-cell seed; quest-item refusal still needs a dedicated fixture.
 
 Essential, protected, unique, quest-aliased, commanded, child, teammate, ghost,
 scene-bound, and more-than-15-levels-higher actors are excluded. Native reservation

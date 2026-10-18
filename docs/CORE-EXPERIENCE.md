@@ -263,6 +263,12 @@ source-integrity validation (`build/lifecycle-full-05/summary.json`). An earlier
 lower-level reward failure did not reproduce in either rerun; its cause remains
 unconfirmed. The acceptance record retains it, the diagnostics and the runs
 aborted during desktop memory pressure.
+A focused loot matrix passes 22 assertions for exact credit boundaries,
+unarmed/missing/duplicate weapons, equal/better enemy weapons, ammunition
+preservation, retained equipped suit/helmet/boost pack and healthy-load cleanup.
+It uses spawned ordinary enemies in the existing quiet-cell seed. The new
+fixture required ammunition normalization after weapon additions and active AI
+updates before equipment checks; production theft behavior passed unchanged.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
 the shipped content pending the broader acceptance gates recorded there.
