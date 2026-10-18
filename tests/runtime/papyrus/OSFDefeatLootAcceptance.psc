@@ -194,6 +194,22 @@ Function Prepare(String kind)
     EndIf
     hunt.LastTheftStatus = -1
     hunt.LastWeaponConsidered = None
+    String setup = "loot-setup-" + kind
+    OSFDefeatAcceptanceProbe.Record(setup + "-running", hunt.IsRunning())
+    OSFDefeatAcceptanceProbe.Record(setup + "-nemesis-empty", hunt.Nemesis.GetReference() == None)
+    OSFDefeatAcceptanceProbe.Record(setup + "-weapon-empty", hunt.StolenWeapon.GetReference() == None)
+    OSFDefeatAcceptanceProbe.Record(setup + "-eligible", hunt.Eligible(target), target)
+    OSFDefeatAcceptanceProbe.Record(setup + "-credits", player.GetItemCount(Game.GetCredits()) == funds, player, player.GetItemCount(Game.GetCredits()))
+    OSFDefeatAcceptanceProbe.Record(setup + "-player-ammo", player.GetItemCount(ammunition) == 37, player, player.GetItemCount(ammunition))
+    OSFDefeatAcceptanceProbe.Record(setup + "-player-weapons", True, player, playerWeapons)
+    Weapon equipped = target.GetEquippedWeapon()
+    If equipped != None
+        OSFDefeatAcceptanceProbe.Record(setup + "-target-weapon-form", True, target, equipped.GetFormID())
+        OSFDefeatAcceptanceProbe.Record(setup + "-target-weapon-count", True, target, target.GetItemCount(equipped))
+    EndIf
+    If kind == "armor"
+        OSFDefeatAcceptanceProbe.Record(setup + "-armor", ArmorPreserved())
+    EndIf
     OSFDefeatAcceptanceProbe.Record("loot-ready-" + kind, ready, target)
 EndFunction
 

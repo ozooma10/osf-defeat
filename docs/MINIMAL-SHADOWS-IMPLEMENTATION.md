@@ -388,6 +388,15 @@ native owned registries. Production gameplay is unchanged. Runtime acceptance
 is pending; the native acceptance DLL and all six Papyrus consumers compile,
 132 runner checks pass, and preflight finds all prerequisites.
 
+The first live attempt (`build/loot-02.json`, artifacts
+`OSF Test Harness/artifacts/20261018-032918-867-DefeatSmoke`) passes 15 assertions,
+including all ten credit cases and unarmed/missing-weapon refusal. It stops at
+duplicate-weapon preparation; that case did not reach promotion. Additional
+preparation observations now retain quest/alias state, eligibility, credits,
+player ammunition, weapon counts and the enemy's equipped base. The preceding
+`build/loot-01.json` is a blocked launch because an unrelated game was running.
+Neither attempt is complete acceptance; no production change is inferred.
+
 ## Remaining acceptance before replacing Basic
 
 - Existing world aggressor at an authored combat encounter and a generated enemy
