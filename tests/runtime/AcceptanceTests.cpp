@@ -921,7 +921,8 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Check(out,"truce-timer-expiry",!Engine::HasCaptiveFactionApplied(*player) && !Defeat::IsDefeated(player));
         Papyrus("PrepareRepeatDefeat"); phase=39; phaseAt=Now(); break;
     case 36:
-        if(Wait(Saw("shadows-player-reward") && Saw("shadows-other-kill") && Saw("shadows-lower-level-no-reward"),45)) break;
+        // A recorded negative result is a failed assertion, not a missing callback.
+        if(Wait(Recorded("shadows-player-reward",0) && Recorded("shadows-other-kill",0) && Recorded("shadows-lower-level-no-reward",0),45)) break;
         Check(out,"shadows-player-kill-reward",Saw("shadows-player-reward"));
         Check(out,"shadows-other-kill-clears-debuff",Saw("shadows-other-kill"));
         Check(out,"shadows-modified-weapon-retrieval",Saw("weapon-mods-retrieved"));

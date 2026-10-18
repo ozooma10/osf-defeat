@@ -262,6 +262,11 @@ Function ShadowsPlayerKill()
         Utility.Wait(0.1)
         waited += 1
     EndWhile
+    OSFDefeatAcceptanceProbe.Record("shadows-lower-level-promoted", promoted, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-lower-level-dead", shadow.IsDead(), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-lower-level-alias", hunt.Nemesis.GetReference() == None, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-lower-level-reward-absent", !Game.GetPlayer().HasSpell(hunt.PlayerReward), shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-lower-level-debuff-absent", !Game.GetPlayer().HasSpell(hunt.PlayerDebuff), shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-lower-level-no-reward", promoted && shadow.IsDead() && hunt.Nemesis.GetReference() == None && !Game.GetPlayer().HasSpell(hunt.PlayerReward) && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff), shadow, shadow.GetLevel())
 EndFunction
 
