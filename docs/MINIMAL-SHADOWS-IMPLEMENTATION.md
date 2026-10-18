@@ -282,7 +282,7 @@ The quiet-cell lifecycle suite passes **18/18 assertions**, using spawned actors
 and real save/load checkpoints. Defeat `b5d184a`, receipt `build/lifecycle-06.json`,
 artifacts `OSF Test Harness/artifacts/20261017-212507-872-DefeatSmoke`; owned PID
 46512, creation FILETIME `134367459325878084`. The source remained unchanged during
-the run, and the owned game closed normally.
+the run, and the harness stopped the owned game afterward.
 
 The original hunt leaked its NPC ability and player wound when the alias was
 cleared or the quest stopped. `OnQuestShutdown` receives already-empty aliases,
@@ -337,7 +337,8 @@ restarts. Receipt `build/lifecycle-shadows-07.json`; artifacts
 `OSF Test Harness/artifacts/20261018-022512-325-DefeatSmoke`. The four owned process
 identities are retained in `runtime-sessions.json`: 48600 / `134367639456041448`,
 29956 / `134367641501819264`, 58012 / `134367642073959329`, and 52796 /
-`134367642685168540`. Source-integrity checks pass and each game closes normally.
+`134367642685168540`. Source-integrity checks pass and the harness stops each
+owned game afterward.
 This pass does not explain the previous aggregate failure.
 
 The following full attempt, `build/lifecycle-full-04`, passes the same offline
@@ -347,8 +348,11 @@ fails allocating double-mapped memory. The last snapshot still says `running`,
 and no final runtime receipt was written, so neither snapshot nor summary counts
 as acceptance. Retained artifacts:
 `OSF Test Harness/artifacts/20261018-023229-847-DefeatSmoke`, PID 55748, creation
-FILETIME `134367643756387650`. The game is no longer running; a normal-close
-receipt was not produced. Windows reports a 2,349 MiB pagefile and approximately
+FILETIME `134367643756387650`. The game is no longer running; final cleanup
+did not produce a receipt. `post-abort-recovery/` retains the latest logs, the
+aborted run's owner identity and a separate recovery note; the verified stale
+owner file was retired without changing the original reports.
+Windows reports a 2,349 MiB pagefile and approximately
 7 GiB of available system commit after the game exits. Full runtime acceptance
 remains pending additional desktop memory headroom.
 
