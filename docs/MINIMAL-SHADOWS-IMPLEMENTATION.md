@@ -1,7 +1,8 @@
 # Minimal Shadows implementation
 
 Slice 1 of [CORE-EXPERIENCE.md](CORE-EXPERIENCE.md), implemented as a separate
-[staged pack](../shadows/README.md). Basic Consequences remains the shipped pack.
+[staged pack](../shadows/README.md). Shadows has its own release track; Basic Consequences
+remains the optional starter pack. See the [roadmap](../ROADMAP.md) for product boundaries.
 The disposable-cell acceptance suite passes; existing-enemy world acceptance
 remains open below.
 
@@ -433,12 +434,313 @@ loot boundary coverage without claiming a new full regression. Quest-item
 refusal and instance preservation for other weapon families remain separate
 coverage gaps, alongside the world gates below.
 
-## Remaining acceptance before replacing Basic
+## CommonLibSF revalidation (2026-10-21)
 
-- Existing world aggressor at an authored combat encounter and a generated enemy
-  structure: normal full-body appearance, title/journal/abilities, normal planet
-  departure and return, reload/cold restart, long absence and actual reset behavior.
-  The old seeds prove inert surrogates at a city and a natural feature only.
+The update to CommonLib `4242565` exposed two regressions. Its weapon-fire event
+source ID is zero, which aborted startup, and its no-argument `Actor::IsDead()`
+again reads the cached bit that stayed false during actual deaths. Defeat now
+keeps the previously proven event binding (`822934`, with the existing address,
+vtable and instruction checks) and Papyrus-equivalent death predicate local.
+The dependency checkout remains unchanged.
+
+With those local fixes on Defeat `6d12b18`, validation passes:
+
+- Full regression: **78/78 live assertions**, **85 native cases / 1,036 checks**,
+  **136 runner checks**, payload/build and source integrity. Receipt:
+  `build/commonlib-20261021-full-04/summary.json`; artifacts:
+  `OSF Test Harness/artifacts/20261021-165252-298-DefeatSmoke`.
+- Scripted attacks: **23/23**, including player and NPC native weapon fire.
+  Receipt: `build/commonlib-20261021-scripted-03.json`; artifacts:
+  `OSF Test Harness/artifacts/20261021-170158-050-DefeatSmoke`.
+- Death and landed/orbital refusal: **12/12**. Receipt:
+  `build/commonlib-20261021-death-01.json`; artifacts:
+  `OSF Test Harness/artifacts/20261021-164947-594-DefeatSmoke`.
+  All three dead checkpoints retain `commonlibIsDead=false`, while Defeat and
+  Papyrus both report true and the production entry points reject the actor.
+
+All three receipts share source hash
+`1477C5B3F4B1846AAA0CECE03C1719E106D0BBC77D69A26EE594FB67332D418D`.
+The full run uses four distinct owned processes; their identities and launch
+tokens are retained in `runtime-sessions.json`. Original fixtures and live
+Default payloads were not changed. Runtime entrypoints now require explicit
+`-Interactive`; save/load setup uses the harness native command channel, while
+the private profile keeps the game active and restores owned foreground after load.
+
+Earlier failed/blocked evidence remains retained: full-01 hit the zero-ID startup
+abort; full-02 and full-03 lost foreground (full-03 completed 60 checks);
+scripted-01 timed out waiting for foreground gameplay; scripted-02 completed all
+23 gameplay checks but failed source integrity when concurrent documentation
+edits landed. These attempts are not counted as passing runs. World acceptance
+is separate from the successful quiet-cell regression.
+
+The first world session loaded the original New Atlantis seed in a fresh owned
+profile and captured the player with the landed home ship. Foreground ownership
+then repeatedly changed to Edge, so travel/combat input was held and the owned
+game stopped. Retained result: `build/commonlib-20261021/world-runtime/20261021-170442-037-ShadowsWorld-authored`.
+No enemy-world gate passed in that session. Native EditorID quest setup produced
+no probe log; the test-only `StartProbe` bootstrap now resolves the quest by
+plugin filename and logs its actual ID. `build/commonlib-20261021-world-probe-03`
+passes Papyrus compilation and the 11-record round trip. The bootstrap was then
+verified live: quest `07000900` resolved and ran. Normal travel from New Atlantis
+reached Kreet Research Lab. Its cafeteria pirates (`0005236A` through `0005236C`)
+and the Lab 01 pirate (`000543C3`) were all rejected because their leveled bases
+are unique; the other recorded eligibility gates passed. They were not modified
+to bypass the restriction. Route and diagnostic evidence is retained in world
+sessions `20261021-171036-540-ShadowsWorld-authored` and
+`20261021-174432-490-ShadowsWorld-authored`.
+
+That work also exposed missing presentation assets in the private setup: it
+disabled the installed Defeat mod without staging `OSF/osfdefeat.osf.json`.
+`prepare-shadows-world.ps1` now copies and verifies that scene manifest and the
+framework overrides. The corrected profile showed a real `osf.defeat.cower`
+scene start, recovery and restored movement during natural combat. This is setup
+verification, not an existing-enemy persistence pass.
+
+The generated route walked north from the preserved Kreet landing save to the
+scanner-identified Abandoned Weapon Station. Session
+`20261021-175213-890-ShadowsWorld-generated` preserved approach, perimeter and
+pre-combat saves with both sidecars. Existing enemy `FF028BF8` (base `00375AA4`,
+level 5 against player level 2) passed eligibility. The first trial exposed a
+probe error: the low-level `DefeatActor` verb does not select/launch the player
+consequence. That attempt is retained as blocked, with no persistence pass.
+Probe build `commonlib-20261021-world-probe-05` compiled and round-tripped 11
+records, but its preselected enemy differed from the actual lethal attacker in
+session `20261021-181040-728-ShadowsWorld-generated`. Native logs show normal
+Shadows consequence dispatch and recovery; `Inspect` correctly failed identity.
+The post-defeat save is retained, without a persistence claim.
+
+Build `commonlib-20261021-world-probe-06` also compiles and round-trips 11 records.
+`BeginTrial generated` now arms the actor-defeated callback before combat. That
+callback checks the actual lethal aggressor's eligibility, loaded cell, original
+planet and Health defeat cause, then stamps it once before delayed promotion.
+It retains no additional Actor reference or alias. In session
+`20261021-181806-972-ShadowsWorld-generated`, the callback captured existing
+hostile Model A robot `FF01D994` (base `00120A54`, stamp `8597501`) at 14:28:53,
+immediately after the native lethal-hit/consequence log.
+
+At 14:28:55 Starfield crashed with an access violation at RVA `0642202` and
+`RBX=0`. The retained Trainwreck stack crosses the installed
+`MakeAliasedRefFromInventory` callback (`2076D40`, return site `207714D`) and
+inventory/alias frames `20C34AC` and `20C564C`. This localizes the failure during
+the weapon-theft alias path; its root cause remains unproven. The next fresh
+perimeter-seed launch (`20261021-184252-473-ShadowsWorld-generated`) exited before
+the native handshake. Further launches stopped after these two abnormal exits.
+The audit retains the crash/Papyrus/MO2 logs, confirms all 14 payload/seed hash
+checks, and finds no duplicate native console request IDs. No game or MO2 process
+remained after cleanup. No generated persistence, travel, reset or loot-recovery
+gate is marked passed. Resume evidence is recorded in
+`build/commonlib-20261021/world-resume.json`; the detailed crash audit is in the
+`20261021-181806-972-ShadowsWorld-generated` artifact directory.
+
+## Generated-encounter inventory-alias crash (2026-10-21)
+
+The same retained pre-combat save was replayed with copied-source theft
+diagnostics. With weapon theft bypassed after credits, the natural Model A
+robot defeat recovered normally. With theft enabled, the last log was immediately
+before `MakeAliasedRefFromInventory`; no return log appeared. The repeated crash
+was at `Starfield+0642202`, with `RBX=0` and the same inventory-alias stack. This
+isolates the crashing operation without claiming an engine root cause. Both
+attempts and the original saves remain in `build/theft-20261021-ab.json`.
+
+Production no longer creates that inventory alias. The native
+`IsSingleInventoryItemUnreserved` query takes the existing inventory read lock,
+requires exactly one copy, and refuses all alias metadata, including ordinary
+non-quest reservations. This is a conservative snapshot check, not an atomic
+reservation. Papyrus transfers the existing sole instance and records its base
+only after verified ownership changes. The legacy alias is retained for cleanup
+of older saves. No engine offsets or dependency mirrors were changed for this fix.
+
+The same natural encounter then completed theft and recovery: Eon ownership went
+from player 1 / nemesis 0 to player 0 / nemesis 1. The nemesis remained alive,
+the hunt objective and abilities were present, and controls/AI were restored.
+Artifact `20261021-192240-873-ShadowsWorld-generated` retains the logs, screenshot,
+and `osfworld_theft_fixed_20261021` save with both sidecars. Its strict
+`loaded-at-player` parent-cell equality failed, so the run does not certify world
+acceptance; the next probe adds loaded/distance/cell logging to diagnose it.
+
+Focused regressions pass **24/24 loot**, **40/40 Shadows**, and **18/18 lifecycle**
+(`build/theft-20261021-{loot-02,shadows-01,lifecycle-01}.json`). True quest-object
+and ordinary aliases both refuse theft and retain their item/alias. Complete
+modified-Eon OMOD rows survive transfer, reload, three cold-start checkpoints,
+natural drop, retrieval and world pickup. Cancellation, alias loss, saved-hunt
+cleanup and restarts also pass. The separate earlier startup exit has not repeated
+across these fresh starts.
+
+The generated robot subsequently remained loaded 25-36 units away while its
+parent cell differed from the player's. The world probe now requires loaded 3D,
+the original planet and distance at most 100 units; both cell IDs remain logged
+and the failed equality checks are retained. This corrects the observation only.
+Visual appearance and normal site access remain independent requirements.
+
+Artifacts `20261021-194015-720-ShadowsWorld-generated` and
+`20261021-200426-721-ShadowsWorld-generated` cover normal departure from the
+station to Niira, alias detach/unload, save/reload away, a fresh process loading
+that away save, and normal return through Kreet Research Lab and the station's
+surface-map marker. Walking into the station passed original identity, loaded
+proximity, abilities, objective, restored controls/AI and stolen-Eon ownership.
+The return logged 5.478745 UT hours since the final away observation. The
+`station-unbroken-body.png` capture shows the full robot and level-6 title.
+The clean returned checkpoint and sidecars are retained. No actual cell reset
+has yet been demonstrated.
+
+Artifact `20261021-203931-325-ShadowsWorld-generated` resolves the companion-combat
+attribution question. At 16:43 the alias death callback and `Actor.GetKiller` both
+reported player `0x14`, despite no submitted player attack. At 16:44 the original
+hunt, abilities and objective cleared correctly, and the level-6 enemy versus
+level-2 player satisfied the reward rule. This proves engine-credited attribution,
+not the identity of the direct attacker. At 17:03 normal Transfer/Take All looting
+recovered the modified Eon: player 1 / original corpse 0. The retrieved save and
+both sidecars are retained with clean native state. Credits remain unexercised
+because this fixture started with zero.
+
+Later cleanup checks failed after another natural defeat promoted a new hunt;
+those logs remain intact and do not supersede the earlier resolution check. The
+probe now blocks shared-state cleanup/reward assertions when a different hunt
+occupies the slot and disarms death callbacks after the first event. Loot counts
+remain independently observable. Repeated recovery also left the HUD hidden in
+this session; reload restored it before successful looting. That presentation
+observation is retained, without claiming a diagnosed cause or a fix.
+
+The extended-absence run is retained in artifacts
+`20261021-210715-597-ShadowsWorld-generated` and
+`20261021-212906-924-ShadowsWorld-generated`. Normal travel to Venus followed by
+the ship's Wait UI produced 752.687073 measured UT hours away. A fresh process
+loaded the away checkpoint and confirmed the same identity remained unloaded.
+Normal travel back through Kreet Research Lab and the station marker passed
+return at 756.593506 UT hours: original enemy alive, loaded within 91 units,
+original planet, hunt objective/abilities, restored controls/AI, and stolen Eon
+ownership. `osfworld_long_return_20261021` and both clean sidecars are retained.
+The UI's selected 800-hour estimate is not substituted for the measured clock.
+No alias reset event was recorded, and no independent ambient reset baseline was
+established, so actual reset remains unverified.
+
+The authored fixture now reaches Mars's Abandoned Mines from a retained
+checkpoint. Preparation used `player.moveto 0014B4DD`, an existing exterior marker
+verified in the installed ESM; that shortcut is not counted as departure/return
+acceptance. The original approach save is retained. A cold start from
+`osfworld_authored_quick_setup_20261021` loaded successfully in
+`20261021-224216-722-ShadowsWorld-authored`. Four ordinary level-8 enemies passed
+eligibility. At 18:46:35, a natural attack from existing Spacer `0014B3EA` began
+the consequence (base `000D2148`, stamp `14926544`, Mars `0003F59A`); recovery
+completed at 18:46:38. At 18:46:53 the new background checkpoint runner collected
+eight passing identity, alive/proximity, planet, abilities/objective, controls,
+and AI assertions. Theft status 3 means the Spacer already owned an equal-or-more
+valuable weapon, so this encounter does not certify weapon theft. The test added
+1,000 player credits before combat, but credit ownership was not independently
+asserted. Authored visual, reload, travel, reset, and resolution gates remain open.
+
+`tools/world-checkpoint.ps1` now batches native save/reload/probe operations,
+retains exact save/sidecar hashes and timings, and stops on modal dialogs without
+automatic input or mutation retries. The initial setup save completed in 0.72s;
+the authored eight-assertion probe plus blocked save completed in 1.68s. A final
+standalone probe passed all eight assertions in 1.22s at 18:49:36. End-to-end
+same-process reload automation is not yet accepted: Starfield repeatedly showed
+its low-save-space warning and did not perform the requested load/save. This
+persisted after a cold start and with about 10 GB free. The warning was subsequently traced to Steam Cloud quota (see below). Two earlier 60-second timeouts and subsequent immediate
+blocked reports are retained. NTFS compression of eight generated Defeat PCH
+files freed 2.63 GB with identical before/after SHA-256 hashes; no saves or test
+evidence were deleted. Reuse checkpoints and capture milestones rather than
+repeating navigation and every movement screenshot.
+
+On the resumed run, Steam's live storage API reported a 1,073,741,824-byte quota
+with only 12,219,776 bytes available despite roughly 10 GB free on disk. The 23
+owned world-test saves were copied with their sidecars into
+`build/commonlib-20261021/cloud-world-backup-20261021/`; all hashes matched.
+Steam `FileForget` released only those test saves' Cloud copies, retaining and
+verifying the original local/API bytes. Available quota increased to 68,821,840
+bytes. Personal saves, other projects and Cloud settings were not changed.
+The audit records every file and result. In session
+`20261021-231819-354-ShadowsWorld-authored`, a fresh named save then passed in
+0.66s and its observed same-process restore passed in 4.14s, with no modal.
+This validates checkpoint I/O; active-hunt reload remains a separate assertion.
+
+The same resumed authored session then replayed the natural attack with one
+fixture Inflictor (`0026D8A0`) and 1,000 credits. Existing level-8 Spacer
+`0014B2BF` (base `0027BB7B`, stamp `1121901`) landed the lethal hit at 19:30:52;
+recovery completed at 19:30:55 without a crash. At 19:31:00 theft status 7 and
+nine assertions passed: player weapon 0 / nemesis 1, player credits 900 / nemesis
+178. The player lost exactly 100 credits; the enemy's pre-existing balance was
+not separately captured. The active-hunt checkpoint and sidecars are retained.
+The first combined reload completed its native callbacks but the runner rejected
+normal Papyrus user-log rotation. It now accepts that bootstrap boundary only
+when the previous bytes survive in rotation 1; other reads remain append-only.
+The failed report is retained. A fresh combined run at 19:31:49 passed all nine
+checks both before and after reload in 6.89s. Visual, cold restart, normal travel,
+actual reset and final authored resolution remain separate gates.
+
+A fresh process in `20261021-233249-438-ShadowsWorld-authored` loaded the retained
+active hunt and passed all nine assertions at 19:33:59 (1.29s probe). The journal
+visibly displayed Hunt Your Nemesis and its The Unbroken/recover possessions
+objective. Full nemesis body/title and status-screen visuals remain pending.
+An additional defeat occurred during attempted visual framing; the untouched
+active-hunt seed was restored with fresh sidecar/native callbacks before travel.
+Normal surface-map Fast Travel to Ship reached the Frontier at Cydonia. The
+Venus Hills landing then passed all three away checks, including identity,
+other planet and unload after the observed detach. Away save/reload passed three
+checks before and after in 9.26s. Normal return through Cydonia, the Abandoned
+Mines surface marker and walking passed at 20:05:54 after 4.466789 measured UT
+hours away: the original enemy was alive, loaded nearby, and still held the
+Inflictor and 178 credits. The return checkpoint is retained.
+
+The same session subsequently captured the complete humanoid body and level-8
+The Unbroken title (`authored-unbroken-body-title.png`), and the status screen's
+Shaken -20 physical resistance (`authored-shaken-status.png`). A focused combat
+branch restored the pre-combat visual checkpoint and supplied only the player
+with a Magstorm, ammunition and 5,000 health; enemy state was unchanged. This
+tests normal weapon death and resolution, not ordinary difficulty balance.
+Player gunfire produced OnDying at 20:31:23 and OnDeath at 20:31:26; both callback
+and GetKiller credited player 20 (enemy level 8, player level 2). All five
+resolution assertions passed at 20:31:58. The dropped Inflictor was visible in
+the corpse's normal Transfer menu. Take All recovered it and 178 credits:
+at 20:37:01 player weapon 1 / corpse 0, player credits 1,078 / corpse 0, with all
+six resolution/retrieval assertions passing. Before looting the balances were
+900 / 178. Earlier repeat-defeat attempts remain retained and were not counted.
+The loot checkpoint preserves this branch. Authored long absence and independent
+actual reset evidence at both sites remain open.
+
+The authored reset branch emptied the ordinary ammo case beside the red tool
+chest and gray storage crate in the northern electrical yard, retaining before
+and empty quick-loot captures and `osfworld_authored_reset_baseline_01`. The prior
+session then ended at its two-hour harness deadline, without a game crash.
+Session `20261022-013928-027-ShadowsWorld-authored` cold-loaded that baseline,
+passed the nine hunt assertions, and departed normally via the ship and Venus
+Rocky Desert. Normal chair waiting selected ten local hours; the report uses
+measured UT elapsed time instead of the selector's nominal conversion. Away
+reload passed before and after in 10.3 seconds. Normal return through Cydonia and
+the original mine marker passed after **957.180664 UT hours** at 22:17:06. The
+same original enemy remained alive, loaded nearby and held the Inflictor and
+178 credits, with hunt, abilities, controls and AI checks passing.
+
+Walking back to the same ammo case independently witnessed a natural reset:
+the previously empty case now contained a frag grenade and two fragmentation
+mines (`reset-case-quickloot.png`). Its surroundings and player position match
+the retained baseline; no reset command or container/enemy mutation was used.
+The nemesis alias logged zero reset events, which is not used as the reset
+oracle. All nine hunt checks passed again at 22:33:42, and the paired
+`osfworld_authored_actual_reset_01` checkpoint preserves the result. Player-only
+fixture health was retained for navigating the hostile yard. Two premature save
+requests during ship animations produced no callback; their failed reports are
+retained, and the subsequent stable landed save and reload succeeded.
+
+The final generated reset branch, `20261022-033059-458-ShadowsWorld-generated`,
+was saved and stopped at the user's request on October 22. A yellow storage crate
+under the dismantled ship at approximately (705.8, 1553.1, 31.3) was emptied of
+ZeroWire through normal looting and saved as `osfworld_generated_reset_baseline_01`.
+Player-only positioning helped establish this fixture before the baseline; it
+is not travel evidence. A temporary read-only container survey retained no
+references and changed no containers or enemies. Normal walking departure and
+Frontier travel to Venus passed all three away observations. The paired
+`osfworld_generated_reset_away_paused_01` checkpoint was saved in 0.57 seconds;
+all three file hashes were verified before the owned session closed normally.
+No long wait or return followed this new baseline, so the generated site's
+independent actual-reset witness remains unverified. Source changes and earlier
+passing regressions are retained; the normal play profile was not deployed to.
+
+## Remaining acceptance for the separate Shadows release
+
+- Independent natural-reset witness at the generated enemy structure. Authored
+  world acceptance is complete; generated identity, visuals, travel, reload,
+  long absence and resolution have passed in the retained branches above.
 - Custom third-party attack paths outside the scripted compatibility matrix.
   Anonymous `DamageValue` requires explicit `EndRecoveryTruce` integration.
 - Broader unsupported-domain fixtures such as piloting, free-space actors and
@@ -448,7 +750,10 @@ The [world probe and setup guide](../tests/world-shadows/README.md) are ready. I
 stamps an existing enemy once, relies on the production hunt's alias, observes
 unload/reattach and live cells, and records actual elapsed UT time and any alias
 reset events. It neither suspends AI nor adds another subject alias. A long wait
-alone does not certify a reset. Two new disposable combat saves are still required.
+alone does not certify a reset. Both site checkpoints are retained, and an
+eligible authored natural aggressor is now verified. The generated theft crash is
+resolved in the retained replay. The authored actual-reset witness is now
+complete; the generated site's independent reset witness remains pending.
 
 The wake-up table remains the next slice after these world gates. The five-slot
 library, dropped pack, companion rescue, settings and wider traits follow later.

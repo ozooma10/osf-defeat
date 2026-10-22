@@ -1,8 +1,10 @@
-# OSF Defeat — Core Experience: Shadows of Starfield
+# Shadows of Starfield — Content Proposal
 
-Status: proposal, 2026-10-16. Decides what the shipped content is, so that OSF Defeat is worth
-installing on its own. The framework stays the platform; this is the flagship content built on
-it, and the reference for how other authors extend it.
+Status: content proposal, originally 2026-10-16; product boundary updated 2026-10-21.
+Shadows is a separate optional content pack built on OSF Defeat's public API. The
+[roadmap](../ROADMAP.md) defines the framework's first-release scope and supersedes this
+proposal's earlier plan to replace Basic Consequences. The gameplay below remains a
+Shadows proposal; its breadth and balance are not framework release requirements.
 
 ## 1. Why the current build doesn't land
 
@@ -205,14 +207,17 @@ Most of Shadows of Starfield is Papyrus content on the existing API.
 | **Native name override** (later, RE) | Generated names instead of a pre-authored pool. |
 | **Down-beat scene hook** (later) | Let a consequence name its own OSF Animation scene instead of the bare cower. |
 
-## 7. What happens to Basic Consequences
+## 7. Relationship to Basic Consequences and the framework
 
-Shadows of Starfield replaces it as the in-box pack. Custody becomes wake-up tier 1. Robbery
-becomes the nemesis gear and credit take. Left for Scrap and Mauled become the robot and
-creature archetypes. Left as a Message becomes Va'ruun titles and buffs. Picked Clean goes.
+Basic Consequences remains a separate optional starter pack and reference consumer.
+Shadows ships independently and uses normal consequence selection and user overrides when
+other packs are installed. It does not replace Basic or become a framework dependency.
 
-Parked until the on-foot loop is good: ship-domain defeat (roadmap M5), the surrender prompt,
-and NPC consequence content.
+Shadows may adapt custody, robbery, robot, creature, and Va'ruun aftermath ideas into its own
+loop. Those choices do not remove scenarios from Basic. Shared technical primitives belong
+in the framework when a consumer needs them; nemesis, injury, reward, and destination policy
+stay in the pack. Ship defeat, surrender UI, and NPC consequence arbitration are deferred
+framework/content work as described in the [roadmap](../ROADMAP.md).
 
 ## 8. Build order
 
@@ -271,7 +276,7 @@ fixture required ammunition normalization after weapon additions and active AI
 updates before equipment checks; production theft behavior passed unchanged.
 The [existing-enemy world probe](../tests/world-shadows/README.md)
 and isolated-profile setup are ready for two new combat saves. Basic Consequences remains
-the shipped content pending the broader acceptance gates recorded there.
+the optional starter pack; Shadows' separate release awaits its own acceptance gates.
 
 0. **Spike: persistence.** Prove that a quest-aliased actor and a placed container survive
    leaving and returning to a planet, in both an authored location and a procedurally

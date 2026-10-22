@@ -1,10 +1,11 @@
 # OSF Defeat — Basic Consequences
 
-The SFW default consequence pack that ships with OSF Defeat (roadmap M3), and the
+The optional SFW starter pack offered alongside OSF Defeat, and the
 **reference consumer** of the framework's handoff API: quest start, held recovery with an
 automatic watchdog-bounded defeat lease, context getters (`GetLastPlayerAggressor`, `GetLastPlayerDefeatCause`),
-and the explicit recovery handshake. It exists so the framework is worth installing on its own —
-Acheron's empty-by-default mistake, not repeated.
+and the explicit recovery handshake. It gives users a small default experience and
+authors working integration examples. Shadows is a separate optional content pack;
+see the [roadmap](../ROADMAP.md) for the independent release tracks.
 
 Ships as its **own MO2 mod** (`OSF Defeat - Basic Consequences`) so users can toggle or replace
 the default content without touching the framework.
@@ -74,11 +75,13 @@ fallback path is what runs.
 .\Build.ps1 -NoDeploy    # build only
 ```
 
-## Planned (M3 remainder)
+## Release scope and later work
 
-- Runtime-verify the wake-up destination seam: with no tagged marker (fallback = today's
-  same-cell recovery), then with a test XMarker carrying `OSFDefeatBasicRecoveryMarker`.
-- Richer item stripping for `Picked Clean` (a curated aid/ammo FormList) beyond credits + digipicks.
-- Escalation for repeat defeats by the same faction (uses the cooldown/arbitration fields).
-- Runtime verification that `ActorTypeCreature` / `ActorTypeRobot` fire on the intended aggressors
-  (the negative case is proven; the positive keyword case is the open M0 test).
+The [roadmap](../ROADMAP.md#basic-consequences-optional-starter-pack) defines this pack's
+release checks. The marker helper and positive robot/creature routing have recorded
+coverage in [TESTPLAN.md](../TESTPLAN.md); use candidate-specific evidence rather than
+treating the old milestone checklist as current sign-off. Full custody accounting and
+broader natural-encounter recovery still need acceptance for the behavior advertised.
+
+Richer item stripping, repeated-defeat escalation, and wider destination coverage are
+later pack improvements, separate from the first framework release.

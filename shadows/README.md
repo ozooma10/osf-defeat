@@ -1,7 +1,9 @@
 # Minimal Shadows — staged slice 1
 
-This pack is under development. It is built into a separate payload and has not
-replaced Basic Consequences in the shipped installation.
+Shadows is an optional content pack built on OSF Defeat's public API, with its own
+release track. This minimal slice is under development and built into a separate
+payload. Basic Consequences remains the optional starter pack; the framework can
+release independently of Shadows. See the [roadmap](../ROADMAP.md).
 
 Run `pwsh -File tools/build-shadows.ps1` from the repository root. The build
 compiles Papyrus, creates `OSFDefeatShadows.esm`, round-trips it through Spriggit
