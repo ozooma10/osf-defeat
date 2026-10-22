@@ -23,6 +23,11 @@ $apiPex = Join-Path $repo 'dist/Scripts/OSFDefeat.pex'
 foreach ($nativeFile in @($DefeatDll,$AnimationDll,$apiPex)) { if (-not (Test-Path -LiteralPath $nativeFile -PathType Leaf)) { throw "Build the production DLL/API first: $nativeFile" } }
 $nativeInventory = @(@{source=[IO.Path]::GetFullPath($DefeatDll);path='SFSE/Plugins/OSF Defeat.dll';sha256=(Get-FileHash -LiteralPath $DefeatDll).Hash}, @{source=$apiPex;path='Scripts/OSFDefeat.pex';sha256=(Get-FileHash -LiteralPath $apiPex).Hash})
 $nativeInventory += @{source=[IO.Path]::GetFullPath($AnimationDll);path='SFSE/Plugins/OSF Animation.dll';sha256=(Get-FileHash -LiteralPath $AnimationDll).Hash}
+foreach ($relative in @('OSF/osfdefeat.osf.json','SFSE/OSFDefeat/Overrides.json')) {
+    $source = Join-Path $repo "dist/$relative"
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing framework asset: $source" }
+    $nativeInventory += @{source=$source;path=$relative;sha256=(Get-FileHash -LiteralPath $source).Hash}
+}
 $nativeInventory += @(Get-ChildItem (Join-Path $repo 'dist/SFSE/OSFDefeat/Settings') -File -Recurse | ForEach-Object {
     @{source=$_.FullName;path=[IO.Path]::GetRelativePath((Join-Path $repo 'dist'),$_.FullName);sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}
 })
@@ -48,7 +53,7 @@ $settingsPath = Join-Path $sourceProfile 'settings.ini'
 $usesLocalSettings = (Test-Path -LiteralPath $settingsPath) -and
     ((Get-Content -LiteralPath $settingsPath -Raw) -match '(?im)^\s*LocalSettings\s*=\s*(true|1)\s*$')
 $iniSource = if ($usesLocalSettings) { $sourceProfile } else { $script:GameDocuments }
-foreach ($relative in @('OSFDefeatShadows.esm','Scripts/OSFDefeatShadowsWorldProbe.pex','SFSE/Plugins/OSFDefeatTest.json','SFSE/Plugins/OSFTestHarness.dll','SFSE/Plugins/OSF Defeat.dll','SFSE/Plugins/OSF Animation.dll','SFSE/OSFDefeat')) {
+foreach ($relative in @('OSFDefeatShadows.esm','Scripts/OSFDefeatShadowsWorldProbe.pex','SFSE/Plugins/OSFDefeatTest.json','SFSE/Plugins/OSFTestHarness.dll','SFSE/Plugins/OSF Defeat.dll','SFSE/Plugins/OSF Animation.dll','SFSE/OSFDefeat','OSF/osfdefeat.osf.json')) {
     if (Test-Path -LiteralPath (Join-Path $script:Config.MO2 "overwrite/$relative")) { throw "Shared overwrite conflicts with the probe: $relative" }
 }
 $id = $Kind + '-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8)
