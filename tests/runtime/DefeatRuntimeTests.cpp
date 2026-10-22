@@ -126,7 +126,7 @@ namespace OSFDefeat::RuntimeTests {
             }
             if(Now()>deadline) throw std::runtime_error("Runtime suite deadline expired");
             if(auto* ui=RE::UI::GetSingleton(); ui && (ui->IsMenuOpen("LoadingMenu") || ui->IsMenuOpen("MainMenu"))) { Publish(); return; }
-            if(!player || (player->IsDead() && !Acceptance::ExpectsPlayerDeath())) throw std::runtime_error("Player unavailable or dead");
+            if(!player || (Engine::IsDead(*player) && !Acceptance::ExpectsPlayerDeath())) throw std::runtime_error("Player unavailable or dead");
             const auto elapsed=Now()-phaseStart;
             switch(phase) {
             case 0:
@@ -166,7 +166,7 @@ namespace OSFDefeat::RuntimeTests {
                 Next(); break;
             case 6:
                 if(!Defeat::IsDefeated(player) && elapsed<5000) break;
-                Check("lethal-health-hook",!player->IsDead() && Defeat::GetDefeatCause(player)==DefeatCause::kHealth &&
+                Check("lethal-health-hook",!Engine::IsDead(*player) && Defeat::GetDefeatCause(player)==DefeatCause::kHealth &&
                     DefeatContext::GetLastPlayerDefeatCause()==DefeatCause::kHealth && Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())>0);
                 Check("emergency-recovery",Defeat::ForceRecoverAll()==1 && !Defeat::IsDefeated(player)); Next(); break;
             case 7:

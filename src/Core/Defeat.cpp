@@ -21,7 +21,7 @@ namespace OSFDefeat::Defeat
     bool DefeatActor(RE::Actor* a_victim, RE::Actor* a_aggressor, DefeatCause a_cause)
     {
         std::scoped_lock stateLock{ RuntimeMutation::Mutex() };
-        if (!a_victim || a_victim->IsDead()) {
+        if (!a_victim || Engine::IsDead(*a_victim)) {
             return false;
         }
 

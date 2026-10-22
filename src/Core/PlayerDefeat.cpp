@@ -84,7 +84,7 @@ namespace OSFDefeat::PlayerDefeat
             const auto origin = a_player.GetPosition();
             const float radiusSq = a_radius > 0.0f ? a_radius * a_radius : 0.0f;
             const auto consider = [&](RE::Actor* a_actor, bool a_requireHostile) {
-                if (!a_actor || a_actor == &a_player || a_actor->IsDead()) {
+                if (!a_actor || a_actor == &a_player || Engine::IsDead(*a_actor)) {
                     return;
                 }
                 if (std::find(out.begin(), out.end(), a_actor) != out.end()) {
@@ -439,7 +439,7 @@ namespace OSFDefeat::PlayerDefeat
         auto* const player = PlayerActor();
         // The damage hook is the eligibility/commit boundary for Health defeats. Do not re-evaluate
         // mutable config after the hook has already clamped lethal damage.
-        if (!player || player->IsDead() || Defeat::IsDefeated(player)) {
+        if (!player || Engine::IsDead(*player) || Defeat::IsDefeated(player)) {
             return;
         }
 

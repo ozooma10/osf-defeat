@@ -55,8 +55,9 @@ TEST(nonfinite_conversion_and_invalid_form_set_reject_entire_file) {
 }
 TEST(eligibility_precedence_and_scene_gate) {
     RE::Actor actor(50); CHECK(Eligibility::IsEligible(&actor)); CHECK(Eligibility::Explain(nullptr) == Eligibility::Verdict::kNoVictim);
-    actor.dead = true; CHECK(Eligibility::Explain(&actor) == Eligibility::Verdict::kVictimDead);
-    actor.dead = false; actor.inScene = true; CHECK(Eligibility::IsEligible(&actor));
+    actor.dead = true; CHECK(!actor.IsDead()); CHECK(Eligibility::Explain(&actor) == Eligibility::Verdict::kVictimDead);
+    actor.dead = false; actor.cachedDead = true; CHECK(actor.IsDead()); CHECK(Eligibility::IsEligible(&actor));
+    actor.inScene = true; CHECK(Eligibility::IsEligible(&actor));
     Write("Settings/a.json", {{"version",3},{"disableInScenes",true}}); Config::Reload();
     CHECK(Eligibility::Explain(&actor) == Eligibility::Verdict::kInScene);
     Write("Settings/a.json", {{"version",3},{"processingEnabled",false}}); Config::Reload();

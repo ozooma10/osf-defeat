@@ -3,6 +3,7 @@
 #include "Core/Eligibility.h"
 
 #include "Core/Config.h"
+#include "Engine/Engine.h"
 
 namespace OSFDefeat::Eligibility
 {
@@ -25,7 +26,7 @@ namespace OSFDefeat::Eligibility
         if (!a_victim) {
             return Verdict::kNoVictim;
         }
-        if (a_victim->IsDead()) {
+        if (Engine::IsDead(*a_victim)) {
             return Verdict::kVictimDead;
         }
         if (Config::ShouldDisableInScenes() && a_victim->GetCurrentScene()) {

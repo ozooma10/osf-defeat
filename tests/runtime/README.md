@@ -182,12 +182,13 @@ Papyrus death evidence, and a real automatic reload with working controls and
 empty Defeat state. It repeats after the actual home ship's `TakeOff()` transition
 and requires both `IsLanded=False` and `IsInSpaceEx(False)=True` before the hit.
 
-The corrected CommonLib `Actor::IsDead()` helper uses the same virtual predicate
-and argument as Papyrus. A version-gated native probe compares both at every NPC
+Defeat's `Engine::IsDead()` helper uses the same virtual predicate and argument
+as Papyrus. CommonLib revision `4242565` restored the unreliable cached-bit helper;
+Defeat keeps the proven predicate local. A version-gated native probe compares both at every NPC
 checkpoint and before death, during death, and after reload for each player fixture.
 It verifies complete function bytes, primary vtables and compiler-visible field
-offsets. `nativeDeadBit` records the original raw flag separately from
-`nativeIsDead`; the raw flag stayed false during the proven deaths. The oracle
+offsets. `nativeDeadBit` and `commonlibIsDead` record the dependency's raw behavior
+separately from Defeat's `nativeIsDead`; both stayed false during the proven deaths. The oracle
 also retains Papyrus `OnDying`/`OnDeath` observations and requires subsequent load
 events/epoch changes. Canonical proof is in OSF RE's `gameplay.defeat_damage_hook`
 module. The focused suite and full 78-assertion regression pass on Defeat `d78f1a9`

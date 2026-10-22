@@ -8,6 +8,14 @@ namespace OSFDefeat::Engine
 {
 	constexpr RE::ACTOR_LIFE_STATE kBleedOut = RE::ACTOR_LIFE_STATE::kBleedOut;
 
+	[[nodiscard]] inline bool IsDead(const RE::Actor& a_actor)
+	{
+		// Match Papyrus Actor.IsDead: TESObjectREFR slot 0x10D, notEssential=true.
+		// CommonLib's no-argument Actor helper reads a cached bit that can remain
+		// clear during real death. Proven on .244 in OSF RE gameplay.defeat_damage_hook.
+		return static_cast<const RE::TESObjectREFR&>(a_actor).IsDead(true);
+	}
+
 	[[nodiscard]] RE::ActorValueInfo* HealthAV();
 	[[nodiscard]] RE::ActorValueOwner& AVOwnerOf(RE::Actor& a_actor);
 

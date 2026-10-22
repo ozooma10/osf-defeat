@@ -3,8 +3,8 @@ using namespace Test;
 
 TEST(defeat_rejects_null_dead_and_duplicate_without_side_effects) {
     RE::Actor victim(1), aggressor(2); Add(victim); Add(aggressor);
-    CHECK(!Defeat::DefeatActor(nullptr,nullptr)); victim.dead=true; CHECK(!Defeat::DefeatActor(&victim,nullptr));
-    victim.dead=false; CHECK(Defeat::DefeatActor(&victim,&aggressor,DefeatCause::kHealth));
+    CHECK(!Defeat::DefeatActor(nullptr,nullptr)); victim.dead=true; CHECK(!victim.IsDead()); CHECK(!Defeat::DefeatActor(&victim,nullptr));
+    victim.dead=false; victim.cachedDead=true; CHECK(victim.IsDead()); CHECK(Defeat::DefeatActor(&victim,&aggressor,DefeatCause::kHealth));
     CHECK(!Defeat::DefeatActor(&victim,nullptr)); CHECK(downCalls==1);
     CHECK(Defeat::GetDefeatCause(&victim)==DefeatCause::kHealth); CHECK(DefeatRegistry::Get(1)->aggressor==2);
     CHECK(Defeat::IsDamageImmune(&victim)); CHECK(!Defeat::IsDamageImmune(nullptr));

@@ -70,13 +70,15 @@ namespace RE {
         float GetActorValue(const ActorValueInfo&) const { return health; }
         float GetPermanentActorValue(const ActorValueInfo&) const { return maximum; }
     };
-    struct TESObjectREFR : TESForm, ActorValueOwner {};
+    struct TESObjectREFR : TESForm, ActorValueOwner {
+        virtual bool IsDead(bool) const { return false; }
+    };
     struct BGSKeyword : TESForm {};
     struct TESFaction : TESForm {};
     struct TESObjectWEAP : TESForm {};
     struct Actor : TESObjectREFR {
         explicit Actor(std::uint32_t value = 0) { id = value; }
-        bool dead = false, inScene = false;
+        bool dead = false, cachedDead = false, inScene = false;
         enum class BOOL_BITS { kProcessMe };
         struct Bits { bool enabled = true; bool all(BOOL_BITS) const { return enabled; } } boolBits;
         struct Loaded { void* data3D = reinterpret_cast<void*>(1); } loaded;
@@ -92,7 +94,8 @@ namespace RE {
         std::set<BGSKeyword*> keywords;
         std::map<TESFaction*, int> factions;
         std::set<Actor*> hostile;
-        bool IsDead() const { return dead; }
+        bool IsDead() const { return cachedDead; }
+        bool IsDead(bool) const override { return dead; }
         bool IsPlayerRef() const { return id == 0x14; }
         void* GetCurrentScene() const { return inScene ? reinterpret_cast<void*>(1) : nullptr; }
         bool HasKeyword(BGSKeyword* keyword) const { return keywords.contains(keyword); }

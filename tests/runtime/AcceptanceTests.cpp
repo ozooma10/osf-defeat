@@ -158,7 +158,7 @@ namespace {
             {"subject",subject?subject->GetFormID():0},{"value",value}});
         if(label.starts_with("domain-player-") && subject) {
             records.back()["nativeDeadBit"]=subject->boolBits.all(RE::Actor::BOOL_BITS::kDead);
-            records.back()["nativeIsDead"]=subject->IsDead();
+            records.back()["nativeIsDead"]=Engine::IsDead(*subject);
             records.back()["lifeState"]=(static_cast<const RE::ActorState&>(*subject).actorState1>>17)&0xF;
         }
         if((label=="fixture" || label=="scripted-fixture" || label=="shadows-ready" || label=="shadows-repeat-ready" || label=="domain-ready") && ok && subject) npcID=subject->GetFormID();
@@ -215,13 +215,14 @@ namespace {
             {"gate",gate},{"papyrusIsDead",papyrusDead},{"expectedDead",expectedDead},{"epoch",RuntimeMutation::CurrentEpoch()}};
         bool ok=false;
         if(gate) {
-            const bool native=subject->IsDead();
+            const bool native=Engine::IsDead(*subject);
             const bool virtualDead=static_cast<const RE::TESObjectREFR*>(subject)->IsDead(true);
             const auto lifeState=(state>>17)&0xF;
             ok=native==expectedDead && papyrusDead==expectedDead && virtualDead==expectedDead;
             if(label=="npc-down") ok=ok && lifeState==8 && Defeat::IsDefeated(subject);
             if(label=="npc-recovered") ok=ok && !Defeat::IsDefeated(subject);
-            observation.update({{"nativeIsDead",native},{"nativeDeadBit",subject->boolBits.all(RE::Actor::BOOL_BITS::kDead)},
+            observation.update({{"nativeIsDead",native},{"commonlibIsDead",subject->IsDead()},
+                {"nativeDeadBit",subject->boolBits.all(RE::Actor::BOOL_BITS::kDead)},
                 {"virtualTrue",virtualDead},{"virtualFalse",static_cast<const RE::TESObjectREFR*>(subject)->IsDead(false)},
                 {"lifeState",lifeState}});
             if(expectedDead && native && virtualDead) {
@@ -336,7 +337,7 @@ namespace {
         return result;
     }
     bool Ghost(RE::Actor* a) { return a->extraDataList && a->extraDataList->HasType(RE::ExtraDataType::kGhost); }
-    bool Down(RE::Actor* a) { return a && !a->IsDead() && Defeat::IsDefeated(a) && Ghost(a) && a->boolFlags.all(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery); }
+    bool Down(RE::Actor* a) { return a && !Engine::IsDead(*a) && Defeat::IsDefeated(a) && Ghost(a) && a->boolFlags.all(RE::Actor::BOOL_FLAGS::kNoBleedoutRecovery); }
     bool Loaded(RE::Actor* a) { if(!a) return false; const auto loaded=a->loadedData.LockRead(); return *loaded && (*loaded)->data3D; }
     void Request(Json& out,std::string_view kind,std::string_view name) {
         action=std::string(kind); ++actionId;
@@ -713,7 +714,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             beforeRecords=Sequence(); Papyrus("ProbeDeathStates"); phase=6; phaseAt=Now(); break;
         case 2:
             if(Wait(Saw("domain-ready",beforeRecords) && Loaded(npc),90)) break;
-            Check(out,prefix+"-fixture",npc && npc!=player && !player->IsDead() && Saw("death-state-player-"+refusalDomain+"-alive",beforeRecords));
+            Check(out,prefix+"-fixture",npc && npc!=player && !Engine::IsDead(*player) && Saw("death-state-player-"+refusalDomain+"-alive",beforeRecords));
             beforeRecords=Sequence(); beforeLoad=loads; beforeEpoch=RuntimeMutation::CurrentEpoch();
             Damage(player,-Engine::AVOwnerOf(*player).GetActorValue(*Engine::HealthAV())-100,npc);
             Papyrus("WatchRefusal",refusalDomain); Next(); break;
@@ -727,7 +728,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
             // the engine event/epoch instead of racing it with console typing.
             Next(); break;
         case 4:
-            if(Wait(loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch && !player->IsDead() && !Defeat::IsDefeated(player),45)) break;
+            if(Wait(loads>beforeLoad && RuntimeMutation::CurrentEpoch()>beforeEpoch && !Engine::IsDead(*player) && !Defeat::IsDefeated(player),45)) break;
             beforeRecords=Sequence(); Papyrus("InspectRefusalReload",refusalDomain); Next(); break;
         case 5:
             if(Wait(Saw("controls-up",beforeRecords) && scenes->GetSceneForActor(player)==0)) break;
@@ -782,7 +783,7 @@ bool Tick(Json& out,RE::Actor* player,OSF::API::IOSFSceneAPI* scenes,const std::
         Papyrus("Initialize"); Next(); break;
     case 1:
         if(Wait(Saw("fixture") && Saw("registered") && Loaded(npc))) break;
-        Check(out,"npc-disposable-fixture",npc!=player && !npc->IsDead() && !Engine::IsInCaptiveFaction(*npc));
+        Check(out,"npc-disposable-fixture",npc!=player && !Engine::IsDead(*npc) && !Engine::IsInCaptiveFaction(*npc));
         Check(out,"papyrus-registration",Saw("registered"));
         if(shadowsOnly) { Request(out,"save","osfdefeathealthy"); phase=28; phaseAt=Now(); break; }
         beforePosition=player->GetPosition(); Request(out,"move","baseline"); Next(); break;
