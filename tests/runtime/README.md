@@ -19,7 +19,7 @@ requires both reserved items to remain with the player. The Shadows suite retain
 the complete modified-weapon OMOD rows through transfer, same-process reload,
 three cold-start checkpoints, natural drop, retrieval, and world pickup.
 
-Run the reservation cases with `tools/test-runtime.ps1 -LootOnly
+Run the reservation cases with `tools/test-runtime.ps1 -Interactive -LootOnly
 -ResultPath build/new-loot-result.json`. The optional reservation quest is built
 only for that test mode. The fixed natural-combat replay also recovered with the
 Eon actually transferred; world travel/reset acceptance is tracked separately.
@@ -27,7 +27,7 @@ Eon actually transferred; world travel/reset acceptance is tracked separately.
 ## Run hunt lifecycle coverage
 
 ```powershell
-pwsh -NoProfile -File tools/test-runtime.ps1 -LifecycleOnly `
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -LifecycleOnly `
   -ResultPath build/new-lifecycle-result.json
 ```
 
@@ -60,7 +60,7 @@ for the reproduced failures, fixes and broader regression status.
 ## Run scripted attack compatibility
 
 ```powershell
-pwsh -NoProfile -File tools/test-runtime.ps1 -ScriptedOnly `
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -ScriptedOnly `
   -ResultPath build/new-scripted-result.json
 ```
 
@@ -94,7 +94,7 @@ retains the fixes, controls and complete regression results.
 ## Run broader weapon coverage
 
 ```powershell
-pwsh -NoProfile -File tools/test-runtime.ps1 -WeaponsOnly `
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -WeaponsOnly `
   -ResultPath build/new-weapons-result.json
 ```
 
@@ -132,15 +132,15 @@ retains scope, process identity, isolation-load evidence, and earlier iterations
 ## Run blackout coverage
 
 ```powershell
-pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly `
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -ShadowsOnly `
   -ResultPath build/new-shadows-result.json
 
 # Just the post-theft/post-time checkpoints and their cold restarts:
-pwsh -NoProfile -File tools/test-runtime.ps1 -BlackoutOnly `
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -BlackoutOnly `
   -ResultPath build/new-blackout-result.json
 
 # Framework, Basic Consequences, and Shadows together:
-pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame
+pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame -Interactive
 ```
 
 Use a new result path each time. The default disposable quiet-cell fixture is
@@ -181,7 +181,7 @@ Use a retained slice-0 save whose `ShipMarker` alias is inside the current lande
 home ship, on the player's planet, plus its matching verified probe build:
 
 ```powershell
-pwsh -NoProfile -File tools/test-runtime.ps1 `
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive `
   -RefusalFixture 'C:\path\to\retained-ship-marker-save.sfs' `
   -PersistenceBuildReceipt 'C:\path\to\persistence-build\build.json' `
   -ResultPath build/new-refusal-result.json

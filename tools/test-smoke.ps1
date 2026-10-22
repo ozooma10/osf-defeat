@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param(
     [switch]$RunGame,
+    [switch]$Interactive,
     [switch]$Plan,
     [ValidateSet('debug','releasedbg')][string]$Mode = 'releasedbg',
     [string]$Harness = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'OSF Test Harness'),
@@ -9,6 +10,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($RunGame -and -not $Interactive -and -not $Plan) { throw '[blocked] The Defeat runtime suite tests desktop input. Supply -RunGame -Interactive explicitly.' }
 $repo = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'TestSupport.ps1')
 $coverage = @(Get-Content (Join-Path $repo 'tests/coverage.json') -Raw | ConvertFrom-Json)
@@ -75,7 +77,7 @@ try {
     if ($RunGame) {
         Run-Stage runtime {
             $runtime=Join-Path $directory 'runtime.json'
-            & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'test-runtime.ps1') -Harness $Harness -ResultPath $runtime -SourceHash $identity.sha256
+            & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'test-runtime.ps1') -Interactive -Harness $Harness -ResultPath $runtime -SourceHash $identity.sha256
             $code=$LASTEXITCODE
             if ($code -ne 0) { throw "$(if ($code -eq 1) {'[failed]'} else {'[blocked]'}) Runtime suite exited $code; see $runtime" }
             $receipt=Get-Content $runtime -Raw | ConvertFrom-Json

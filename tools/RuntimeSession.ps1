@@ -17,7 +17,7 @@ function Move-DefeatPrivateFile([string]$Source, [string]$Destination, [int]$Ret
 # Dot-sourced by test-runtime.ps1; every launch uses a new mailbox and token.
 function Invoke-DefeatRuntimeSession([string[]]$RequiredMods, [string]$Label) {
     $script:AnimationMode=$true
-    try { $null=Start-TestGame -RequiredTestMods $RequiredMods -AllowProductionSettings }
+    try { $null=Start-TestGame -RequiredTestMods $RequiredMods -AllowProductionSettings -RefocusAfterLoad }
     finally { $script:AnimationMode=$false }
     $identity=Get-ProcessIdentity (Get-OwnedGame)
     $snapshotPath=Join-Path $script:DefeatMailbox 'snapshot.json'
@@ -31,6 +31,7 @@ function Invoke-DefeatRuntimeSession([string[]]$RequiredMods, [string]$Label) {
         $null=Read-DefeatCosave (Join-Path $healthy 'osfdefeathealthy.osf') @{}
         Copy-Item -LiteralPath (Join-Path $healthy 'osfdefeathealthy.sfs'),(Join-Path $healthy 'osfdefeathealthy.osf') -Destination $script:SaveRoot
     }
+    $null=Invoke-Input 'focus'
     $null=Save-Capture "$Label-before"
     $runId=[guid]::NewGuid().ToString('N')
     Write-JsonFile (Join-Path $script:DefeatMailbox 'start.json') @{pid=$identity.pid;processStartFileTime=$identity.processStartFileTime;launchToken=$script:DefeatLaunchToken;runId=$runId;expiresAtUtcMs=[DateTimeOffset]::UtcNow.AddSeconds(15).ToUnixTimeMilliseconds()}
@@ -51,6 +52,7 @@ function Invoke-DefeatRuntimeSession([string[]]$RequiredMods, [string]$Label) {
         if ([DateTimeOffset]::UtcNow -ge $limit) { throw '[blocked] Runtime suite timed out.' }
     } while ($true)
     Write-JsonFile (Join-Path $script:Run.path "$Label-result.json") $snapshot
+    $null=Invoke-Input 'focus'
     $null=Save-Capture "$Label-after"
     if ($snapshot.state -ne 'passed') { throw "[failed] Runtime assertion: $($snapshot.error)" }
     return @{snapshot=$snapshot;identity=$identity;launchToken=$script:DefeatLaunchToken}

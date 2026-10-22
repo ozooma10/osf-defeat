@@ -14,7 +14,7 @@ pwsh -NoProfile -File tools/test-smoke.ps1 -Plan
 pwsh -NoProfile -File tools/test-smoke.ps1
 
 # Offline bench plus a fresh local game smoke session.
-pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame
+pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame -Interactive
 
 # Fast native iteration using the current XMake configuration.
 xmake build -y osfdefeat-tests
@@ -25,16 +25,16 @@ xmake test 'osfdefeat-persistence-tests/*'
 pwsh -NoProfile -File tools/test-runtime.ps1 -Preflight
 
 # Focused staged Minimal Shadows loop (40 assertions, including three cold restarts).
-pwsh -NoProfile -File tools/test-runtime.ps1 -ShadowsOnly
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -ShadowsOnly
 
 # Scripted attacks, attribution controls, and healthy-load cleanup (23 assertions).
-pwsh -NoProfile -File tools/test-runtime.ps1 -ScriptedOnly
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -ScriptedOnly
 
 # Hunt cancellation, shutdown/restart, and save/load cleanup (18 assertions).
-pwsh -NoProfile -File tools/test-runtime.ps1 -LifecycleOnly
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -LifecycleOnly
 
 # Credit boundaries, weapon refusal, ammunition, armor, and cleanup (22 assertions).
-pwsh -NoProfile -File tools/test-runtime.ps1 -LootOnly
+pwsh -NoProfile -File tools/test-runtime.ps1 -Interactive -LootOnly
 ```
 
 The focused loot suite uses spawned, restrained ordinary actors in the existing

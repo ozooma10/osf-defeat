@@ -5,6 +5,7 @@ param(
     [string]$ResultPath = '',
     [string]$SourceHash = '',
     [switch]$Preflight,
+    [switch]$Interactive,
     [switch]$ShadowsOnly,
     [switch]$BlackoutOnly,
     [switch]$WeaponsOnly,
@@ -75,6 +76,7 @@ if ($Preflight) {
     @{harness=$Harness;fixture=$script:Config.FixtureSave;animationMod=$animationMod;missing=$missing;runtimeCases=$expected} | ConvertTo-Json -Depth 5
     exit $(if ($missing.Count) {2} else {0})
 }
+if (-not $Interactive) { throw '[blocked] The Defeat runtime suite tests desktop input. Supply -Interactive explicitly.' }
 if ($ResultPath -and (Test-Path -LiteralPath $ResultPath)) { throw 'ResultPath must be new.' }
 $lock=$null; $outcome='blocked'; $message='Runtime preparation did not complete.'; $code=2; $started=$false
 $source=Get-DefeatSourceIdentity $repo
@@ -231,6 +233,7 @@ try {
     Set-IniValue (Join-Path $profile 'settings.ini') 'custom_overwrites' ($script:Config.Executable.Replace(' ','%20')) $outputName
     foreach ($ini in @('Starfield.ini','StarfieldCustom.ini')) {
         Set-IniValue (Join-Path $profile $ini) 'General' 'sLocalSavePath' ([IO.Path]::GetRelativePath($script:GameDocuments,$script:SaveRoot)+'\')
+        Set-IniValue (Join-Path $profile $ini) 'General' 'bAlwaysActive' '1'
     }
     Set-IniValue (Join-Path $profile 'StarfieldCustom.ini') 'Archive' 'bInvalidateOlderFiles' '1'
     Set-IniValue (Join-Path $profile 'StarfieldCustom.ini') 'Archive' 'sResourceDataDirsFinal' ''

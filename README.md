@@ -170,7 +170,7 @@ Registered receivers should implement `OnPlayerDefeated()`, `OnPlayerConsequence
 
 ```powershell
 pwsh -NoProfile -File tools/test-smoke.ps1          # Native tests, payload checks, production build
-pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame # Also run a fresh local game smoke session
+pwsh -NoProfile -File tools/test-smoke.ps1 -RunGame -Interactive # Also run a fresh local game smoke session
 pwsh -NoProfile -File tools/test-smoke.ps1 -Plan    # Coverage and stage inventory
 ```
 

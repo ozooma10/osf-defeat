@@ -29,3 +29,19 @@ function Test-WeaponInputBounds {
     $snapshot.action.name='reload-aim'; Invoke-DefeatRuntimeAction $snapshot; $script:checks++
 }
 Test-WeaponInputBounds
+
+# Save/load setup must use the native mailbox without taking desktop focus.
+function Test-DefeatConsoleDispatch {
+    . (Join-Path $root 'tools/RuntimeActions.ps1')
+    $commands=[Collections.Generic.List[string]]::new()
+    function Invoke-ConsoleCommand([string]$Text) { $commands.Add($Text) }
+    function Invoke-Input { throw 'Console setup must not send desktop input.' }
+    function Send-Key { throw 'Console setup must not type into the console.' }
+    Invoke-DefeatConsole 'save osfdefeathealthy'
+    Invoke-DefeatConsole 'load osfdefeatblackout'
+    if ($commands.Count -ne 2 -or $commands[0] -cne 'save osfdefeathealthy' -or $commands[1] -cne 'load osfdefeatblackout') { throw 'Console dispatch changed command order or content.' }; $script:checks++
+    Reject { Invoke-DefeatConsole 'save unrelated' }
+    Reject { Invoke-DefeatConsole "load osfdefeathealthy`nplayer.kill" }
+    if ($commands.Count -ne 2) { throw 'Invalid console command was dispatched.' }; $script:checks++
+}
+Test-DefeatConsoleDispatch

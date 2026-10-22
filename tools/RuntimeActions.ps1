@@ -1,23 +1,9 @@
 # Dot-sourced after the existing harness helpers. These are fixed acceptance actions.
 function Invoke-DefeatConsole([string]$Command) {
     if ($Command -notmatch '^(save|load) osfdefeat(healthy|down|clean|truce|blackout|theft|time|lifecycle|lifecycleclean)$') { throw '[blocked] Unexpected acceptance console command.' }
-    $null=Invoke-Input 'focus'
-    Send-Key 192 200
-    try {
-        $null=Wait-Observed 'Defeat acceptance console opened' {Get-GameState} {param($s) 'Console' -in $s.menus -or 'ConsoleMenu' -in $s.menus} 3
-    } catch {
-        # Startup can consume the first key. Reobserve before a single retry so
-        # a late open is never toggled closed, and don't type through other menus.
-        $state=Get-GameState
-        if ('Console' -notin $state.menus -and 'ConsoleMenu' -notin $state.menus) {
-            if (-not $state.loaded -or $state.snapshotStale -or @($state.menus).Count) { throw }
-            Send-Key 192 200
-            $null=Wait-Observed 'Defeat acceptance console retry' {Get-GameState} {param($s) 'Console' -in $s.menus -or 'ConsoleMenu' -in $s.menus} 6
-        }
-    }
-    foreach ($character in $Command.ToUpperInvariant().ToCharArray()) { Send-Key ([int]$character) 40 }
-    Send-Key 13
-    Send-Key 192
+    # The caller separately observes save callbacks, files and load epochs.
+    # A native console receipt alone does not establish completion.
+    $null=Invoke-ConsoleCommand $Command
 }
 
 function Invoke-DefeatRuntimeAction($Snapshot) {
@@ -39,6 +25,7 @@ function Invoke-DefeatRuntimeAction($Snapshot) {
             $inspection.saveSha256=(Get-FileHash -LiteralPath $save).Hash
             Write-JsonFile (Join-Path $evidence 'inspection.json') $inspection
             Add-Evidence 'save-pair' $name $inspection
+            $null=Invoke-Input 'focus'
             $null=Save-Capture $name
         }
         'load' {
