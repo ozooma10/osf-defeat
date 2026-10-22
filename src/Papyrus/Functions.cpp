@@ -123,6 +123,28 @@ namespace OSFDefeat::Papyrus
                 a_actor->extraDataList->HasType(RE::ExtraDataType::kEssentialProtected));
         }
 
+        bool IsSingleInventoryItemUnreserved(std::monostate, RE::Actor* a_owner, RE::TESForm* a_item)
+        {
+            if (!a_owner || !a_item) return false;
+            // Same locked inventory/stack layout used by equipped-weapon capture
+            // and the runtime OMOD checks. Never materialize an inventory REFR:
+            // MakeAliasedRefFromInventory can dereference null in generated cells.
+            const auto inventory = a_owner->inventoryList.LockRead();
+            if (!*inventory) return false;
+            std::uint32_t copies = 0;
+            for (const auto& item : (*inventory)->data) {
+                if (item.object != a_item) continue;
+                for (const auto& stack : item.stacks) {
+                    if (!stack.count) continue;
+                    if (stack.count != 1 || ++copies != 1) return false;
+                    // Reject all alias metadata, including non-quest aliases and
+                    // cleared retained entries. This deliberately overprotects.
+                    if (stack.extra && stack.extra->HasType(RE::ExtraDataType::kAliasInstanceArray)) return false;
+                }
+            }
+            return copies == 1;
+        }
+
         bool SuspendActorAI(std::monostate, RE::Actor* a_actor)
         {
             return QueueActorOperation(a_actor, &Defeat::SuspendAI);
@@ -462,6 +484,7 @@ namespace OSFDefeat::Papyrus
         vm->BindNativeMethod(kClass, "IsRecoveryTruceActive", &IsRecoveryTruceActive, std::nullopt, false);
         vm->BindNativeMethod(kClass, "GetLastPlayerEquippedWeapon", &GetLastPlayerEquippedWeapon, std::nullopt, false);
         vm->BindNativeMethod(kClass, "HasQuestAlias", &HasQuestAlias, std::nullopt, false);
+        vm->BindNativeMethod(kClass, "IsSingleInventoryItemUnreserved", &IsSingleInventoryItemUnreserved, std::nullopt, false);
         vm->BindNativeMethod(kClass, "HasProtectionOverride", &HasProtectionOverride, std::nullopt, false);
         vm->BindNativeMethod(kClass, "RescueActor", &RecoverActor, std::nullopt, false);
         vm->BindNativeMethod(kClass, "SuspendActorAI", &SuspendActorAI, std::nullopt, false);

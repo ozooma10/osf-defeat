@@ -6,7 +6,8 @@ param(
     [string]$Spriggit = '',
     [string]$DotNetDirectory = '',
     [string]$OutputDirectory = '',
-    [switch]$WorldProbe
+    [switch]$WorldProbe,
+    [switch]$LootProbe
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -41,7 +42,7 @@ $scripts = Join-Path $payload 'Scripts'
 [IO.Directory]::CreateDirectory($scripts) | Out-Null
 $oldPath = $env:PATH
 $oldDotNet = $env:DOTNET_ROOT
-$receipt = [ordered]@{schemaVersion=1;outcome='building';runtimeVerified=$false;worldProbe=[bool]$WorldProbe;payload=$payload;source=@();files=@()}
+$receipt = [ordered]@{schemaVersion=1;outcome='building';runtimeVerified=$false;worldProbe=[bool]$WorldProbe;lootProbe=[bool]$LootProbe;payload=$payload;source=@();files=@()}
 function Invoke-BuildTool([string]$Name, [string]$Program, [string[]]$Arguments) {
     & $Program @Arguments *>&1 | Tee-Object -FilePath (Join-Path $output "$Name.log") | Out-Host
     if ($LASTEXITCODE) { throw "$Name failed (exit $LASTEXITCODE); see $output" }
@@ -54,14 +55,19 @@ try {
     $inputs = @(Get-ChildItem (Join-Path $source 'Plugin'), (Join-Path $source 'Scripts'), (Join-Path $source 'SFSE') -File -Recurse)
     $worldSource = Join-Path $repo 'tests/world-shadows'
     if ($WorldProbe) { $inputs += @(Get-ChildItem (Join-Path $worldSource 'Plugin'), (Join-Path $worldSource 'Scripts') -File -Recurse) }
+    $lootSource = Join-Path $repo 'tests/loot-shadows/Plugin'
+    if ($LootProbe) { $inputs += @(Get-ChildItem $lootSource -File -Recurse) }
     $receipt.source = @($inputs | ForEach-Object { @{path=[IO.Path]::GetRelativePath($repo, $_.FullName);sha256=(Get-FileHash -LiteralPath $_.FullName).Hash} })
     Invoke-BuildTool 'papyrus' $compiler @((Join-Path $source 'Scripts/Source'), "-i=$(Join-Path $source 'Scripts/Source');$(Join-Path $repo 'dist/Scripts/Source');$Imports", "-o=$scripts", "-f=$flags", '-all')
     $pluginInput = Join-Path $source 'Plugin'
     if ($WorldProbe) {
         Invoke-BuildTool 'world-papyrus' $compiler @((Join-Path $worldSource 'Scripts/Source'), "-i=$(Join-Path $worldSource 'Scripts/Source');$(Join-Path $source 'Scripts/Source');$(Join-Path $repo 'dist/Scripts/Source');$Imports", "-o=$scripts", "-f=$flags", '-all')
+    }
+    if ($WorldProbe -or $LootProbe) {
         $pluginInput = Join-Path $output 'plugin-input'
         Copy-Item -LiteralPath (Join-Path $source 'Plugin') -Destination $pluginInput -Recurse
-        Get-ChildItem (Join-Path $worldSource 'Plugin') | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $pluginInput -Recurse -Force }
+        if ($WorldProbe) { Get-ChildItem (Join-Path $worldSource 'Plugin') | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $pluginInput -Recurse -Force } }
+        if ($LootProbe) { Get-ChildItem $lootSource | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $pluginInput -Recurse -Force } }
     }
     $esm = Join-Path $payload 'OSFDefeatShadows.esm'
     Invoke-BuildTool 'plugin' $Spriggit @('deserialize', '-i', $pluginInput, '-o', $esm, '-d', (Join-Path $Game 'Data'))
@@ -69,6 +75,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $source 'SFSE') -Destination (Join-Path $payload 'SFSE') -Recurse
     $verifyArgs = @((Join-Path $source 'verify_plugin.py'), $esm)
     if ($WorldProbe) { $verifyArgs += '--world-probe' }
+    if ($LootProbe) { $verifyArgs += '--loot-probe' }
     Invoke-BuildTool 'verify' 'python' $verifyArgs
     foreach ($inputFile in $receipt.source) {
         if ((Get-FileHash -LiteralPath (Join-Path $repo $inputFile.path)).Hash -cne $inputFile.sha256) { throw 'Probe source changed during build.' }

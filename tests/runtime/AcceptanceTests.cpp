@@ -66,7 +66,7 @@ namespace {
         "credits-0","credits-1","credits-24","credits-25","credits-26",
         "credits-249","credits-259","credits-24999","credits-25000","credits-25010",
         "unarmed","missing-weapon","duplicate-weapon","equal-weapon","better-weapon",
-        "ammo-empty","ammo-present","armor"
+        "ammo-empty","ammo-present","armor","quest-weapon","reserved-weapon"
     };
     std::size_t lifecycleIndex{};
     constexpr const char* lifecycleCases[]{"cancel","cancel-idempotent","alias-loss","stop","stopped-promotion","restart-old-death","restart-attack","reward-idle","reward-cancel"};

@@ -51,6 +51,11 @@ Weapon Function GetLastPlayerEquippedWeapon() global native
 Bool Function HasQuestAlias(Actor akActor) global native
 Bool Function HasProtectionOverride(Actor akActor) global native
 
+; Read-only inventory snapshot: exactly one owned copy and no alias metadata.
+; False for None, missing/duplicate items, or any retained alias metadata (even
+; non-quest aliases). Does not create a reference, reserve, or transfer the item.
+Bool Function IsSingleInventoryItemUnreserved(Actor akOwner, Form akItem) global native
+
 ; Legacy recovery name retained for source and binary compatibility. Prefer RecoverActor.
 Bool Function RescueActor(Actor akVictim, Bool abUndoPacify = True) global native
 

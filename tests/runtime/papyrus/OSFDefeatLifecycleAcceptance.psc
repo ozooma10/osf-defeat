@@ -81,11 +81,11 @@ Bool Function FreshHunt()
 EndFunction
 
 Bool Function Active()
-    Return hunt.IsRunning() && hunt.Nemesis.GetActorReference() == target && hunt.StolenWeapon.GetReference() != None && target.HasSpell(hunt.NemesisBuff) && Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && hunt.IsObjectiveDisplayed(10) && !hunt.IsObjectiveCompleted(10)
+    Return hunt.IsRunning() && hunt.Nemesis.GetActorReference() == target && hunt.StolenWeaponBase != None && target.HasSpell(hunt.NemesisBuff) && Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && hunt.IsObjectiveDisplayed(10) && !hunt.IsObjectiveCompleted(10)
 EndFunction
 
 Bool Function Clean()
-    Return hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && !target.HasSpell(hunt.NemesisBuff) && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && !Game.GetPlayer().HasSpell(hunt.PlayerReward) && !hunt.IsObjectiveDisplayed(10) && !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer())
+    Return hunt.Nemesis.GetReference() == None && (hunt.StolenWeapon.GetReference() == None && hunt.StolenWeaponBase == None) && !target.HasSpell(hunt.NemesisBuff) && !Game.GetPlayer().HasSpell(hunt.PlayerDebuff) && !Game.GetPlayer().HasSpell(hunt.PlayerReward) && !hunt.IsObjectiveDisplayed(10) && !OSFDefeat.IsRecoveryTruceActive(Game.GetPlayer())
 EndFunction
 
 Bool Function LootUnchanged()
@@ -94,7 +94,7 @@ EndFunction
 
 Function ObserveCleanup(String label)
     OSFDefeatAcceptanceProbe.Record(label + "-alias", hunt.Nemesis.GetReference() == None)
-    OSFDefeatAcceptanceProbe.Record(label + "-weapon-alias", hunt.StolenWeapon.GetReference() == None)
+    OSFDefeatAcceptanceProbe.Record(label + "-weapon-alias", (hunt.StolenWeapon.GetReference() == None && hunt.StolenWeaponBase == None))
     OSFDefeatAcceptanceProbe.Record(label + "-buff", !target.HasSpell(hunt.NemesisBuff), target)
     OSFDefeatAcceptanceProbe.Record(label + "-debuff", !Game.GetPlayer().HasSpell(hunt.PlayerDebuff))
     OSFDefeatAcceptanceProbe.Record(label + "-reward", !Game.GetPlayer().HasSpell(hunt.PlayerReward))
@@ -214,5 +214,5 @@ Function InspectCleanup()
     Utility.Wait(2.0)
     Actor player = Game.GetPlayer()
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
-    OSFDefeatAcceptanceProbe.Record("lifecycle-cleanup", !player.HasSpell(hunt.PlayerDebuff) && !player.HasSpell(hunt.PlayerReward) && hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled())
+    OSFDefeatAcceptanceProbe.Record("lifecycle-cleanup", !player.HasSpell(hunt.PlayerDebuff) && !player.HasSpell(hunt.PlayerReward) && hunt.Nemesis.GetReference() == None && (hunt.StolenWeapon.GetReference() == None && hunt.StolenWeaponBase == None) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled())
 EndFunction

@@ -9,7 +9,7 @@ parser = runpy.run_path(str(Path(__file__).resolve().parents[1] / "tests/persist
 records, subrecords, require = (parser[k] for k in ("records", "subrecords", "require"))
 
 
-def verify(path, world_probe=False):
+def verify(path, world_probe=False, loot_probe=False):
     parsed = list(records(Path(path).read_bytes()))
     header = list(subrecords(parsed[0][2]))
     require([v.rstrip(b"\0") for k, v in header if k == b"MAST"] == [b"Starfield.esm"], "Unexpected masters")
@@ -18,6 +18,8 @@ def verify(path, world_probe=False):
     expected |= {(b"MGEF", i) for i in range(0x01000806, 0x01000809)}
     if world_probe:
         expected |= {(b"QUST", 0x01000900), (b"AVIF", 0x01000901)}
+    if loot_probe:
+        expected.add((b"QUST", 0x01000902))
     require(len(parsed) == len(expected) + 1 and {(k, i) for k, i, _ in parsed[1:]} == expected, "Missing/extra records or foreign overrides")
     fields = {i: list(subrecords(body)) for _, i, body in parsed[1:]}
     hunt = fields[0x01000801]
@@ -43,8 +45,12 @@ def verify(path, world_probe=False):
         for name in ("OSFDefeatShadowsWorldProbe", "Hunt", "IdentityStamp"):
             token = name.encode()
             require(struct.pack("<H", len(token)) + token in vmad, "Missing world probe binding: " + name)
-    return {"outcome": "passed", "records": len(expected), "nemesisSlots": 1, "worldProbe": world_probe, "runtimeVerified": False}
+    if loot_probe:
+        fixture = fields[0x01000902]
+        require([struct.unpack("<I", v)[0] for k, v in fixture if k == b"ALST"] == [0, 1], "Wrong loot fixture aliases")
+        require([struct.unpack("<I", v)[0] for k, v in fixture if k == b"FNAM"] == [0x6, 0x2], "Loot fixture requires quest-object and ordinary aliases")
+    return {"outcome": "passed", "records": len(expected), "nemesisSlots": 1, "worldProbe": world_probe, "lootProbe": loot_probe, "runtimeVerified": False}
 
 
 if __name__ == "__main__":
-    print(json.dumps(verify(sys.argv[1], "--world-probe" in sys.argv[2:]), indent=2))
+    print(json.dumps(verify(sys.argv[1], "--world-probe" in sys.argv[2:], "--loot-probe" in sys.argv[2:]), indent=2))

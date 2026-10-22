@@ -154,7 +154,9 @@ try {
     }
     Copy-Tree (Join-Path $repo 'dist') $payload
     $shadowsBuild=Join-Path $script:Run.path 'shadows-build'
-    & pwsh -NoProfile -File (Join-Path $repo 'tools/build-shadows.ps1') -OutputDirectory $shadowsBuild
+    $shadowsBuildArgs = @('-NoProfile','-File',(Join-Path $repo 'tools/build-shadows.ps1'),'-OutputDirectory',$shadowsBuild)
+    if ($LootOnly) { $shadowsBuildArgs += '-LootProbe' }
+    & pwsh @shadowsBuildArgs
     if ($LASTEXITCODE) { throw '[failed] Shadows build failed.' }
     $shadowsPayload=Join-Path $shadowsBuild 'payload'
     Copy-Tree (Join-Path $shadowsPayload 'Scripts') (Join-Path $payload 'Scripts')

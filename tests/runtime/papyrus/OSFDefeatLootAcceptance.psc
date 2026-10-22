@@ -19,11 +19,18 @@ Int targetCredits
 Int targetSuits
 Int targetHelmets
 Int targetPacks
+Quest reservationQuest
+ReferenceAlias reservedAlias
+ObjectReference reservedWeapon
 
 Function Initialize()
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
     eon = Game.GetFormFromFile(0x476C4, "Starfield.esm") as Weapon
     grendel = Game.GetFormFromFile(0x28A02, "Starfield.esm") as Weapon
+    reservationQuest = Game.GetFormFromFile(0x902, "OSFDefeatShadows.esm") as Quest
+    If reservationQuest != None
+        reservationQuest.Start()
+    EndIf
     ; Installed .244 ARMO editor IDs: Spacesuit_Miner, _Helmet, _Backpack.
     suit = Game.GetFormFromFile(0x5278E, "Starfield.esm") as Armor
     helmet = Game.GetFormFromFile(0x52792, "Starfield.esm") as Armor
@@ -31,7 +38,7 @@ Function Initialize()
     If eon != None
         ammunition = eon.GetAmmo()
     EndIf
-    OSFDefeatAcceptanceProbe.Record("loot-fixture", hunt != None && eon != None && grendel != None && ammunition != None && suit != None && helmet != None && pack != None)
+    OSFDefeatAcceptanceProbe.Record("loot-fixture", hunt != None && eon != None && grendel != None && ammunition != None && suit != None && helmet != None && pack != None && reservationQuest != None)
 EndFunction
 
 Actor Function NewTarget()
@@ -75,6 +82,11 @@ EndFunction
 Function Prepare(String kind)
     ; Repair only after the preceding case has recorded its observations.
     hunt.CancelHunt()
+    If reservedAlias != None
+        reservedAlias.Clear()
+    EndIf
+    reservedAlias = None
+    reservedWeapon = None
     If target != None
         target.RemoveSpell(hunt.NemesisBuff)
         OSFDefeat.ResumeActorAI(target)
@@ -157,6 +169,19 @@ Function Prepare(String kind)
             expectedStatus = 3
         ElseIf kind == "ammo-present"
             SetCount(target, ammunition, 12)
+        ElseIf kind == "quest-weapon" || kind == "reserved-weapon"
+            SetCount(player, eon, 0)
+            Int slot = 0
+            If kind == "reserved-weapon"
+                slot = 1
+            EndIf
+            reservedAlias = reservationQuest.GetAlias(slot) as ReferenceAlias
+            ; Create a real world item, reserve it, then pick it up. Never use
+            ; the inventory-reference creation operation under investigation.
+            reservedWeapon = player.PlaceAtMe(eon, 1, False, False, False)
+            reservedAlias.ForceRefTo(reservedWeapon)
+            player.AddItem(reservedWeapon, 1, True)
+            expectedStatus = 5
         EndIf
         If player.GetItemCount(eon) > 0
             player.EquipItem(eon, False, True)
@@ -188,7 +213,17 @@ Function Prepare(String kind)
     targetSuits = target.GetItemCount(suit)
     targetHelmets = target.GetItemCount(helmet)
     targetPacks = target.GetItemCount(pack)
-    Bool ready = hunt.IsRunning() && hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && hunt.Eligible(target) && player.GetItemCount(Game.GetCredits()) == funds && player.GetItemCount(ammunition) == 37
+    Bool ready = hunt.IsRunning() && hunt.Nemesis.GetReference() == None && hunt.StolenWeaponBase == None && hunt.StolenWeapon.GetReference() == None && hunt.Eligible(target) && player.GetItemCount(Game.GetCredits()) == funds && player.GetItemCount(ammunition) == 37
+    If kind == "quest-weapon" || kind == "reserved-weapon"
+        Bool reserved = reservedWeapon != None && reservedAlias.GetReference() == reservedWeapon && !OSFDefeat.IsSingleInventoryItemUnreserved(player, eon)
+        reserved = reserved && (reservedWeapon.IsQuestItem() == (kind == "quest-weapon"))
+        OSFDefeatAcceptanceProbe.Record("loot-reservation-fixture-" + kind, reserved)
+        ready = ready && reserved
+    ElseIf playerWeapons == 1
+        ready = ready && OSFDefeat.IsSingleInventoryItemUnreserved(player, eon)
+    Else
+        ready = ready && !OSFDefeat.IsSingleInventoryItemUnreserved(player, eon)
+    EndIf
     If kind == "missing-weapon"
         ready = ready && playerWeapons == 0
     ElseIf kind == "duplicate-weapon"
@@ -254,15 +289,18 @@ Function Run(String kind)
     Bool weaponOk = hunt.LastTheftStatus == expectedStatus && hunt.LastWeaponConsidered == lostWeapon
     Bool ammoOk = player.GetItemCount(ammunition) == 37
     If expectedStatus == 7
-        ObjectReference stolen = hunt.StolenWeapon.GetReference()
-        weaponOk = weaponOk && stolen != None && stolen.GetBaseObject() == eon && player.GetItemCount(eon) == playerWeapons - 1 && target.GetItemCount(eon) == targetWeapons + 1 && target.GetEquippedWeapon() == eon
+        Weapon stolen = hunt.StolenWeaponBase
+        weaponOk = weaponOk && stolen == eon && hunt.StolenWeapon.GetReference() == None && player.GetItemCount(eon) == playerWeapons - 1 && target.GetItemCount(eon) == targetWeapons + 1 && target.GetEquippedWeapon() == eon
         Int expectedAmmo = targetAmmo
         If expectedAmmo == 0
             expectedAmmo = 1
         EndIf
         ammoOk = ammoOk && target.GetItemCount(ammunition) == expectedAmmo
     Else
-        weaponOk = weaponOk && hunt.StolenWeapon.GetReference() == None && player.GetItemCount(eon) == playerWeapons && target.GetItemCount(eon) == targetWeapons
+        weaponOk = weaponOk && hunt.StolenWeaponBase == None && hunt.StolenWeapon.GetReference() == None && player.GetItemCount(eon) == playerWeapons && target.GetItemCount(eon) == targetWeapons
+        If kind == "quest-weapon" || kind == "reserved-weapon"
+            weaponOk = weaponOk && reservedAlias.GetReference() == reservedWeapon && (reservedWeapon.IsQuestItem() == (kind == "quest-weapon"))
+        EndIf
         ammoOk = ammoOk && target.GetItemCount(ammunition) == targetAmmo
         If kind == "equal-weapon"
             weaponOk = weaponOk && target.GetEquippedWeapon() == eon
@@ -284,5 +322,5 @@ Function InspectCleanup()
     Utility.Wait(2.0)
     Actor player = Game.GetPlayer()
     hunt = Game.GetFormFromFile(0x801, "OSFDefeatShadows.esm") as OSFDefeatShadowsHunt
-    OSFDefeatAcceptanceProbe.Record("loot-cleanup", !player.HasSpell(hunt.PlayerDebuff) && !player.HasSpell(hunt.PlayerReward) && hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled())
+    OSFDefeatAcceptanceProbe.Record("loot-cleanup", !player.HasSpell(hunt.PlayerDebuff) && !player.HasSpell(hunt.PlayerReward) && hunt.Nemesis.GetReference() == None && hunt.StolenWeaponBase == None && hunt.StolenWeapon.GetReference() == None && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled())
 EndFunction

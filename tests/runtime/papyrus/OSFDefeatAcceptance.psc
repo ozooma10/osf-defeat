@@ -131,7 +131,7 @@ Function ShadowsInspect()
         OSFDefeatAcceptanceProbe.Record("shadows-actual-equipped", True, shadow, actualEquipped.GetFormID())
     EndIf
     OSFDefeatAcceptanceProbe.Record("shadows-ammo-count", shadow.GetItemCount(testWeapon.GetAmmo()) == 1, shadow, shadow.GetItemCount(testWeapon.GetAmmo()))
-    ObjectReference stolen = hunt.StolenWeapon.GetReference()
+    Weapon stolen = hunt.StolenWeaponBase
     OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "transferred")
     Bool ok = hunt.Nemesis.GetActorReference() == shadow && OSFDefeat.HasQuestAlias(shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-alias", ok, shadow)
@@ -139,14 +139,14 @@ Function ShadowsInspect()
     OSFDefeatAcceptanceProbe.Record("shadows-buff", shadow.HasSpell(hunt.NemesisBuff), shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-player-credits", player.GetItemCount(Game.GetCredits()) == 900, player, player.GetItemCount(Game.GetCredits()))
     OSFDefeatAcceptanceProbe.Record("shadows-nemesis-credits", shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100, shadow, shadow.GetItemCount(Game.GetCredits()) - shadowCredits)
-    OSFDefeatAcceptanceProbe.Record("shadows-weapon-ref", stolen != None, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-weapon-base", stolen != None, shadow)
     OSFDefeatAcceptanceProbe.Record("shadows-theft-status", hunt.LastTheftStatus == 7, shadow, hunt.LastTheftStatus)
     If hunt.LastWeaponConsidered != None
         OSFDefeatAcceptanceProbe.Record("shadows-considered-weapon", hunt.LastWeaponConsidered == testWeapon, player, hunt.LastWeaponConsidered.GetFormID())
     EndIf
     OSFDefeatAcceptanceProbe.Record("shadows-equipped-weapon", shadow.GetEquippedWeapon() == testWeapon, shadow)
     If stolen != None
-        OSFDefeatAcceptanceProbe.Record("shadows-weapon-container", stolen.GetContainer() == shadow, shadow)
+        OSFDefeatAcceptanceProbe.Record("shadows-weapon-owned", shadow.GetItemCount(stolen) == 1, shadow)
     EndIf
     OSFDefeatAcceptanceProbe.Record("shadows-player-weapon", player.GetItemCount(testWeapon) == 0, player, player.GetItemCount(testWeapon))
     OSFDefeatAcceptanceProbe.Record("shadows-nemesis-weapon", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
@@ -155,7 +155,7 @@ Function ShadowsInspect()
     OSFDefeatAcceptanceProbe.Record("shadows-truce-live-ai", OSFDefeat.IsRecoveryTruceActive(player) && player.GetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue) >= healthBefore, player)
     ok = ok && hunt.IsObjectiveDisplayed(10) && shadow.HasSpell(hunt.NemesisBuff) && player.HasSpell(hunt.PlayerDebuff)
     ok = ok && player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
-    ok = ok && stolen != None && stolen.GetBaseObject() == testWeapon && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
+    ok = ok && stolen != None && stolen == testWeapon && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
     ok = ok && shadow.GetEquippedWeapon() == testWeapon
     ok = ok && OSFDefeat.IsRecoveryTruceActive(player) && player.GetValue(Game.GetFormFromFile(0x2D4, "Starfield.esm") as ActorValue) >= healthBefore
     ok = ok && Utility.GetCurrentGameTime() - defeatDay >= 0.083
@@ -175,7 +175,7 @@ Function ShadowsInspect()
 EndFunction
 
 Function ShadowsPlayerKill()
-    ObjectReference stolen = hunt.StolenWeapon.GetReference()
+    Weapon stolen = hunt.StolenWeaponBase
     ; Give the engine a live, drawn weapon at death. Killing a suspended actor
     ; can leave it in corpse inventory without exercising the natural drop path.
     OSFDefeat.ResumeActorAI(shadow)
@@ -201,7 +201,7 @@ Function ShadowsPlayerKill()
     OSFDefeatAcceptanceProbe.Record("shadows-player-kill-loot", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
     ObjectReference dropped = Game.FindClosestReferenceOfTypeFromRef(testWeapon, shadow, 5.0)
     OSFDefeatAcceptanceProbe.Record("shadows-dropped-weapon", dropped != None, shadow)
-    OSFDefeatAcceptanceProbe.Record("shadows-dropped-identity", dropped != None && dropped == stolen, shadow)
+    OSFDefeatAcceptanceProbe.Record("shadows-dropped-base", dropped != None && dropped.GetBaseObject() == stolen, shadow)
     If shadow.GetItemCount(testWeapon) == 1
         OSFDefeatAcceptanceProbe.Record("shadows-retrieval-corpse", True)
         shadow.RemoveItem(testWeapon, 1, True, Game.GetPlayer())
@@ -352,17 +352,17 @@ Function InspectLoadedCheckpoint(String kind)
         Utility.Wait(3.0)
         Actor player = Game.GetPlayer()
         OSFDefeatShadowsAftermath aftermath = Game.GetFormFromFile(0x800, "OSFDefeatShadows.esm") as OSFDefeatShadowsAftermath
-        ObjectReference stolen = hunt.StolenWeapon.GetReference()
+        Weapon stolen = hunt.StolenWeaponBase
         Bool creditsOK = player.GetItemCount(Game.GetCredits()) == 900 && shadow.GetItemCount(Game.GetCredits()) == shadowCredits + 100
         Bool huntOK = hunt.Nemesis.GetActorReference() == shadow && hunt.IsObjectiveDisplayed(10)
         huntOK = huntOK && player.HasSpell(hunt.PlayerDebuff) && shadow.HasSpell(hunt.NemesisBuff)
-        ; MakeAliasedRefFromInventory proxies can have no GetContainer even
-        ; while the real instance is owned. Inspect actual inventory OMODs.
+        ; The saved base is bookkeeping, not instance identity; verify the
+        ; actual inventory instance through exact OMOD entries as well.
         Bool modsOK = OSFDefeatAcceptanceProbe.VerifyWeapon(shadow, testWeapon, "loaded-" + kind)
-        Bool weaponOK = stolen != None && stolen.GetBaseObject() == testWeapon
+        Bool weaponOK = stolen != None && stolen == testWeapon
         weaponOK = weaponOK && player.GetItemCount(testWeapon) == 0 && shadow.GetItemCount(testWeapon) == 1
         weaponOK = weaponOK && modsOK
-        OSFDefeatAcceptanceProbe.Record("checkpoint-weapon-alias", stolen != None && stolen.GetBaseObject() == testWeapon)
+        OSFDefeatAcceptanceProbe.Record("checkpoint-weapon-base", stolen != None && stolen == testWeapon)
         OSFDefeatAcceptanceProbe.Record("checkpoint-player-weapon-count", player.GetItemCount(testWeapon) == 0, player, player.GetItemCount(testWeapon))
         OSFDefeatAcceptanceProbe.Record("checkpoint-nemesis-weapon-count", shadow.GetItemCount(testWeapon) == 1, shadow, shadow.GetItemCount(testWeapon))
         Bool recovered = !OSFDefeat.IsDefeated(player) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled() && Game.IsLookingControlsEnabled()
@@ -886,7 +886,7 @@ Function WatchRefusal(String kind)
     OSFDefeatAcceptanceProbe.VerifyDeathState(player, player.IsDead(), True, "player-" + kind + "-dead")
     Bool stopped = aftermath.LastResult == "unsupported-domain" && !aftermath.IsRunning() && aftermath.Phase == 0
     Bool creditsOK = player.GetItemCount(Game.GetCredits()) == repeatCredits && shadow.GetItemCount(Game.GetCredits()) == shadowCredits
-    Bool huntOK = hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && !hunt.IsObjectiveDisplayed(10)
+    Bool huntOK = hunt.Nemesis.GetReference() == None && hunt.StolenWeapon.GetReference() == None && hunt.StolenWeaponBase == None && !hunt.IsObjectiveDisplayed(10)
     huntOK = huntOK && !player.HasSpell(hunt.PlayerDebuff) && !shadow.HasSpell(hunt.NemesisBuff)
     Bool weaponOK = player.GetItemCount(testWeapon) == 1 && OSFDefeatAcceptanceProbe.VerifyWeapon(player, testWeapon, "refused-" + kind)
     Float hours = (Utility.GetCurrentGameTime() - defeatDay) * 24.0

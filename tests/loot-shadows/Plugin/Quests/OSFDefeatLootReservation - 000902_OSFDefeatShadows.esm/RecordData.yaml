@@ -1,0 +1,24 @@
+FormKey: 000902:OSFDefeatShadows.esm
+EditorID: OSFDefeatLootReservation
+FormVersion: 582
+Data:
+  Flags: []
+  Priority: 60
+  Unused: 0x000000
+UnusedConditions: []
+NextAliasID: 2
+Aliases:
+- MutagenObjectType: QuestReferenceAlias
+  Name: QuestWeapon
+  Flags:
+  - Optional
+  - QuestObject
+  ALFG: 0
+  VoiceTypes: Null
+- MutagenObjectType: QuestReferenceAlias
+  ID: 1
+  Name: ReservedWeapon
+  Flags:
+  - Optional
+  ALFG: 0
+  VoiceTypes: Null

@@ -56,6 +56,19 @@ remain after a reference override is cleared. These functions report presence, n
 current quest list or effective protection value. Also check base essential/protected/
 unique flags and any other content-specific eligibility rules.
 
+## Inventory reservation check
+
+```papyrus
+Bool Function IsSingleInventoryItemUnreserved(Actor akOwner, Form akItem) global native
+```
+
+Returns true only when the current inventory contains exactly one copy and its
+stack has no alias metadata. Returns false for missing inputs, absent items,
+duplicates, or any alias metadata, including non-quest aliases and cleared retained
+entries. It reads under the inventory and extra-data locks without creating an
+inventory reference. This is a snapshot, not a reservation or transfer operation.
+The caller must still observe the result of its subsequent transfer.
+
 ## Recovery Handshake
 
 ```papyrus

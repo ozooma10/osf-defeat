@@ -20,5 +20,7 @@
   "loot-ammo-empty",
   "loot-ammo-present",
   "loot-armor",
+  "loot-quest-weapon",
+  "loot-reserved-weapon",
   "loot-cleanup-load"
 ]

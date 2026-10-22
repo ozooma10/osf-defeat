@@ -82,9 +82,9 @@ Function Inspect()
     Check("hunt-objective", Hunt.IsObjectiveDisplayed(10))
     Check("controls-restored", !OSFDefeat.IsDefeated(player) && Game.IsMovementControlsEnabled() && Game.IsFightingControlsEnabled())
     Check("ai-not-suspended", !OSFDefeat.IsActorAISuspended(subject))
-    ObjectReference item = Hunt.StolenWeapon.GetReference()
+    Weapon item = Hunt.StolenWeaponBase
     If item != None
-        Check("stolen-weapon-owned", subject.GetItemCount(item.GetBaseObject()) > 0)
+        Check("stolen-weapon-owned", subject.GetItemCount(item) > 0 && player.GetItemCount(item) == 0)
     EndIf
     Log("INSPECT|initial-id=" + initialID + "|current-id=" + subject.GetFormID() + "|cell=" + subject.GetParentCell().GetFormID() + "|theft-status=" + Hunt.LastTheftStatus + "|hours=" + ((Utility.GetCurrentGameTime() - beganDay) * 24.0) + "|reset-events=" + resetEvents)
     Log("VISUAL-REQUIRED|normal full-body appearance, visible title, journal objective and abilities")

@@ -19,16 +19,21 @@ be replaced by another defeat.
 An eligible promotion transfers 10% of credits (25 minimum, 2,500 maximum, bounded
 by available credits). Weapon theft compares base credit values in this first
 version. The framework snapshots the equipped base before down presentation changes
-it. Theft requires exactly one owned copy, holds it in an alias, and moves that
-inventory item by base form; ambiguous stacks and quest items are skipped. Suit,
+it. Theft requires exactly one owned copy without alias reservations and moves that
+inventory item by base form. A native read-only check protects quest items and
+conservatively skips all other alias-reserved items. The hunt saves the weapon
+base while the actual instance stays in the nemesis's inventory; it does not create
+an inventory reference. Ambiguous stacks are skipped. Suit,
 helmet, and boost pack are never taken. The modified/legendary Eon fixture preserves
 every OMOD row through theft, reload, retrieval and forced world pickup.
 Base value is not a damage or modification-quality
 comparison; theft preservation for other weapon families still needs coverage.
-The focused `-LootOnly` suite passes 22 assertions covering exact credit bounds,
+The focused `-LootOnly` suite passes 24 assertions covering exact credit bounds,
 unarmed/missing/duplicate weapons, equal/better enemy weapons, ammunition
 preservation and equipped mining suit/helmet/boost-pack retention. It uses the
-existing quiet-cell seed; quest-item refusal still needs a dedicated fixture.
+existing quiet-cell seed, plus real quest-object and non-quest alias-reserved
+weapon fixtures. Both reservation fixtures retain their weapon and alias after
+the attempted theft (`build/theft-20261021-loot-02.json`).
 
 Essential, protected, unique, quest-aliased, commanded, child, teammate, ghost,
 scene-bound, and more-than-15-levels-higher actors are excluded. Native reservation

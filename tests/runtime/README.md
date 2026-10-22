@@ -3,6 +3,27 @@
 These are local, disposable MO2 + SFSE tests. Enemy-world persistence remains a
 separate [world-probe acceptance task](../world-shadows/README.md).
 
+## Inventory-alias crash regression (2026-10-21)
+
+The generated weapon-station encounter reproduced an engine crash while creating
+an inventory alias. Production theft now checks the sole inventory stack's alias
+metadata without materializing a reference, then transfers the existing item.
+New hunts save its weapon base; the legacy alias remains for old-save cleanup.
+
+Focused results after the fix: **24/24 loot**, **40/40 Shadows**, and **18/18
+lifecycle**. Receipts are `build/theft-20261021-loot-02.json`,
+`build/theft-20261021-shadows-01.json`, and
+`build/theft-20261021-lifecycle-01.json`. The loot suite tests a real quest-object
+alias and an ordinary alias, independently confirms their quest-item status, and
+requires both reserved items to remain with the player. The Shadows suite retains
+the complete modified-weapon OMOD rows through transfer, same-process reload,
+three cold-start checkpoints, natural drop, retrieval, and world pickup.
+
+Run the reservation cases with `tools/test-runtime.ps1 -LootOnly
+-ResultPath build/new-loot-result.json`. The optional reservation quest is built
+only for that test mode. The fixed natural-combat replay also recovered with the
+Eon actually transferred; world travel/reset acceptance is tracked separately.
+
 ## Run hunt lifecycle coverage
 
 ```powershell

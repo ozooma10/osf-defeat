@@ -2,12 +2,15 @@ Scriptname OSFDefeatShadowsHunt extends Quest
 
 ReferenceAlias Property Nemesis Auto Const Mandatory
 ReferenceAlias Property StolenWeapon Auto Const Mandatory
+; The legacy alias remains for cleanup of existing saves. New thefts retain only
+; the base; the actual instance stays in the persistent nemesis's inventory.
+Weapon Property StolenWeaponBase Auto Hidden
 Spell Property NemesisBuff Auto Const Mandatory
 Spell Property PlayerDebuff Auto Const Mandatory
 Spell Property PlayerReward Auto Const Mandatory
 Int Property LevelGap = 15 Auto Const
 ; Observable aftermath result: 1 unarmed, 2 ambiguous stack, 3 not better,
-; 4 alias failed, 5 quest item, 6 transfer refused, 7 transferred.
+; 4 legacy alias failure, 5 reserved/unavailable item, 6 transfer refused, 7 transferred.
 Int Property LastTheftStatus = 0 Auto Hidden
 Weapon Property LastWeaponConsidered Auto Hidden
 String Property LastAttackEvent Auto Hidden
@@ -145,23 +148,19 @@ Function TakeLoot(Actor candidate, Weapon weaponBase)
         LastTheftStatus = 3
         Return
     EndIf
-    ObjectReference item = player.MakeAliasedRefFromInventory(weaponBase, StolenWeapon)
-    If item == None
-        LastTheftStatus = 4
-        Return
-    EndIf
-    If item.IsQuestItem()
+    ; Creating an inventory alias crashes inside the engine in the generated
+    ; weapon-station fixture. Inspect reservation metadata without creating one.
+    If !OSFDefeat.IsSingleInventoryItemUnreserved(player, weaponBase)
         LastTheftStatus = 5
-        StolenWeapon.Clear()
         Return
     EndIf
-    ; The aliased inventory proxy can report GetContainer=None. Transfer the
-    ; sole inventory instance by base instead; this moves it, never recreates it.
-    ; The single-copy guard above makes the choice unambiguous.
+    ; Move the sole inventory instance by base, never recreate it. The native
+    ; guard rejects ambiguous stacks and all quest/non-quest alias reservations.
     Int beforeCount = candidate.GetItemCount(weaponBase)
     Int moved = player.RemoveItem(weaponBase, 1, True, candidate)
     If moved == 1 && player.GetItemCount(weaponBase) == 0 && candidate.GetItemCount(weaponBase) == beforeCount + 1
         LastTheftStatus = 7
+        StolenWeaponBase = weaponBase
         ; The AI can immediately switch to fists if the stolen gun uses an
         ; ammunition type absent from its original loadout. Supply one round
         ; only when needed; do not take more of the player's inventory.
@@ -199,6 +198,7 @@ Function ResolveDeath(ObjectReference killer, Actor dying = None)
     UnregisterForRemoteEvent(target, "OnDeath")
     SetObjectiveCompleted(10, True)
     StolenWeapon.Clear()
+    StolenWeaponBase = None
     Nemesis.Clear()
     ownedTarget = None
     deathPending = False
@@ -263,6 +263,7 @@ Function ClearOwnedHunt(Bool removeReward)
     SetObjectiveFailed(10, False)
     SetObjectiveDisplayed(10, False)
     StolenWeapon.Clear()
+    StolenWeaponBase = None
     Nemesis.Clear()
     ownedTarget = None
     deathPending = False
@@ -325,7 +326,7 @@ Event OnTimer(Int timerID)
         If ownedTarget == None
             ownedTarget = target
         EndIf
-        If target != ownedTarget || (target == None && (Game.GetPlayer().HasSpell(PlayerDebuff) || StolenWeapon.GetReference() != None))
+        If target != ownedTarget || (target == None && (Game.GetPlayer().HasSpell(PlayerDebuff) || StolenWeapon.GetReference() != None || StolenWeaponBase != None))
             ; Alias loss is an abandoned hunt, not a credited kill. Preserve a
             ; previously earned reward and the recovery truce, but lift the wound.
             RequestCleanup(False)
