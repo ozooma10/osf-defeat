@@ -85,7 +85,10 @@ namespace OSFDefeat::AttackEvents
     {
         static bool installed = false;
         if (installed) return true;
-        auto* source = RE::WeaponFiredEvent::GetEventSource();
+        // Keep the proven binding local: newer CommonLib revisions park the
+        // public WeaponFiredEvent ID at zero, which aborts the game on lookup.
+        static REL::Relocation<RE::BSTEventSource<RE::WeaponFiredEvent>*> verifiedSource{REL::ID{822934}};
+        auto* source = verifiedSource.get();
         const auto image = reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));
         // .244 dispatcher ID61804 references this source. Producer ID61817
         // retains the actor at event+0x10. Proven with player and NPC Fire calls;
